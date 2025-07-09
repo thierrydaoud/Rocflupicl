@@ -333,11 +333,19 @@
       common /ppiclf_io_restart/ istartout
 !
 
-      call ppiclf_printsi(' *Begin WriteBinVTU$',ppiclf_cycle)
 
       if (icalld1 .eq. 0) icalld1 = istartout
 
       icalld1 = icalld1+1
+
+      !ppiclf_printbinvtu set true in ppiclf_comm_CreateBin
+      IF(ppiclf_printbinvtu .OR. ppiclf_time .EQ. 0.0) THEN
+        call ppiclf_printsi(' *Begin WriteBinVTU$',ppiclf_cycle)
+        ! Set false for next iteration
+        ppiclf_printbinvtu = .FALSE. 
+      ELSE
+        RETURN
+      END IF
 
       nnp   = ppiclf_np
       nxx   = PPICLF_NPART

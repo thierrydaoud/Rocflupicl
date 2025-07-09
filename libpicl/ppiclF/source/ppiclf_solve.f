@@ -195,11 +195,12 @@
       ppiclf_dt     = 0.0d0
       ppiclf_time   = 0.0d0
 
-      ppiclf_overlap    = .FALSE.
-      ppiclf_linit      = .FALSE.
-      ppiclf_lintp      = .FALSE.
-      ppiclf_lproj      = .FALSE.
-      ppiclf_binchanged = .TRUE.
+      ppiclf_overlap     = .FALSE.
+      ppiclf_linit       = .FALSE.
+      ppiclf_lintp       = .FALSE.
+      ppiclf_lproj       = .FALSE.
+      ppiclf_binchanged  = .TRUE.
+      ppiclf_printbinvtu = .TRUE.
       IF(PPICLF_INTERP .EQ. 1)  ppiclf_lintp = .TRUE.
       IF(PPICLF_PROJECT .EQ. 1) ppiclf_lproj = .TRUE.
 
@@ -776,7 +777,6 @@ c----------------------------------------------------------------------
 
       CALL ppiclf_io_WriteParticleVTU('')
       CALL ppiclf_io_WriteBinVTU('')
-
       ! Output diagnostics
       CALL ppiclf_io_OutputDiagAll
 

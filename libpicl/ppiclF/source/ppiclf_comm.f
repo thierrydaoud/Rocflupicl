@@ -221,6 +221,7 @@
         RETURN
       ELSE
         ppiclf_binchanged = .TRUE.
+        ppiclf_printbinvtu = .TRUE.
       END IF
 
       ! Ensuring ppiclf_binb not greater than 
