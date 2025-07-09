@@ -313,8 +313,8 @@
       ! particle radius
       rad = ppiclf_rprop(PPICLF_R_JDP,i) * 0.5d0
       
-      ! ppiclf_d2chk(3) is neighbor width - user defined
-      dr_max = ppiclf_d2chk(3)
+      ! ppiclf_nndist is neighbor width - user defined
+      dr_max = ppiclf_nndist
 
       ! In the example program binary_model.f90, the nearest
       ! neighbor calculations are done here at this point to

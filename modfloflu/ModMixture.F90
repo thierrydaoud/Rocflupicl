@@ -176,8 +176,6 @@ MODULE ModMixture
     REAL(RFREAL), DIMENSION(:,:,:), POINTER :: piclgradFeedback
     ! 04/01/2025 - TLJ - ends here
 
-    REAL(RFREAL) :: piclGeom    
-
     REAL(RFREAL), POINTER :: sd(:,:)
     REAL(RFREAL), POINTER :: cvOld1(:,:),cvOld2(:,:)
     REAL(RFREAL), POINTER :: cvRef(:,:)

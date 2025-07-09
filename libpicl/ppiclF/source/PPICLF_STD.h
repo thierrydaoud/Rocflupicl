@@ -6,15 +6,20 @@
 #define PPICLF_LRP 1
 #endif
 
-#define PPICLF_LRP2 4
+#ifndef PPICLF_LRP2
+#define PPICLF_LRP2 0
+#endif
 
 #ifndef PPICLF_VU
 #define PPICLF_VU 5
 #endif
+
+#ifndef PPICLF_LRP3
 #define PPICLF_LRP3 6*PPICLF_VU
+#endif
 
 #ifndef PPICLF_LIP
-#define PPICLF_LIP 11
+#define PPICLF_LIP 9 
 #endif
 
 #define PPICLF_LPART_GP 26*PPICLF_LPART
@@ -31,6 +36,7 @@
 #ifndef PPICLF_PROJECT
 #define PPICLF_PROJECT 1
 #endif
+
 #ifndef PPICLF_LRP_PRO
 #undef PPICLF_PROJECT
 #define PPICLF_PROJECT 0
@@ -38,11 +44,11 @@
 #endif
 
 #ifndef PPICLF_LRP_GP
-#define PPICLF_LRP_GP PPICLF_LRS+PPICLF_LRP+PPICLF_LRP_PRO
+#define PPICLF_LRP_GP PPICLF_LRS+PPICLF_LRP
 #endif
 
 #ifndef PPICLF_LIP_GP
-#define PPICLF_LIP_GP 5
+#define PPICLF_LIP_GP 8 
 #endif
 
 #ifndef PPICLF_LEX
@@ -78,7 +84,7 @@
 #endif
 
 #ifndef PPICLF_LRMAX
-#define PPICLF_LRMAX 6
+#define PPICLF_LRMAX 6 
 #endif
 
 #ifndef PPICLF_LWALL

@@ -17,18 +17,18 @@
 ! Input:
 !
       INTEGER*4  SBin_map( 0 : (
-     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3)) 
+     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist) 
      >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3))
+     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)
      >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3)) 
+     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist) 
      >       + 1) - 1), (ppiclf_npart+ppiclf_npart_gp))
       INTEGER*4  SBin_counter( 0 : (
-     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3)) 
+     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist) 
      >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3))
+     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)
      >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3)) 
+     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist) 
      >       + 1) - 1))
       INTEGER*4  i_Bin(3), n_SBin(3), tot_SBin
      >          
@@ -51,8 +51,8 @@
         ! Determine the number of subbins in each dimension
         DO l = 1,3
           IF (l .LT. 3 .OR. ppiclf_ndim .GT. 2) THEN
-            n_SBin(l) = FLOOR((ppiclf_bins_dx(l)+2*ppiclf_d2chk(3))
-     >                       /ppiclf_d2chk(3))
+            n_SBin(l) = FLOOR((ppiclf_bins_dx(l)+2*ppiclf_nndist)
+     >                       /ppiclf_nndist)
           ELSE
             n_SBin(l) = 0
           END IF
@@ -79,7 +79,7 @@
            DO l = 1,3
               IF (l .LT. 3 .OR. ppiclf_ndim .GT. 2) THEN
                   i_SBin(l) = FLOOR((xp(l) - (bin_xMin(l) 
-     >            - ppiclf_d2chk(3)))/ppiclf_d2chk(3)) 
+     >            - ppiclf_nndist))/ppiclf_nndist) 
               ELSE
                  i_SBin(l) = 0
               END IF
@@ -103,18 +103,18 @@
           ! Only map ghost particles within one neighborwidth
           ! from bin edge to subbins. All others are outside
           ! of collision search distance.
-          IF (xp(1) .GT. (bin_xMin(1)-ppiclf_d2chk(3))
-     >  .AND. xp(2) .GT. (bin_xMin(2)-ppiclf_d2chk(3))
-     >  .AND. xp(3) .GT. (bin_xMin(3)-ppiclf_d2chk(3))
-     >  .AND. xp(1) .LT. (bin_xMin(1)+ppiclf_bins_dx(1)+ppiclf_d2chk(3))
-     >  .AND. xp(2) .LT. (bin_xMin(2)+ppiclf_bins_dx(2)+ppiclf_d2chk(3))
-     >  .AND. xp(3) .LT. (bin_xMin(3)+ppiclf_bins_dx(3)+ppiclf_d2chk(3))
+          IF (xp(1) .GT. (bin_xMin(1)-ppiclf_nndist)
+     >  .AND. xp(2) .GT. (bin_xMin(2)-ppiclf_nndist)
+     >  .AND. xp(3) .GT. (bin_xMin(3)-ppiclf_nndist)
+     >  .AND. xp(1) .LT. (bin_xMin(1)+ppiclf_bins_dx(1)+ppiclf_nndist)
+     >  .AND. xp(2) .LT. (bin_xMin(2)+ppiclf_bins_dx(2)+ppiclf_nndist)
+     >  .AND. xp(3) .LT. (bin_xMin(3)+ppiclf_bins_dx(3)+ppiclf_nndist)
      >        ) THEN
             ! Determine subbin
             DO l = 1,3
               IF (l .LT. 3 .OR. ppiclf_ndim .GT. 2) THEN
                 i_SBin(l) = FLOOR((xp(l) - (bin_xMin(l) 
-     >          - ppiclf_d2chk(3)))/ppiclf_d2chk(3)) 
+     >          - ppiclf_nndist))/ppiclf_nndist) 
               ELSE
                 i_SBin(l) = 0
               END IF

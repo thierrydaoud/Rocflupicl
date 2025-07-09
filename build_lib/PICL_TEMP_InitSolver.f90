@@ -131,6 +131,8 @@ SUBROUTINE PICL_TEMP_InitSolver( pRegion)
 
 
 
+
+
 !DEC$ FREEFORM
 
 
@@ -148,61 +150,63 @@ INTEGER :: errorFlag,icg
 
    CHARACTER(CHRLEN) :: endString,iFileName,matName,comment
    CHARACTER(12) :: vtuFile,vtuFile1
-   LOGICAL :: notfoundFlag, pf_restart,pf_rpInit,pf_settle,pf_fluidInit,&
-              wall_exists, fexists, foundMat
-   INTEGER :: i,npart,nCells,lx,ly,lz,vi,vii,ii,jj,kk,loopCounter,ipart,icl
+   LOGICAL :: notfoundFlag, pf_restart,pf_rpInit,pf_settle,&
+              wall_exists, fexists, foundMat, CreateGhosts
+   INTEGER :: i,npart,nCells,vi,vii,ii,jj,kk,loopCounter,ipart,icl
    INTEGER :: PPC,numPclCells,npart_local,i_global,i_global_min,i_global_max,&
-              iFile,iMat, k, j, l, m
-   REAL(RFREAL) :: dp_min,dp_max,rhop,tester,ratio,total_vol,filter,xMinCurt,&
+              iFile,iMat, k, j, l, m, MinFluidCells
+   REAL(RFREAL) :: dp_min,dp_max,rhop,tester,ratio,total_vol,xMinCurt,&
                    xMaxCurt,yMinCurt,yMaxCurt,xMinCell,xMaxCell,yMinCell,&
                    yMaxCell,zMinCell,zMaxCell,x,vFrac,volpclsum,xLoc,yLoc,zLoc,yL, &
                    zpf_factor,xpf_factor,dp,neighborWidth,dp_max_l,xp_min,xp_max, &
-                   xp_min_l,xp_max_l
-   REAL(KIND=8) :: y(12, 20000), &
-                   rprop(64, 20000)
-   REAL(KIND=8), DIMENSION(:,:,:,:), ALLOCATABLE :: xGrid, yGrid, zGrid,vfP
-   REAL(RFREAL),ALLOCATABLE,DIMENSION(:) :: xData,yData,zData,rData,dumData     
-   REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: volp,SPL 
-   REAL(KIND=8), DIMENSION(3) :: tpw1,tpw2,tpw3         
+                   xp_min_l,xp_max_l 
+   REAL(RFREAL) :: y(12, 70000), &
+                   rprop(64, 70000)
+   REAL(RFREAL), DIMENSION(:,:), ALLOCATABLE :: rocGrid 
+   REAL(RFREAL),ALLOCATABLE,DIMENSION(:) :: xData,yData,zData,rData,dumData    
+   REAL(RFREAL), DIMENSION(:), ALLOCATABLE :: volp,SPL 
+   REAL(RFREAL), DIMENSION(3) :: tpw1,tpw2,tpw3         
    REAL(RFREAL) :: xin, wout, pi
    REAL(RFREAL) :: rmass
+   REAL(RFREAL), DIMENSION(:,:,:,:), ALLOCATABLE :: xGrid, yGrid, zGrid
 
    INTEGER :: seed(33), isize
 
-   integer*4 :: stationary, qs_flag, am_flag, pg_flag, &
+   INTEGER :: stationary, qs_flag, am_flag, pg_flag, &
         collisional_flag, heattransfer_flag, feedback_flag, &
         qs_fluct_flag, ppiclf_debug, rmu_flag, &
         rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
         qs_fluct_filter_adapt_flag, &
         ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
         sbNearest_flag, burnrate_flag, flow_model
-   real*8 :: rmu_ref, tref, suth, ksp, erest
-   common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag, &
+   REAL(RFREAL) :: rmu_ref, tref, suth, ksp, erest
+   COMMON /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag, &
         collisional_flag, heattransfer_flag, feedback_flag, &
         qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth, &
         rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
         qs_fluct_filter_adapt_flag, ksp, erest, &
         ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
         sbNearest_flag, burnrate_flag, flow_model
-   real*8 :: ppiclf_rcp_part
+   REAL(RFREAL) :: ppiclf_rcp_part
    CHARACTER(12) :: ppiclf_matname
-   common /RFLU_ppiclf_misc01/ ppiclf_rcp_part
-   common /RFLU_ppiclf_misc02/ ppiclf_matname
+   COMMON /RFLU_ppiclf_misc01/ ppiclf_rcp_part
+   COMMON /RFLU_ppiclf_misc02/ ppiclf_matname
 
    ! 08/19/24 - Thierry - added for Periodicity - begins here
-   integer*4 x_per_flag, y_per_flag, z_per_flag, ang_per_flag 
-   real*8 x_per_min, x_per_max, & 
-          y_per_min, y_per_max, & 
-          z_per_min, z_per_max, & 
-          ang_per_angle, ang_per_xangle, &
-          ang_per_rin, ang_per_rout
+   INTEGER :: x_per_flag, y_per_flag, z_per_flag, ang_per_flag 
+   REAL(RFREAL) :: x_per_min, x_per_max, & 
+                   y_per_min, y_per_max, & 
+                   z_per_min, z_per_max, & 
+                   ang_per_angle, ang_per_xangle, &
+                   ang_per_rin, ang_per_rout
    ! 08/19/24 - Thierry - added for Periodicity - ends here
 
-   REAL :: MaxPoint(3), MinPoint(3), EleLen(3), Max_EleLen(3)
+   REAL(RFREAL), DIMENSION(3) :: MaxPoint, MinPoint, CellLen, Max_CellLen, &
+                                 filter, filter_local
    
    ! 04/04/2025 - TLJ - added min/max grid for periodicity
-   integer :: errorFrag
-   real*8 gridmin,gridmax
+   INTEGER :: errorFrag
+   REAL(RFREAL) :: gridmin,gridmax
 
    
 !******************************************************************************
@@ -211,7 +215,6 @@ INTEGER :: errorFlag,icg
   
   global => pRegion%global !pRegion%global
 
-!write(*,*) "Step 0:",global%myProcid  
   CALL RegisterFunction( global,'PICL_TEMP_InitSolver',"../rocpicl/PICL_TEMP_InitSolver.F90" )
 
 
@@ -221,15 +224,14 @@ INTEGER :: errorFlag,icg
   !  pRegion => regions(1)         !pLevel%regions(iReg)
     pGrid   => pRegion%grid!pRegion%grid
 
-  CALL MPI_Barrier(global%mpiComm,errorFlag)
-
-
 !MOVING 1 HERE TO AVOID SEG FAULT OF ROCFLU STORED VF
 
 IF (global%rkscheme /= RK_SCHEME_3_WRAY) THEN
-  CALL ErrorStop(global,ERR_PICL_WRONG_RK,197,'Wrong RK Scheme for ppiclf. Needs RK3')
+  CALL ErrorStop(global,ERR_PICL_WRONG_RK,195,'Wrong RK Scheme for ppiclf. Needs RK3')
 END IF
 
+! Setting flags from input file
+! ************************************************************
 stationary = global%piclStationaryFlag
 qs_flag = global%piclQsFlag
 am_flag = global%piclAmFlag
@@ -257,42 +259,32 @@ erest = global%piclERest
 qs_fluct_filter_flag = global%piclQsFluctFilterFlag
 qs_fluct_filter_adapt_flag = global%piclQsFluctFilterAdaptFlag
 
-! 08/13/24 - Thierry - added for Periodicity - begins here
-! 04/04/2025 - TLJ - modified to detemine min/max from Rocflu grid
-
-x_per_min=-10000.0; x_per_max= 10000.0; ! set crazy value if not used
-y_per_min=-10000.0; y_per_max= 10000.0; ! set crazy value if not used
-z_per_min=-10000.0; z_per_max= 10000.0; ! set crazy value if not used
-
 x_per_flag = global%piclPeriodicXFlag 
-if (x_per_flag == 1) then
-    gridmin = MINVAL(pGrid%xyz(XCOORD,1:pGrid%nVert))
-    gridmax = MAXVAL(pGrid%xyz(XCOORD,1:pGrid%nVert))
-    CALL MPI_AllReduce(gridmin,x_per_min,1,MPI_RFREAL,MPI_MIN, &
-            global%mpiComm,errorFlag)
-    CALL MPI_AllReduce(gridmax,x_per_max,1,MPI_RFREAL,MPI_MAX, &
-            global%mpiComm,errorFlag)
-endif
+! Find min/max grid coordinates across MPI ranks
+gridmin = MINVAL(pGrid%xyz(XCOORD,1:pGrid%nVert))
+gridmax = MAXVAL(pGrid%xyz(XCOORD,1:pGrid%nVert))
+CALL MPI_AllReduce(gridmin,x_per_min,1,MPI_RFREAL,MPI_MIN, &
+        global%mpiComm,errorFlag)
+CALL MPI_AllReduce(gridmax,x_per_max,1,MPI_RFREAL,MPI_MAX, &
+        global%mpiComm,errorFlag)
 
 y_per_flag = global%piclPeriodicYFlag    
-if (y_per_flag == 1) then
-    gridmin = MINVAL(pGrid%xyz(YCOORD,1:pGrid%nVert))
-    gridmax = MAXVAL(pGrid%xyz(YCOORD,1:pGrid%nVert))
-    CALL MPI_AllReduce(gridmin,y_per_min,1,MPI_RFREAL,MPI_MIN, &
-            global%mpiComm,errorFlag)
-    CALL MPI_AllReduce(gridmax,y_per_max,1,MPI_RFREAL,MPI_MAX, &
-            global%mpiComm,errorFlag)
-endif
+! Find min/max grid coordinates across MPI ranks
+gridmin = MINVAL(pGrid%xyz(YCOORD,1:pGrid%nVert))
+gridmax = MAXVAL(pGrid%xyz(YCOORD,1:pGrid%nVert))
+CALL MPI_AllReduce(gridmin,y_per_min,1,MPI_RFREAL,MPI_MIN, &
+        global%mpiComm,errorFlag)
+CALL MPI_AllReduce(gridmax,y_per_max,1,MPI_RFREAL,MPI_MAX, &
+        global%mpiComm,errorFlag)
 
 z_per_flag = global%piclPeriodicZFlag 
-if (z_per_flag == 1) then
-    gridmin = MINVAL(pGrid%xyz(ZCOORD,1:pGrid%nVert))
-    gridmax = MAXVAL(pGrid%xyz(ZCOORD,1:pGrid%nVert))
-    CALL MPI_AllReduce(gridmin,z_per_min,1,MPI_RFREAL,MPI_MIN, &
-            global%mpiComm,errorFlag)
-    CALL MPI_AllReduce(gridmax,z_per_max,1,MPI_RFREAL,MPI_MAX, &
-            global%mpiComm,errorFlag)
-endif
+! Find min/max grid coordinates across MPI ranks
+gridmin = MINVAL(pGrid%xyz(ZCOORD,1:pGrid%nVert))
+gridmax = MAXVAL(pGrid%xyz(ZCOORD,1:pGrid%nVert))
+CALL MPI_AllReduce(gridmin,z_per_min,1,MPI_RFREAL,MPI_MIN, &
+        global%mpiComm,errorFlag)
+CALL MPI_AllReduce(gridmax,z_per_max,1,MPI_RFREAL,MPI_MAX, &
+        global%mpiComm,errorFlag)
 
 ang_per_flag   = global%piclAngularPeriodicFlag
 ang_per_angle  = global%piclAngularPeriodicAngle
@@ -300,78 +292,59 @@ ang_per_xangle = global%piclAngularPeriodicXAngle
 ang_per_rin    = global%piclAngularPeriodicRin
 ang_per_rout   = global%piclAngularPeriodicRout
 
-pi = acos(-1.0d0)
-ang_per_angle  = global%piclAngularPeriodicAngle * pi / 180.0d0
-ang_per_xangle = global%piclAngularPeriodicXAngle * pi / 180.0d0
+pi = acos(-1.0D0)
+ang_per_angle  = global%piclAngularPeriodicAngle * pi / 180.0D0
+ang_per_xangle = global%piclAngularPeriodicXAngle * pi / 180.0D0
 
-call ppiclf_solve_Initialize( &
-   x_per_flag, x_per_min, x_per_max, &
-   y_per_flag, y_per_min, y_per_max, &
-   z_per_flag, z_per_min, z_per_max, &
-   ang_per_flag, ang_per_angle, ang_per_xangle, ang_per_rin, ang_per_rout)
-
-! 08/13/24 - Thierry - added for Periodicity - ends here
 
 ! Sanity check for viscosity
-if (rmu_ref .lt. 0.0d0) then
-    CALL ErrorStop(global,ERR_PICL_INVALID_VISC,284,&
+IF(rmu_ref .LT. 0.0d0) THEN
+    CALL ErrorStop(global,ERR_PICL_INVALID_VISC,267,&
         'Negative viscosity for ppiclF')
-end if
+END IF
 
  ! Initialization for viscous unsteady term
  ppiclf_nTimeBH = 1
- ppiclf_nUnsteadyData = 5
+ ppiclf_nUnsteadyData = 0
+! ************************************************************
 
- CALL MPI_Barrier(global%mpiComm,errorFlag)
-
+! *** I think we can delete this? Random not used -Avery
 seed = 1
-call RANDOM_SEED(put=seed)
-call RANDOM_SEED(size=isize)
-
-
-! Sam - Making this as simple as possible for the initial commit. 
-! We can later add back in some of these routines if we decide we
-! need them. Cleaning house like Calvin, not Luther. 
-
-pf_fluidInit = .true.
+CALL RANDOM_SEED(put=seed)
+CALL RANDOM_SEED(size=isize)
+!***
 
 ! Josh Gillis - Fixed restart probelm
 ! TLJ - we should probably use the .rin file instead
 global%restartFromScratch = .true.
 vtuFile1 = 'par00002.vtu'
 INQUIRE(FILE=trim(vtuFile1), EXIST=fexists)
-IF ( global%myProcid == MASTERPROC) then
+IF( global%myProcid == MASTERPROC) then
    write(*,*) fexists, "fexists"
 ENDIF
-IF (fexists) THEN
+IF(fexists) THEN
    global%restartFromScratch = .false.
    IF ( global%myProcid == MASTERPROC) THEN
-      print*, " "
-      print*, " ======================================="
-      print*, " "
+      PRINT*, " "
+      PRINT*, " ======================================="
+      PRINT*, " "
       WRITE(*,*) 'Starting PPICLF Restart'
-   ENDIF
-ENDIF
+   END IF
+END IF
 
-IF (global%restartFromScratch) THEN
-   ! This variable is stupid
-   pRegion%mixt%piclGeom = 1.00_RFREAL
-  
-   ! Sam - initialization reading .dat file with points set all other
-   ! properties manually except location
+IF(global%restartFromScratch) THEN
    IF ( global%myProcid == MASTERPROC) then
       WRITE(STDOUT,'(A,1X,A)') SOLVER_NAME,'Reading points.dat file...'
    END IF
   
-   CALL MPI_Barrier(global%mpiComm,errorFlag)
    iFileName = 'points.dat'
    iFile = 0
 
    ! open data file
    OPEN(iFile,FILE=iFileName,FORM="FORMATTED",STATUS="OLD",IOSTAT=errorFlag)
    global%error = errorFlag   
-   IF ( global%error /= ERR_NONE ) THEN 
-      CALL ErrorStop(global,ERR_FILE_OPEN,341,iFileName)
+   IF( global%error /= ERR_NONE ) THEN 
+      CALL ErrorStop(global,ERR_FILE_OPEN,312,iFileName)
    END IF
 
    ! check for comments at beginning of file
@@ -385,64 +358,52 @@ IF (global%restartFromScratch) THEN
    BACKSPACE(iFile, IOSTAT=ErrorFlag)
   
    READ(iFile,*) npart ! global number of particles
-   IF (npart .gt. 20000*global%nProcs) THEN
-      CALL ErrorStop(global,ERR_ILLEGAL_VALUE,356,'PPICLF:too &
+   IF (npart .gt. 70000*global%nProcs) THEN
+      CALL ErrorStop(global,ERR_ILLEGAL_VALUE,327,'PPICLF:too &
         many particles to initialize')
    END IF
   
-   npart_local = npart/global%nProcs+1
+   npart_local = CEILING(npart*1.0D0/(global%nProcs*1.0D0))
    i = 1
    i_global = 1
    i_global_min = npart_local*global%myProcid
    i_global_max = npart_local*(global%myProcid+1)
    IF(i_global_max > npart) i_global_max = npart
-   !print*,global%myProcid,npart,i_global_min,i_global_max
 
-   !IF ( global%myProcid == MASTERPROC) then
-    !  print*,global%myProcid,npart,i_global_min,i_global_max
-   !ENDIF
-
-   rprop(1:64,1:20000) = 0.0d0
-  
-   dp_max = 0.0d0
+   rprop(1:64,1:70000) = 0.0D0
+   dp_max = 0.0D0
    xp_min_l = +17400000.0
    xp_max_l = -17400000.0
-   do i_global=1,npart
+   DO i_global=1,npart
       READ(iFile,*) matName, (y(ii,i),ii=1,3),dp !points.dat not formated
 
+      ! These are global max/min's since in 1:npart loop
       dp_max = max(dp_max,dp)
-      xp_min_l = min(xp_min_l,y(1,i)-dp/2.0)!sqrt(y(1,i)*y(1,i)+y(2,i)*y(2,i)))
-      xp_max_l = max(xp_max_l,y(1,i)+dp/2.0)!sqrt(y(1,i)*y(1,i)+y(2,i)*y(2,i)))
+      xp_min_l = min(xp_min_l,y(1,i)-dp/2.0)
+      xp_max_l = max(xp_max_l,y(1,i)+dp/2.0)
   
       ! if in range for this processor set all the other properties and increment i
-      if ((i_global .gt. i_global_min) .and. (i_global .le. i_global_max)) then
-         y(4,i) = 0.0d0
-         y(5,i) = 0.0d0
-         y(6,i) = 0.0d0
+      IF((i_global .GT. i_global_min) .AND. (i_global .LE. i_global_max)) THEN
+         y(4,i) = 0.0D0
+         y(5,i) = 0.0D0
+         y(6,i) = 0.0D0
          y(7, i) = global%piclTemp
-         y(8,i) = 0.0d0
-         y(9,i) = 0.0d0
-         y(10,i) = 0.0d0
+         y(8,i) = 0.0D0
+         y(9,i) = 0.0D0
+         y(10,i) = 0.0D0
   
-         ! initially zero out all properties
-         !do ii=1,64
-         !  rprop(ii, i) = 0.0d0
-         !end do
-
          ! search for material
          matName = ADJUSTL(TRIM(matName))
          foundMat = .FALSE.
          DO iMat=1,global%nMaterials
             material => global%materials(iMat)
             IF (matName == material%name) THEN
-               ! TLJ - Set heat capacity of particle [J/kg-K]
-               !     - If not set in *.inp file, set default
-               ! Soda lime: Cv = 840; rhop = 2520.
                ppiclf_matname = matName
-               IF (material%spht .GE. 10.0_RFREAL) THEN
+               IF (material%spht .GE. 1.0_RFREAL) THEN
                   ppiclf_rcp_part = material%spht
                ELSE
-                  ppiclf_rcp_part = 840.0
+                 PRINT*, 'Material Specific Heat not found in input file' 
+                 CALL ErrorStop(global,ERR_INRT_MISSPLAGMAT,371,matName)
                ENDIF
                rhop = material%dens
                foundMat = .TRUE.
@@ -450,9 +411,9 @@ IF (global%restartFromScratch) THEN
             END IF
          END DO
 
-         IF (.NOT. foundMat) THEN
+         IF(.NOT. foundMat) THEN
             print*,global%myProcid,'stopping foundMat = False'
-            CALL ErrorStop(global,ERR_INRT_MISSPLAGMAT,422,matName)
+            CALL ErrorStop(global,ERR_INRT_MISSPLAGMAT,381,matName)
          END IF
 
          IF ( global%myProcid == MASTERPROC) then
@@ -471,7 +432,7 @@ IF (global%restartFromScratch) THEN
          rprop(3,i)   = dp ! particle diameter
          rprop(4,i) = (4.0_RFREAL/3.0_RFREAL)*global%pi*&
                                    (0.5_RFREAL*dp)**3 ! particle volume
-    
+         ! Super Particle Loading (Real Number of particles = JSPL * number of compuational particles)
          rprop(22,i) = 1.0_RFREAL
 
          ! Davin - added for burn rate model 02/22/2025
@@ -482,115 +443,96 @@ IF (global%restartFromScratch) THEN
          y(12,i) = 0.0_RFREAL       ! Initial OX mass
 
          i = i + 1
-      endif
-   enddo
+      END IF
+   END DO
    npart_local = i - 1
-   CALL MPI_Allreduce(xp_min_l,xp_min,1,MPI_RFREAL,MPI_MIN, &
-      global%mpiComm,global%mpierr )
-   CALL MPI_Allreduce(xp_max_l,xp_max,1,MPI_RFREAL,MPI_MAX, &
-      global%mpiComm,global%mpierr )
 
-   IF ( global%myProcid == MASTERPROC) THEN
+   CALL MPI_ALLREDUCE(xp_min_l,xp_min,1,MPI_RFREAL,MPI_MIN, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(xp_max_l,xp_max,1,MPI_RFREAL,MPI_MAX, &
+        global%mpiComm,global%mpierr)
+
+   IF(global%myProcid == MASTERPROC) THEN
       print*
       print*,'TLJ starting location of particle bed (xp_min) = ',xp_min
       print*,'TLJ ending   location of particle bed (xp_max) = ',xp_max
       print*,'TLJ particle bed thickness (xp_max-xp_min)*1e3 = ',(xp_max-xp_min)*1e3
       print*
-   ENDIF
+   END IF
 
    ! Close points.dat file
    CLOSE(iFile, IOSTAT=errorFlag)
-   CALL MPI_Barrier(global%mpiComm,errorFlag)
    global%error = errorFlag   
    IF ( global%error /= ERR_NONE ) THEN 
-      CALL ErrorStop(global,ERR_FILE_CLOSE,473,iFileName)
+      CALL ErrorStop(global,ERR_FILE_CLOSE,433,iFileName)
    END IF ! global%error  
-
 ELSE
 !  This is for a restart
-   pf_fluidInit = .false.
    fexists = .true.
-   ii=0
+   ii=0 !last exists par.vtu file
    DO WHILE (fexists)
       ii = ii + 1
       vtuFile = ''
-      write(vtuFile,'(A3,I5.5,A4)') 'par',ii,'.vtu'
+      WRITE(vtuFile,'(A3,I5.5,A4)') 'par',ii,'.vtu'
       INQUIRE(FILE=trim(vtuFile), EXIST=fexists)
-      IF ( global%myProcid == MASTERPROC) THEN
+      IF( global%myProcid == MASTERPROC) THEN
          WRITE(*,*) 'PPICLF par file: ',TRIM(vtuFile),ii,'  ',fexists
-      ENDIF
+      END IF
    END DO
    ii = ii - 1
    vtuFile = ''
-   write(vtuFile,'(A3,I5.5,A4)') 'par',ii,'.vtu'
-   IF ( global%myProcid == MASTERPROC) THEN
+   WRITE(vtuFile,'(A3,I5.5,A4)') 'par',ii,'.vtu'
+   IF( global%myProcid == MASTERPROC) THEN
       WRITE(*,*) 'Reading ', vtuFile, len(vtuFile)
    ENDIF
 
-   IF (ii .lt. 0) THEN
-      CALL ErrorStop(global,ERR_FILE_EXIST,498,vtuFile)
+   IF(ii .lt. 0) THEN
+      CALL ErrorStop(global,ERR_FILE_EXIST,456,vtuFile)
    END IF
 
-   ! TLJ - 11/23/2024
-   !  Fixed error in call to ReadParticleVTU:
-   !    CALL ppiclf_io_ReadParticleVTU(trim(vtuFile), ii-1)
-   !  Now passing back npart and dp_max
-   !  Note that dp_max is needed for proper setting of neighborWidth
    npart = -1
    dp_max = -1.0
    CALL ppiclf_io_ReadParticleVTU(trim(vtuFile), ii, npart, dp_max_l)
    CALL MPI_Allreduce(dp_max_l,dp_max,1,MPI_RFREAL,MPI_MAX, &
       global%mpiComm,global%mpierr )
    print*,global%myProcid,npart,dp_max_l,dp_max
-
-   i = 1 ! particles/rank to distribute??
-
-   IF ( global%myProcid == MASTERPROC) THEN
+   IF( global%myProcid == MASTERPROC) THEN
       print*, " "
       WRITE(*,*) 'Finished PPICLF Restart'
       print*, " "
       print*, " ======================================="
       print*, " "
-   ENDIF
+   END IF
 END IF ! global%restartFromScratch
-
-
-CALL MPI_Barrier(global%mpiComm,errorFlag)
-
-!BRAD STARTS HERE
-!Taking what was already done and building 1-way coupled first
-!NEED TO BUILD overlap mesh 
-!Loop through cells
- !Pull face id's
-  !grab face center coords 
-   !dump into approperate array
-!How cooord is grab needs to match how props are grabbed
 
 ! User sets up overlap mesh:
 nCells = pRegion%grid%nCells
-lx = 2
-ly = 2
-lz = 2
  
-ALLOCATE(xGrid(lx,ly,lz,nCells),STAT=errorFlag)
+ALLOCATE(xGrid(2,2,2,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_ALLOCATE,545,'PPICLF:xGrid')
+  CALL ErrorStop(global,ERR_ALLOCATE,480,'PPICLF:xGrid')
 END IF ! global%error
 
-ALLOCATE(yGrid(lx,ly,lz,nCells),STAT=errorFlag)
+ALLOCATE(yGrid(2,2,2,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_ALLOCATE,551,'PPICLF:yGrid')
+  CALL ErrorStop(global,ERR_ALLOCATE,486,'PPICLF:yGrid')
 END IF ! global%error
 
-ALLOCATE(zGrid(lx,ly,lz,nCells),STAT=errorFlag)
+ALLOCATE(zGrid(2,2,2,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_ALLOCATE,557,'PPICLF:zGrid')
+  CALL ErrorStop(global,ERR_ALLOCATE,492,'PPICLF:zGrid')
 END IF ! global%error
 
-!Loop cells
+ALLOCATE(rocGrid(7,nCells),STAT=errorFlag)
+IF ( global%error /= ERR_NONE ) THEN
+  CALL ErrorStop(global,ERR_ALLOCATE,497,'PPICLF:rocGrid')
+END IF ! global%error
+
+! *** ppiclF requires hexahedral elements ***
 DO i = 1, nCells 
 
    vi = pRegion%grid%hex2v(1,i) 
@@ -627,20 +569,20 @@ DO i = 1, nCells
             zGrid(2,2,2,i) = pRegion%grid%xyz(ZCOORD,vi) 
 
 END DO !nCells
-! Max cell lengths
+
+! Find cell lengths
 DO i = 1,nCells
   ! Initialize as zero for each element
   DO l = 1,3
-    MaxPoint(l) = -1.0E10 
-    MinPoint(l) =  1.0E10 
-    EleLen(l)   =  0.0   
-    Max_EleLen(l)  =  1.23456789D-10
-  ENDDO !l
-  ! Add all x,y,z mesh points for centroid and find extremes
-  ! AVERY FUTURE WORK - update filter to be 3 dimensional.
-    DO k = 1,2!2
-      DO j = 1,2!2
-        DO m = 1,2!2
+    MaxPoint(l) = -1.0D10 
+    MinPoint(l) =  1.0D10 
+    CellLen(l)   =  0.0D0   
+    Max_CellLen(l)  =  1.23456789D-10
+  END DO !l
+  ! Add all x,y,z cell corners for centroid and find extremes
+    DO k = 1,2
+      DO j = 1,2
+        DO m = 1,2
           IF (xGrid(k,j,m,i) > MaxPoint(1)) &
             MaxPoint(1) = xGrid(k,j,m,i)
           IF (xGrid(k,j,m,i) < MinPoint(1)) &
@@ -653,115 +595,91 @@ DO i = 1,nCells
             MaxPoint(3) = zGrid(k,j,m,i)  
           IF (zGrid(k,j,m,i) < MinPoint(3)) &
             MinPoint(3) = zGrid(k,j,m,i)
-        ENDDO !i
-      ENDDO !j
-    ENDDO !k
+        END DO !i
+      END DO !j
+    END DO !k
   DO l = 1,3
-    ! Find max element length in all dimensions
-    EleLen(l) = ABS(MaxPoint(l)-MinPoint(l))
-    ! Find max lengths for all mesh elements in all directions
-    IF (EleLen(l) > 1D-2 .OR. EleLen(l) < 1D-7) THEN
-      WRITE(*,*) 'AVERY - Extreme points:', MaxPoint(l), MinPoint(l), 'Dimension:',l
-      CYCLE
+    ! Find element length in all dimensions
+    CellLen(l) = ABS(MaxPoint(l)-MinPoint(l))
+    ! Find max lengths for all grid cells on this processor
+    IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
+    IF(CellLen(l) > 1D-2 .OR. CellLen(l) < 1D-7) THEN
+      WRITE(*,*) 'Error in calculating max element size'
+      WRITE(*,*) 'Max & Min points:', MaxPoint(l), MinPoint(l), 'Dimension:',l
+      CALL ErrorStop(global,ERR_ALLOCATE,574,'PPICLF:CellLen')
     END IF
-    IF (EleLen(l) .GT. Max_EleLen(l)) Max_EleLen(l) = EleLen(l)
-  ENDDO !l
-ENDDO !i
-filter = 4*MAXVAL(Max_EleLen) ! Minimum two cells per ppiclf_bin
-! TLJ compute ppcilf_d2chk here in rocpicl
-!     this is needed to have the bin at t=0 be
-!     the correct size
-!
-! TLJ: Here we need dp_min to be defined
-! Sam - switching to dp_max which is the worst case
-neighborWidth = 4.0_RFREAL*dp_max
-if ((neighborWidth .gt. global%piclNeighborWidth) &
-    .and. (global%myProcid == MASTERPROC)) then
+  END DO !l
+
+  rocGrid(1,i) = pRegion%grid%cofg(1,i) !Cell Centroid x position
+  rocGrid(2,i) = pRegion%grid%cofg(2,i) !Cell Centroid y position
+  rocGrid(3,i) = pRegion%grid%cofg(3,i) !Cell Centroid z position
+  rocGrid(4,i) = CellLen(1) ! Cell largest dx
+  rocGrid(5,i) = CellLen(2) ! Cell largest dy
+  rocGrid(6,i) = CellLen(3) ! Cell largest dz
+  rocGrid(7,i) = pRegion%grid%vol(i) ! Cell volume
+
+END DO !i
+
+MinFluidCells = 2 !Number of fluid cells for Minimum Bin Size or ppiclf_filter(1:3)
+DO l = 1,3
+  filter_local(l) = MinFluidCells*Max_CellLen(l) 
+  ! Find max x,y,z cell lengths across all MPI ranks (entire rocflu domain)
+  CALL MPI_Allreduce(filter_local(l),filter(l),1,MPI_RFREAL,MPI_MAX, &
+      global%mpiComm,global%mpierr )
+END DO
+
+neighborWidth = 4.0_RFREAL*dp_max ! Minimum value. User can entire larger if desired
+IF((neighborWidth .GT. global%piclNeighborWidth) &
+    .AND. (global%myProcid == MASTERPROC)) THEN
     WRITE(STDOUT, '(A)') &
         '*** WARNING *** PICL NEIGHBORWIDTH too small, defaulting to 4*dp_max'
-end if
+END IF
 neighborWidth = MAX(neighborWidth, global%piclNeighborWidth)
-!filter = global%piclFilterWidth
-filter=filter/2.0d0
 
-if (global%myProcid == MASTERPROC)  then
-   print*,' '
-   print*,'PPICLF: '
-   print*,'  Inputs FILTERWIDTH    : ',global%piclFilterWidth
-   print*,'  Inputs NEIGHBORWIDTH  : ',global%piclNeighborWidth
-   print*,'  dp_max (points.dat)               : ',dp_max
-   print*,'  d2chk(2) = FILTERWIDTH/2          : ',filter
-   print*,'  d2chk(3) = max(4dp,NEIGHBORWIDTH) : ',neighborWidth
-   print*,'  d2chk(1) = max(d2chk(2),d2chk(3)) : ',max(filter,neighborWidth)
-   print*,'    d2chk(1) = max(d2chk(1),d2chk(2); used in CreateBin'
-   print*,'    d2chk(2) = filter; used in filters'
-   print*,'    d2chk(3) = neighborWidth; used in nearestNeighbor'
-   print*,' '
-endif
+IF(global%myProcid == MASTERPROC) THEN
+   PRINT*,' '
+   PRINT*,'PPICLF: '
+   PRINT*,'  Inputs NEIGHBORWIDTH  : ',global%piclNeighborWidth
+   PRINT*,'  dp_max (points.dat)   : ',dp_max
+   PRINT*,'  ppiclf_filter(1)      : ',filter(1)
+   PRINT*,'  ppiclf_filter(2)      : ',filter(2)
+   PRINT*,'  ppiclf_filter(3)      : ',filter(3)
+   PRINT*,'  ppiclf_nndist         : ',neighborWidth
+   PRINT*,' '
+END IF
 
-! TLJ after computing d2chk, we can initialize bins, etc.
-call ppiclf_solve_InitParticle(2,3,0,npart_local,y,rprop,filter,neighborWidth) 
+! Sets ppiclf_nndist, ppiclf_filter(1:3), ppiclf_y(), ppiclf_rprop()
+!(imethod (RK pick), nDimensions, iendian (IO format), .....)
+CALL ppiclf_solve_InitParticle(2,3,0,npart_local,y,rprop,filter,neighborWidth) 
+IF(global%myProcid == MASTERPROC) THEN
+  PRINT*, 'x fluid min/max', x_per_min, x_per_max
+  PRINT*, 'y fluid min/max', y_per_min, y_per_max
+  PRINT*, 'z fluid min/max', z_per_min, z_per_max
+END IF
 
-! TLJ: CAUTION - Gaussian filter needs to be fixed
-! TLJ: Initialize Box Filter
-!      This sets ppiclf_d2chk(2) used in Nearest Neighbors
-! subroutine ppiclf_solve_InitBoxFilter(filt,iwallm,sngl_elem)
-call ppiclf_solve_InitBoxFilter(filter,0,1)!global%piclFilterWidth,0,1)
+!IF(
+!  CreateGhosts,                    &
+CALL ppiclf_solve_Initialize( & 
+           x_per_flag, x_per_min, x_per_max, &
+           y_per_flag, y_per_min, y_per_max, &
+           z_per_flag, z_per_min, z_per_max, &
+           ang_per_flag, ang_per_angle, ang_per_xangle, ang_per_rin, ang_per_rout)
 
-
-! Sam - must call initneighborbin before initoverlap for new interpolation scheme
-call ppiclf_solve_InitNeighborBin(neighborWidth)
-
-call ppiclf_comm_InitOverlapMesh(nCells,lx,ly,lz,xGrid,yGrid,zGrid)
-
-! 08/13/24 - Thierry - added for Periodicity - begins here
-
-! Thierry - user cannot invoke linear periodicity in x or y when invoking 
-!           angular periodicity around z-axis
+! *** AVERY - Update when general ang per is done ***
 IF(((ang_per_flag.eq.1) .and. (x_per_flag.eq.1 .or. y_per_flag.eq.1)) .or. & 
     (ang_per_flag .gt. 1)) THEN
-    CALL ErrorStop(global,ERR_PICL_INVALID_PERIODICITY,690,&
+    CALL ErrorStop(global,ERR_PICL_INVALID_PERIODICITY,636,&
       'Wrong periodicity choices for ppiclF')
 END IF 
-
-! Angular-Periodic
-IF(ang_per_flag .eq. 1) then
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF Angular Periodic Invoked"
-     call ppiclf_solve_InitAngularPeriodic(ang_per_flag , &
-                                           ang_per_rin  , ang_per_rout, &
-                                           ang_per_angle, ang_per_xangle)
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF Angular Periodic Done"
-END IF
-
-! Linear X-Periodic
-IF(x_per_flag .eq. 1) then  
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicX Invoked"
-   call ppiclf_solve_InitPeriodicX(x_per_min, x_per_max) 
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicX Done" 
-END IF 
-
-! Linear Y-Periodic
-IF(y_per_flag .eq. 1) then
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicY Invoked"
-  call ppiclf_solve_InitPeriodicY(y_per_min, y_per_max)
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicY Done" 
-END IF
-
-! Linear Z-Periodic
-IF(z_per_flag .eq. 1) then 
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicZ Invoked"
- call ppiclf_solve_InitPeriodicZ(z_per_min, z_per_max)
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicZ Done" 
-END IF 
-
-! 08/13/24 - Thierry - added for Periodicity - ends here
+! Creates OverlapMesh and Calls Init Solve
+CALL ppiclf_comm_InitOverlapMesh(nCells,rocGrid)
 
 INQUIRE(FILE='filein.vtk', EXIST=wall_exists)
-if (wall_exists) then
-  call ppiclf_io_ReadWallVTK('filein.vtk')
-else if (global%myProcid == MASTERPROC) then
+IF(wall_exists) THEN
+  CALL ppiclf_io_ReadWallVTK('filein.vtk')
+ELSE IF (global%myProcid == MASTERPROC) THEN
   WRITE(*,*) 'Could not find filein.vtk'
-end if
+END IF
 
 
 ! 03/24/2025 - Thierry - store the RocfluMP Flow Model chosen (Euler or NS)
@@ -770,75 +688,56 @@ end if
 !flow_model = 0
 !flow_model = int(pRegion%mixtInput%flowModel)
 
-! Important note from BRAD:
-!!!!!!!!!!!!!!!!!!!!!!!!WARNING!!!!!!!!!!!!!!!!!!!!
-!Make sure this call is done specifically when starting the simulation
-!for the First Time. As in t = 0.000 else the collision factor will be messed up 
-!TLJ commented this out because not needed
-!if (pf_fluidInit .eqv. .true. ) call ppiclf_solve_InterpFieldUser(20,xGrid)    
+DEALLOCATE(rocGrid,STAT=errorFlag)
+global%error = errorFlag
+IF ( global%error /= ERR_NONE ) THEN
+  CALL ErrorStop(global,ERR_DEALLOCATE,659,'PPICLF:rocGrid')
+END IF ! global%error
+
 
 DEALLOCATE(xGrid,STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_DEALLOCATE,750,'PPICLF:xGrid')
+  CALL ErrorStop(global,ERR_DEALLOCATE,666,'PPICLF:xGrid')
 END IF ! global%error
 
 DEALLOCATE(yGrid,STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_DEALLOCATE,756,'PPICLF:yGrid')
+  CALL ErrorStop(global,ERR_DEALLOCATE,672,'PPICLF:yGrid')
 END IF ! global%error
 
 DEALLOCATE(zGrid,STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_DEALLOCATE,762,'PPICLF:zGrid')
+  CALL ErrorStop(global,ERR_DEALLOCATE,678,'PPICLF:zGrid')
 END IF ! global%error
-
-ALLOCATE(vfP(2,2,2,nCells),STAT=errorFlag)
-    global%error = errorFlag
-    IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,768,'PPICLF:xGrid')
-    END IF ! global%error
 
 ALLOCATE(volp(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,774,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,684,'PPICLF:volp')
     END IF ! global%error
 
-do i=1,pGrid%nCellsTot
+DO i=1,pGrid%nCellsTot
         pRegion%mixt%piclVF(i) = 0.0_RFREAL
-end do
+END DO
 
-IF ( global%myProcid == MASTERPROC) write(*,*) "PFINIT: Calc Init VolP"
-DO i = 1,pRegion%grid%nCells
-       volp(i) = 0 
-       tester = 0
-       do lz=1,2
-       do ly=1,2
-       do lx=1,2
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, i, 1,&
-                        vfP(lx,ly,lz,i))
-
+IF ( global%myProcid == MASTERPROC) WRITE(*,*) "PFINIT: Calc Init VolP"
+DO i = 1, nCells
+       CALL ppiclf_solve_GetProFld(i, 1, volp(i))
        IF (pRegion%mixtInput%axiFlag) THEN
            WRITE(*,*) "Need to properly implement axi-sym for phip init."
-           CALL ErrorStop(global,ERR_OPTION_TYPE,793,'PPICLF:axi')
+           CALL ErrorStop(global,ERR_OPTION_TYPE,696,'PPICLF:axi')
        END IF
-
-       tester = tester + (0.125*vfP(lx,ly,lz,i))*pRegion%grid%vol(i)
-
-       end do 
-       end do 
-       end do
-       volp(i) = (tester/(pRegion%grid%vol(i)))
+       volp(i) = 0.0D0
+       volp(i) = volp(i)/pRegion%grid%vol(i)
 !*** VOL FRAC CAP
-! TLJ: Increased from 0.6 to 0.62
-       if (volp(i) .gt. 0.62) then
+       IF(volp(i) .GT. 0.62) THEN
            volp(i) = 0.62 
-       endif
+       END IF
        pRegion%mixt%piclVF(i) = volp(i) 
-end do
+END DO
 
 ! TLJ:
 ! This section takes as input from utilities/init/RFLU_InitFlowHardCode.F90
@@ -846,6 +745,7 @@ end do
 !    (phig*r,phig*r*u,phig*r*v,phig*r*w,phig*r*E), where phig is the gas
 !    phase volume fraction and can only be computed after the particles
 !    are read in.
+
 DO icg = 1,pGrid%nCellsTot
     vFrac = 1.0_RFREAL - pRegion%mixt%piclVF(icg)
     pRegion%mixt%cv(CV_MIXT_DENS,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_DENS,icg)
@@ -853,93 +753,79 @@ DO icg = 1,pGrid%nCellsTot
     pRegion%mixt%cv(CV_MIXT_YMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_YMOM,icg)
     pRegion%mixt%cv(CV_MIXT_ZMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_ZMOM,icg)
     pRegion%mixt%cv(CV_MIXT_ENER,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_ENER,icg)
-    if (pRegion%mixt%cv(CV_MIXT_DENS,icg) .le. 0.0) then
-         WRITE(*,*) "Error: negative density: ",pRegion%mixt%cv(CV_MIXT_DENS,icg)      
-         CALL ErrorStop(global,ERR_INVALID_VALUE,825,'PPICLF:init')
-    end if    
-
+    IF(pRegion%mixt%cv(CV_MIXT_DENS,icg) .le. 0.0) THEN
+         WRITE(*,*) "Error: negative density: ",pRegion%mixt%cv(CV_MIXT_DENS,icg)     
+         PRINT*, 'From rocpicl/PICL_TEMP_InitSolver.F90' 
+         CALL ErrorStop(global,ERR_INVALID_VALUE,724,'PPICLF:init')
+    END IF    
 END DO ! icg
 
-DEALLOCATE(vfP,STAT=errorFlag)
-    global%error = errorFlag
-    IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_DEALLOCATE,833,'PPICLF:zGrid')
-    END IF ! global%error
 DEALLOCATE(volp,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_DEALLOCATE,838,'PPICLF:zGrid')
+      CALL ErrorStop(global,ERR_DEALLOCATE,731,'PPICLF:zGrid')
     END IF ! global%error
 
-!!Josh - Removed Brad Comments and Restart Section
-!!Can now restart using last par output and converting to .dat format
-!!Note that par naming will restart from 00001 (this can be changed)
 
+IF ( global%myProcid == MASTERPROC) then
+   print*, ' '
+   print*, '***********************************************'
+   print*, 'TLJ'
+   print*, 'Starting PICL_TEMP_InitSolver.F90'
+   print*, ' '
+   print*, 'stationary           = ',global%piclStationaryFlag
+   print*, 'qs_flag              = ',global%piclQsFlag
+   print*, 'am_flag              = ',global%piclAmFlag
+   print*, 'pg_flag              = ',global%piclPgFlag
+   print*, 'collisional_flag     = ',global%piclCollisionFlag
+   print*, 'ViscousUnsteady_flag = ',global%piclViscousUnsteady
+   print*, 'heattransfer_flag    = ',global%piclHeatTransferFlag
+   print*, 'feedback_flag        = ',global%piclFeedbackFlag
+   print*, 'qs_fluct_flag        = ',global%piclQsFluctFlag
+   print*, 'ppiclf_debug         = ',global%piclDebug
+   print*, 'ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData
+   print*, 'ppiclf_VU            = ',0
+   print*, 'sbNearest_flag       = ',global%piclSBNearFlag
+   print*, 'burnrate_flag        = ',global%piclBurnRateFlag
 
-!1 MOVE HERE END
+   IF (global%piclViscousUnsteady >=1) THEN
+      print*,'  Using Viscous unsteady history term'
+      print*,'    ppiclf_nTimeBH       = ',ppiclf_nTimeBH
+      print*,'    ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData,0
+   ENDIF
 
-  IF ( global%myProcid == MASTERPROC) then
-     print*, ' '
-     print*, '***********************************************'
-     print*, 'TLJ'
-     print*, 'Starting PICL_TEMP_InitSolver.F90'
-     print*, ' '
-     print*, 'stationary           = ',global%piclStationaryFlag
-     print*, 'qs_flag              = ',global%piclQsFlag
-     print*, 'am_flag              = ',global%piclAmFlag
-     print*, 'pg_flag              = ',global%piclPgFlag
-     print*, 'collisional_flag     = ',global%piclCollisionFlag
-     print*, 'ViscousUnsteady_flag = ',global%piclViscousUnsteady
-     print*, 'heattransfer_flag    = ',global%piclHeatTransferFlag
-     print*, 'feedback_flag        = ',global%piclFeedbackFlag
-     print*, 'qs_fluct_flag        = ',global%piclQsFluctFlag
-     print*, 'ppiclf_debug         = ',global%piclDebug
-     print*, 'ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData
-     print*, 'ppiclf_VU            = ',5
-     print*, 'sbNearest_flag       = ',global%piclSBNearFlag
-     print*, 'burnrate_flag        = ',global%piclBurnRateFlag
+   print*, ' '
+   print*, "XLOC = ", y(1 ,1) 
+   print*, "YLOC = ", y(2 ,1) 
+   print*, "ZLOC = ", y(3 ,1)   
 
-     IF (global%piclViscousUnsteady >=1) THEN
-        print*,'  Using Viscous unsteady history term'
-        print*,'    ppiclf_nTimeBH       = ',ppiclf_nTimeBH
-        print*,'    ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData,5
-     ENDIF
+   print*, ' '
+   print*, 'Reading points.dat file...'
+   print*, "part material  = ", TRIM(ppiclf_matname)
+   print*, "npart          = ", npart
+   print*, 'dp_max         = ', dp_max
+   print*, 'rho_dens       = ', rhop
+   print*, 'cv_particle    = ', ppiclf_rcp_part
+   
+   if(x_per_flag.eq.1) then
+     print*, "ppiclF X-periodic (min, max) ", x_per_min, x_per_max
+   endif  
+   if(y_per_flag.eq.1) then
+     print*, "ppiclF Y-periodic (min, max) ", y_per_min, y_per_max
+   endif  
+   if(z_per_flag.eq.1) then
+     print*, "ppiclF Z-periodic (min, max) ", z_per_min, z_per_max
+   endif  
+   if(ang_per_flag.eq.1) then
+     print*, "ppiclF Angular-periodic (axis, rin, rout, angle, x-angle) ", &
+     ang_per_flag, ang_per_rin, ang_per_rout, &
+     ang_per_angle, ang_per_xangle
+   endif  
 
-     print*, ' '
-     print*, "BOXF = ", filter 
-     print*, "PHIPF = ",  global%pi/6.0*(filter)**3
-     print*, "XLOC = ", y(1 ,1) 
-     print*, "YLOC = ", y(2 ,1) 
-     print*, "ZLOC = ", y(3 ,1)   
-     print*, 'Box filter rwidth (in meters) = ',global%piclFilterWidth
-
-     print*, ' '
-     print*, 'Reading points.dat file...'
-     print*, "part material  = ", TRIM(ppiclf_matname)
-     print*, "npart          = ", npart
-     print*, 'dp_max         = ', dp_max
-     print*, 'rho_dens       = ', rhop
-     print*, 'cv_particle    = ', ppiclf_rcp_part
-     
-     if(x_per_flag.eq.1) then
-       print*, "ppiclF X-periodic (min, max) ", x_per_min, x_per_max
-     endif  
-     if(y_per_flag.eq.1) then
-       print*, "ppiclF Y-periodic (min, max) ", y_per_min, y_per_max
-     endif  
-     if(z_per_flag.eq.1) then
-       print*, "ppiclF Z-periodic (min, max) ", z_per_min, z_per_max
-     endif  
-     if(ang_per_flag.eq.1) then
-       print*, "ppiclF Angular-periodic (axis, rin, rout, angle, x-angle) ", &
-       ang_per_flag, ang_per_rin, ang_per_rout, &
-       ang_per_angle, ang_per_xangle
-     endif  
-  
-     print*, ' '
-     print*, 'Ending PICL_TEMP_InitSolver.F90'
-     print*, '***********************************************'
-  ENDIF
+   print*, ' '
+   print*, 'Ending PICL_TEMP_InitSolver.F90'
+   print*, '***********************************************'
+ENDIF
 
 ! finalize --------------------------------------------------------------------
 
@@ -955,4 +841,5 @@ END SUBROUTINE PICL_TEMP_InitSolver
 !
 !
 !******************************************************************************
+
 

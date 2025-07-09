@@ -62,9 +62,7 @@
       isize = 4
       jx    = 1
       jy    = 2
-      jz    = 1
-      if (ppiclf_ndim .eq. 3)
-     >jz    = 3
+      jz    = 3
 
       if (ppiclf_nid .eq. 0) then
 
@@ -190,8 +188,10 @@
          ic_lrp = ic_lrp + 1
          ppiclf_rprop(j,i) = rout_lrp(ic_lrp)
       enddo
+!*** need to add ppiclf_rprop2 & ppiclf_rprop3
       enddo
-      do j=5,7
+      ! This reads the particle tag infomation.
+      do j=1,3
       do i=1,npart
          ic_lip = ic_lip + 1
          ppiclf_iprop(j,i) = int(rout_lip(ic_lip))
@@ -298,519 +298,6 @@
       call ppiclf_bcast(ppiclf_wall_n,4*PPICLF_LWALL*irsize)
 
       call ppiclf_printsi('  End ReadWallVTK$',nwalls)
-
-      return
-      end
-!-----------------------------------------------------------------------
-      subroutine ppiclf_io_WriteSubBinVTU(filein1)
-!
-      implicit none
-!
-      include "PPICLF"
-      include 'mpif.h'
-!
-! Input:
-!
-      character (len = *) filein1
-!
-! Internal:
-!
-      character*3 filein
-      character*12 vtufile
-      character*6  prostr
-      integer*4 icalld1
-      save      icalld1
-      data      icalld1 /0/
-      integer*4 vtu,pth, nvtx_total, ncll_total
-      integer*8 idisp_pos
-      integer*8 stride_lenv
-      integer*4 icount_pos(PPICLF_BX1, PPICLF_BY1, PPICLF_BZ1)
-      real*4 rpoint(3)
-      integer*4 iint, nnp, nxx, ndxgpp1, ndygpp1, ndxygpp1, if_sz,
-     >          isize, ibin, jbin, kbin, ndumx, ndumy, i, j, k,
-     >          ie, ndum, kmax, ii, jj, kk, itmp, jtmp, ktmp, il, ir,
-     >          jl, jr, kl, kr, npa, npb, npc, npd, npe, npf, npg, nph,
-     >          ioff_dum, itype, ivtu_size, if_pos, ierr, icount_dum,
-     >          iorank
-!
-
-      call ppiclf_printsi(' *Begin WriteSubBinVTU$',ppiclf_cycle)
-
-      call ppiclf_prints(' *Begin InitSolve$')
-         call ppiclf_solve_InitSolve
-      call ppiclf_prints('  End InitSolve$')
-
-      call ppiclf_prints(' *Begin CreateSubBin$')
-         call ppiclf_comm_CreateSubBin
-      call ppiclf_prints('  End CreateSubBin$')
-
-      call ppiclf_prints(' *Begin ProjectParticleSubBin$')
-         call ppiclf_solve_ProjectParticleSubBin
-      call ppiclf_prints('  End ProjectParticleSubBin$')
-
-      icalld1 = icalld1+1
-
-      nnp   = ppiclf_np
-      nxx   = PPICLF_NPART
-
-      ncll_total = ppiclf_n_bins(1)*(ppiclf_bx-1)
-     >            *ppiclf_n_bins(2)*(ppiclf_by-1)
-      if (ppiclf_ndim.eq.3) ncll_total = ncll_total
-     >            *ppiclf_n_bins(3)*(ppiclf_bz-1)
-      nvtx_total = (ppiclf_n_bins(1)*(ppiclf_bx-1)+1)
-     >            *(ppiclf_n_bins(2)*(ppiclf_by-1)+1)
-      if (ppiclf_ndim.eq.3) nvtx_total = nvtx_total
-     >            *(ppiclf_n_bins(3)*(ppiclf_bz-1)+1)
-
-      ndxgpp1 = ppiclf_n_bins(1) + 1
-      ndygpp1 = ppiclf_n_bins(2) + 1
-      ndxygpp1 = ndxgpp1*ndygpp1
-
-      if_sz = len(filein1)
-      if (if_sz .lt. 3) then
-         filein = 'grd'
-      else 
-         write(filein,'(A3)') filein1
-      endif
-
-      isize  = 4
-
-      ! get which bin this processor holds
-      ibin = modulo(ppiclf_nid,ppiclf_n_bins(1))
-      jbin = modulo(ppiclf_nid/ppiclf_n_bins(1),ppiclf_n_bins(2))
-      kbin = 0
-      if (ppiclf_ndim .eq. 3)
-     >kbin = ppiclf_nid/(ppiclf_n_bins(1)*ppiclf_n_bins(2))
-
-! ----------------------------------------------------
-! WRITE EACH INDIVIDUAL COMPONENT OF A BINARY VTU FILE
-! ----------------------------------------------------
-      write(vtufile,'(A3,I5.5,A4)') filein,icalld1,'.vtu'
-
-! test skip
-c     goto 1511
-
-      if (ppiclf_nid .eq. 0) then
-
-      vtu=867+ppiclf_nid
-      open(unit=vtu,file=vtufile,status='replace')
-
-! ------------
-! FRONT MATTER
-! ------------
-      write(vtu,'(A)',advance='no') '<VTKFile '
-      write(vtu,'(A)',advance='no') 'type="UnstructuredGrid" '
-      write(vtu,'(A)',advance='no') 'version="1.0" '
-      if (ppiclf_iendian .eq. 0) then
-         write(vtu,'(A)',advance='yes') 'byte_order="LittleEndian">'
-      elseif (ppiclf_iendian .eq. 1) then
-         write(vtu,'(A)',advance='yes') 'byte_order="BigEndian">'
-      endif
-
-      write(vtu,'(A)',advance='yes') ' <UnstructuredGrid>'
-
-      write(vtu,'(A)',advance='yes') '  <FieldData>' 
-      write(vtu,'(A)',advance='no')  '   <DataArray '  ! time
-      write(vtu,'(A)',advance='no') 'type="Float32" '
-      write(vtu,'(A)',advance='no') 'Name="TIME" '
-      write(vtu,'(A)',advance='no') 'NumberOfTuples="1" '
-      write(vtu,'(A)',advance='no') 'format="ascii"> '
-      write(vtu,'(E14.7)',advance='no') ppiclf_time
-      write(vtu,'(A)',advance='yes') ' </DataArray> '
-
-      write(vtu,'(A)',advance='no') '   <DataArray '  ! cycle
-      write(vtu,'(A)',advance='no') 'type="ProjectParticleSubBinInt32" '
-      write(vtu,'(A)',advance='no') 'Name="CYCLE" '
-      write(vtu,'(A)',advance='no') 'NumberOfTuples="1" '
-      write(vtu,'(A)',advance='no') 'format="ascii"> '
-      write(vtu,'(I0)',advance='no') ppiclf_cycle
-      write(vtu,'(A)',advance='yes') ' </DataArray> '
-
-      write(vtu,'(A)',advance='yes') '  </FieldData>'
-      write(vtu,'(A)',advance='no') '  <Piece '
-      write(vtu,'(A)',advance='no') 'NumberOfPoints="'
-      write(vtu,'(I0)',advance='no') nvtx_total
-      write(vtu,'(A)',advance='no') '" NumberOfCells="'
-      write(vtu,'(I0)',advance='no') ncll_total
-      write(vtu,'(A)',advance='yes') '"> '
-
-! -----------
-! COORDINATES 
-! -----------
-      iint = 0
-      write(vtu,'(A)',advance='yes') '   <Points>'
-      call ppiclf_io_WriteDataArrayVTU(vtu,"Position",3,iint)
-      iint = iint + 3*isize*nvtx_total + isize
-      write(vtu,'(A)',advance='yes') '   </Points>'
-
-! ----
-! DATA 
-! ----
-      write(vtu,'(A)',advance='yes') '   <PointData>'
-      do ie=1,PPICLF_LRP_PRO
-         write(prostr,'(A4,I2.2)') "PRO-",ie
-         call ppiclf_io_WriteDataArrayVTU(vtu,prostr,1,iint)
-         iint = iint + 1*isize*nvtx_total + isize
-      enddo
-c     call ppiclf_io_WriteDataArrayVTU(vtu,"PPR",1,iint)
-c     iint = iint + 1*isize*nvtx_total + isize
-c     call ppiclf_io_WriteDataArrayVTU(vtu,"NID",1,iint)
-c     iint = iint + 1*isize*nvtx_total + isize
-      write(vtu,'(A)',advance='yes') '   </PointData> '
-      write(vtu,'(A)',advance='yes') '   <CellData>'
-      write(vtu,'(A)',advance='yes') '   </CellData> '
-
-! ----------
-! END MATTER
-! ----------
-      write(vtu,'(A)',advance='yes') '   <Cells> '
-      write(vtu,'(A)',advance='no')  '    <DataArray '
-      write(vtu,'(A)',advance='no') 'type="Int32" '
-      write(vtu,'(A)',advance='no') 'Name="connectivity" '
-      write(vtu,'(A)',advance='yes') 'format="ascii"> '
-      ! write connectivity here
-      ndumx = ppiclf_n_bins(1)*(ppiclf_bx-1) + 1
-      ndumy = ppiclf_n_bins(2)*(ppiclf_by-1) + 1
-      ndum = ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)
-      do ie=0,ndum-1
-         i = modulo(ie,ppiclf_n_bins(1))
-         j = modulo(ie/ppiclf_n_bins(1),ppiclf_n_bins(2))
-         k = ie/(ppiclf_n_bins(1)*ppiclf_n_bins(2))
-
-      kmax = 1
-      if (ppiclf_ndim .eq. 3) kmax = ppiclf_bz-1
-
-      do kk=1,kmax
-      do jj=1,ppiclf_by-1
-      do ii=1,ppiclf_bx-1
-
-         itmp = i*(ppiclf_bx-1) + (ii-1)
-         jtmp = j*(ppiclf_by-1) + (jj-1)
-         ktmp = 0
-         if (ppiclf_ndim .eq. 3)
-     >   ktmp = k*(ppiclf_bz-1) + (kk-1)
-
-         kl = ktmp
-         kr = ktmp+1
-         jl = jtmp
-         jr = jtmp+1
-         il = itmp
-         ir = itmp+1
-
-c        ndum = itmp + ndumx*jtmp + ndumx*ndumy*ktmp
-
-         if (ppiclf_ndim .eq. 3) then
-            npa = il + ndumx*jl + ndumx*ndumy*kl
-            npb = ir + ndumx*jl + ndumx*ndumy*kl
-            npc = il + ndumx*jr + ndumx*ndumy*kl
-            npd = ir + ndumx*jr + ndumx*ndumy*kl
-            npe = il + ndumx*jl + ndumx*ndumy*kr
-            npf = ir + ndumx*jl + ndumx*ndumy*kr
-            npg = il + ndumx*jr + ndumx*ndumy*kr
-            nph = ir + ndumx*jr + ndumx*ndumy*kr
-
-            write(vtu,'(I0,A)',advance='no')  npa, ' '
-            write(vtu,'(I0,A)',advance='no')  npb, ' '
-            write(vtu,'(I0,A)',advance='no')  npc, ' '
-            write(vtu,'(I0,A)',advance='no')  npd, ' '
-            write(vtu,'(I0,A)',advance='no')  npe, ' '
-            write(vtu,'(I0,A)',advance='no')  npf, ' '
-            write(vtu,'(I0,A)',advance='no')  npg, ' '
-            write(vtu,'(I0)'  ,advance='yes') nph
-         else
-            npa = il + ndumx*jl + ndumx*ndumy*kl
-            npb = ir + ndumx*jl + ndumx*ndumy*kl
-            npc = il + ndumx*jr + ndumx*ndumy*kl
-            npd = ir + ndumx*jr + ndumx*ndumy*kl
-
-            write(vtu,'(I0,A)',advance='no')  npa, ' '
-            write(vtu,'(I0,A)',advance='no')  npb, ' '
-            write(vtu,'(I0,A)',advance='no')  npc, ' '
-            write(vtu,'(I0)'  ,advance='yes') npd
-         endif
-      enddo
-      enddo
-      enddo
-      enddo
-      write(vtu,'(A)',advance='yes')  '    </DataArray>'
-
-      write(vtu,'(A)',advance='no') '    <DataArray '
-      write(vtu,'(A)',advance='no') 'type="Int32" '
-      write(vtu,'(A)',advance='no') 'Name="offsets" '
-      write(vtu,'(A)',advance='yes') 'format="ascii"> '
-      ioff_dum = 4
-      if (ppiclf_ndim .eq. 3) ioff_dum = 8
-      ! write offsetts here
-      do i=1,ncll_total
-         write(vtu,'(I0)',advance='yes') ioff_dum*i
-      enddo
-      write(vtu,'(A)',advance='yes')  '    </DataArray>'
-
-      write(vtu,'(A)',advance='no') '    <DataArray '
-      write(vtu,'(A)',advance='no') 'type="UInt8" '
-      write(vtu,'(A)',advance='no') 'Name="types" '
-      write(vtu,'(A)',advance='yes') 'format="ascii"> '
-      itype = 8
-      if (ppiclf_ndim .eq. 3) itype = 11
-      ! write types here
-      do i=1,ncll_total
-         write(vtu,'(I0)',advance='yes') itype
-      enddo
-      write(vtu,'(A)',advance='yes')  '    </DataArray>'
-
-      write(vtu,'(A)',advance='yes') '   </Cells> '
-      write(vtu,'(A)',advance='yes') '  </Piece> '
-      write(vtu,'(A)',advance='yes') ' </UnstructuredGrid> '
-
-! -----------
-! APPEND DATA  
-! -----------
-      write(vtu,'(A)',advance='no') ' <AppendedData encoding="raw">'
-      close(vtu)
-
-c1511 continue
-
-      open(unit=vtu,file=vtufile,access='stream',form="unformatted"
-     >    ,position='append')
-      write(vtu) '_'
-      close(vtu)
-
-      inquire(file=vtufile,size=ivtu_size)
-      endif
-
-      call ppiclf_bcast(ivtu_size, isize)
-
-      iorank = -1
-
-      if_pos = 3*isize*nvtx_total
-
-      ! integer write
-      if (ppiclf_nid .eq. 0) then
-        open(unit=vtu,file=vtufile,access='stream',form="unformatted"
-     >      ,position='append')
-        write(vtu) if_pos
-        close(vtu)
-      endif
-
-      call mpi_barrier(ppiclf_comm,ierr)
-
-      ! write points first
-      call ppiclf_byte_open_mpi(vtufile,pth,.false.,ierr)
-
-      do k=1,ppiclf_bz
-      do j=1,ppiclf_by
-      do i=1,ppiclf_bx
-         icount_pos(i,j,k) = 0
-      enddo
-      enddo
-      enddo
-      if (ppiclf_nid .le. 
-     >      ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)-1) then
-         if (ppiclf_ndim .eq. 3) then
-         do k=1,ppiclf_bz
-         do j=1,ppiclf_by
-         do i=1,ppiclf_bx
-            if (i .ne. ppiclf_bx .and.
-     >          j .ne. ppiclf_by .and.
-     >          k .ne. ppiclf_bz) then
-                  icount_pos(i,j,k) = 3
-            endif
-
-            if (i .eq. ppiclf_bx) then
-            if (j .ne. ppiclf_by) then
-            if (k .ne. ppiclf_bz) then
-            if (ibin .eq. ppiclf_n_bins(1)-1) then
-               icount_pos(i,j,k) = 3
-            endif
-            endif
-            endif
-            endif
-
-            if (j .eq. ppiclf_by) then
-            if (i .ne. ppiclf_bx) then
-            if (k .ne. ppiclf_bz) then
-            if (jbin .eq. ppiclf_n_bins(2)-1) then
-               icount_pos(i,j,k) = 3
-            endif
-            endif
-            endif
-            endif
-
-            if (k .eq. ppiclf_bz) then
-            if (i .ne. ppiclf_bx) then
-            if (j .ne. ppiclf_by) then
-            if (kbin .eq. ppiclf_n_bins(3)-1) then
-               icount_pos(i,j,k) = 3
-            endif
-            endif
-            endif
-            endif
-
-            if (i .eq. ppiclf_bx) then
-            if (j .eq. ppiclf_by) then
-            if (k .ne. ppiclf_bz) then
-            if (ibin .eq. ppiclf_n_bins(1)-1) then
-            if (jbin .eq. ppiclf_n_bins(2)-1) then
-               icount_pos(i,j,k) = 3
-            endif
-            endif
-            endif
-            endif
-            endif
-
-            if (i .eq. ppiclf_bx) then
-            if (k .eq. ppiclf_bz) then
-            if (j .ne. ppiclf_by) then
-            if (ibin .eq. ppiclf_n_bins(1)-1) then
-            if (kbin .eq. ppiclf_n_bins(3)-1) then
-               icount_pos(i,j,k) = 3
-            endif
-            endif
-            endif
-            endif
-            endif
-
-            if (j .eq. ppiclf_by) then
-            if (k .eq. ppiclf_bz) then
-            if (i .ne. ppiclf_bx) then
-            if (jbin .eq. ppiclf_n_bins(2)-1) then
-            if (kbin .eq. ppiclf_n_bins(3)-1) then
-               icount_pos(i,j,k) = 3
-            endif
-            endif
-            endif
-            endif
-            endif
-
-            if (i .eq. ppiclf_bx) then
-            if (j .eq. ppiclf_by) then
-            if (k .eq. ppiclf_bz) then
-            if (ibin .eq. ppiclf_n_bins(1)-1) then
-            if (jbin .eq. ppiclf_n_bins(2)-1) then
-            if (kbin .eq. ppiclf_n_bins(3)-1) then
-               icount_pos(i,j,k) = 3
-            endif
-            endif
-            endif
-            endif
-            endif
-            endif
-
-         enddo
-         enddo
-         enddo
-         ! 2D
-         else
-         do j=1,ppiclf_by
-         do i=1,ppiclf_bx
-            if (i .ne. ppiclf_bx .and.
-     >          j .ne. ppiclf_by) then
-                  icount_pos(i,j,1) = 3
-            endif
-
-            if (i .eq. ppiclf_bx) then
-            if (j .ne. ppiclf_by) then
-            if (ibin .eq. ppiclf_n_bins(1)-1) then
-               icount_pos(i,j,1) = 3
-            endif
-            endif
-            endif
-
-            if (j .eq. ppiclf_by) then
-            if (i .ne. ppiclf_bx) then
-            if (jbin .eq. ppiclf_n_bins(2)-1) then
-               icount_pos(i,j,1) = 3
-            endif
-            endif
-            endif
-
-            if (i .eq. ppiclf_bx) then
-            if (j .eq. ppiclf_by) then
-            if (ibin .eq. ppiclf_n_bins(1)-1) then
-            if (jbin .eq. ppiclf_n_bins(2)-1) then
-               icount_pos(i,j,1) = 3
-            endif
-            endif
-            endif
-            endif
-         enddo
-         enddo
-
-         endif
-
-      endif
-
-      do k=1,ppiclf_bz
-      do j=1,ppiclf_by
-      do i=1,ppiclf_bx
-         stride_lenv = ppiclf_grid_i(i,j,k)
-         idisp_pos   = ivtu_size + isize*(3*stride_lenv + 1)
-         icount_dum  = icount_pos(i,j,k)
-         rpoint(1)   = ppiclf_grid_x(i,j,k)
-         rpoint(2)   = ppiclf_grid_y(i,j,k)
-         rpoint(3)   = 0.0d0
-         if (ppiclf_ndim .eq. 3)
-     >   rpoint(3)   = ppiclf_grid_z(i,j,k)
-         call ppiclf_byte_set_view(idisp_pos,pth)
-         call ppiclf_byte_write_mpi(rpoint,icount_dum,iorank,pth,ierr)
-
-      enddo
-      enddo
-      enddo
-
-      call ppiclf_byte_close_mpi(pth,ierr)
-
-
-      ! projected fields
-      do ie=1,PPICLF_LRP_PRO
-
-      if_pos = 1*isize*nvtx_total
-
-      ! integer write
-      if (ppiclf_nid .eq. 0) then
-        open(unit=vtu,file=vtufile,access='stream',form="unformatted"
-     >      ,position='append')
-        write(vtu) if_pos
-        close(vtu)
-      endif
-
-      call mpi_barrier(ppiclf_comm,ierr)
-
-      call ppiclf_byte_open_mpi(vtufile,pth,.false.,ierr)
-
-      do k=1,ppiclf_bz
-      do j=1,ppiclf_by
-      do i=1,ppiclf_bx
-           stride_lenv = ppiclf_grid_i(i,j,k)
-           idisp_pos   = ivtu_size + isize*(3*nvtx_total ! position fld
-     >                   + (ie-1)*nvtx_total ! prev fields
-     >                   + 1*stride_lenv    ! this fld
-     >                   + 1 + ie)          ! ints
-           icount_dum  = icount_pos(i,j,k)/3 ! either zero or 1
-           rpoint(1)   = ppiclf_grid_fld(i,j,k,ie)
-           call ppiclf_byte_set_view(idisp_pos,pth)
-           call ppiclf_byte_write_mpi(rpoint,icount_dum,iorank,pth,ierr)
-      enddo
-      enddo
-      enddo
-
-      call ppiclf_byte_close_mpi(pth,ierr)
-
-      enddo
-
-      call mpi_barrier(ppiclf_comm,ierr)
-
-      if (ppiclf_nid .eq. 0) then
-      vtu=867+ppiclf_nid
-      open(unit=vtu,file=vtufile,status='old',position='append')
-
-      write(vtu,'(A)',advance='yes') '</AppendedData>'
-      write(vtu,'(A)',advance='yes') '</VTKFile>'
-
-      close(vtu)
-      endif
-
-      call ppiclf_printsi('  End WriteSubBinVTU$',ppiclf_cycle)
 
       return
       end
@@ -1131,11 +618,11 @@ c1511 continue
          icount_pos = 3
       endif
       idisp_pos  = ivtu_size + isize*(3*stride_lenv(1) + 1)
-      rpoint(1)  = sngl(ppiclf_binx(1,1))
-      rpoint(2)  = sngl(ppiclf_biny(1,1))
+      rpoint(1)  = sngl(ppiclf_bin_pos(1,1))
+      rpoint(2)  = sngl(ppiclf_bin_pos(1,2))
       rpoint(3)  = 0.0
       if (ppiclf_ndim .eq. 3)
-     >rpoint(3)  = sngl(ppiclf_binz(1,1))
+     >rpoint(3)  = sngl(ppiclf_bin_pos(1,3))
       call ppiclf_byte_set_view(idisp_pos,pth)
       call ppiclf_byte_write_mpi(rpoint,icount_pos,iorank,pth,ierr)
 
@@ -1149,9 +636,9 @@ c1511 continue
      >       ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)-1) then
          if (ibin .eq. ppiclf_n_bins(1)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(2,1))
-            rpoint(2)  = sngl(ppiclf_biny(1,1))
-            rpoint(3)  = sngl(ppiclf_binz(1,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(2,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(1,2))
+            rpoint(3)  = sngl(ppiclf_bin_pos(1,3))
          endif
          endif
          call ppiclf_byte_set_view(idisp_pos,pth)
@@ -1164,9 +651,9 @@ c1511 continue
      >       ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)-1) then
          if (jbin .eq. ppiclf_n_bins(2)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(1,1))
-            rpoint(2)  = sngl(ppiclf_biny(2,1))
-            rpoint(3)  = sngl(ppiclf_binz(1,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(1,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(2,2))
+            rpoint(3)  = sngl(ppiclf_bin_pos(1,3))
          endif
          endif
          call ppiclf_byte_set_view(idisp_pos,pth)
@@ -1179,9 +666,9 @@ c1511 continue
      >       ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)-1) then
          if (kbin .eq. ppiclf_n_bins(3)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(1,1))
-            rpoint(2)  = sngl(ppiclf_biny(1,1))
-            rpoint(3)  = sngl(ppiclf_binz(2,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(1,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(1,2))
+            rpoint(3)  = sngl(ppiclf_bin_pos(2,3))
          endif
          endif
          call ppiclf_byte_set_view(idisp_pos,pth)
@@ -1195,9 +682,9 @@ c1511 continue
          if (ibin .eq. ppiclf_n_bins(1)-1) then
          if (jbin .eq. ppiclf_n_bins(2)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(2,1))
-            rpoint(2)  = sngl(ppiclf_biny(2,1))
-            rpoint(3)  = sngl(ppiclf_binz(1,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(2,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(2,2))
+            rpoint(3)  = sngl(ppiclf_bin_pos(1,3))
          endif
          endif
          endif
@@ -1212,9 +699,9 @@ c1511 continue
          if (ibin .eq. ppiclf_n_bins(1)-1) then
          if (kbin .eq. ppiclf_n_bins(3)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(2,1))
-            rpoint(2)  = sngl(ppiclf_biny(1,1))
-            rpoint(3)  = sngl(ppiclf_binz(2,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(2,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(1,2))
+            rpoint(3)  = sngl(ppiclf_bin_pos(2,3))
          endif
          endif
          endif
@@ -1229,9 +716,9 @@ c1511 continue
          if (jbin .eq. ppiclf_n_bins(2)-1) then
          if (kbin .eq. ppiclf_n_bins(3)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(1,1))
-            rpoint(2)  = sngl(ppiclf_biny(2,1))
-            rpoint(3)  = sngl(ppiclf_binz(2,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(1,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(2,2))
+            rpoint(3)  = sngl(ppiclf_bin_pos(2,3))
          endif
          endif
          endif
@@ -1247,9 +734,9 @@ c1511 continue
          if (jbin .eq. ppiclf_n_bins(2)-1) then
          if (kbin .eq. ppiclf_n_bins(3)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(2,1))
-            rpoint(2)  = sngl(ppiclf_biny(2,1))
-            rpoint(3)  = sngl(ppiclf_binz(2,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(2,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(2,2))
+            rpoint(3)  = sngl(ppiclf_bin_pos(2,3))
          endif
          endif
          endif
@@ -1268,8 +755,8 @@ c1511 continue
      >       ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)-1) then
          if (ibin .eq. ppiclf_n_bins(1)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(2,1))
-            rpoint(2)  = sngl(ppiclf_biny(1,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(2,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(1,2))
             rpoint(3)  = 0.0
          endif
          endif
@@ -1283,8 +770,8 @@ c1511 continue
      >       ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)-1) then
          if (jbin .eq. ppiclf_n_bins(2)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(1,1))
-            rpoint(2)  = sngl(ppiclf_biny(2,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(1,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(2,2))
             rpoint(3)  = 0.0
          endif
          endif
@@ -1299,8 +786,8 @@ c1511 continue
          if (ibin .eq. ppiclf_n_bins(1)-1) then
          if (jbin .eq. ppiclf_n_bins(2)-1) then
             icount_pos = 3
-            rpoint(1)  = sngl(ppiclf_binx(2,1))
-            rpoint(2)  = sngl(ppiclf_biny(2,1))
+            rpoint(1)  = sngl(ppiclf_bin_pos(2,1))
+            rpoint(2)  = sngl(ppiclf_bin_pos(2,2))
             rpoint(3)  = 0.0
          endif
          endif
@@ -1460,8 +947,9 @@ c1511 continue
          rout_lrp(ic_lrp) = sngl(ppiclf_rprop(j,i))
       enddo
       enddo
-      do j=5,7
+      do j=1,3
       do i=1,nxx
+         ! This prints out the particle tag info
          ic_lip = ic_lip + 1
          rout_lip(ic_lip) = real(ppiclf_iprop(j,i))
       enddo
@@ -1766,7 +1254,6 @@ c1511 continue
       call ppiclf_prints('*********** PPICLF OUTPUT *****************$')
       call ppiclf_io_OutputDiagGen
       call ppiclf_io_OutputDiagGhost
-      if (ppiclf_lsubbin) call ppiclf_io_OutputDiagSubBin
       if (ppiclf_overlap) call ppiclf_io_OutputDiagGrid
 
       return
@@ -1840,13 +1327,13 @@ c1511 continue
 !
       call ppiclf_prints(' *Begin Grid Info$')
 
-         nel_max_orig   = ppiclf_iglmax(ppiclf_nee,1)
-         nel_min_orig   = ppiclf_iglmin(ppiclf_nee,1)
-         nel_total_orig = ppiclf_iglsum(ppiclf_nee,1)
+         nel_max_orig   = ppiclf_iglmax(ppiclf_nFVCells,1)
+         nel_min_orig   = ppiclf_iglmin(ppiclf_nFVCells,1)
+         nel_total_orig = ppiclf_iglsum(ppiclf_nFVCells,1)
 
-         nel_max_map   = ppiclf_iglmax(ppiclf_neltb,1)
-         nel_min_map   = ppiclf_iglmin(ppiclf_neltb,1)
-         nel_total_map = ppiclf_iglsum(ppiclf_neltb,1)
+         nel_max_map   = ppiclf_iglmax(ppiclf_nCells_FV2PICL,1)
+         nel_min_map   = ppiclf_iglmin(ppiclf_nCells_FV2PICL,1)
+         nel_total_map = ppiclf_iglsum(ppiclf_nCells_FV2PICL,1)
 
       call ppiclf_printsi('  -Orig. Global cells     :$',nel_total_orig)
       call ppiclf_printsi('  -Orig. Local cells (Max):$',nel_max_orig)
@@ -1883,40 +1370,6 @@ c1511 continue
       call ppiclf_printsi('  -Local ghosts (Min)     :$',npart_min)
 
       call ppiclf_prints('  End Ghost Info$')
-
-      return
-      end
-!-----------------------------------------------------------------------
-      subroutine ppiclf_io_OutputDiagSubBin
-!
-      implicit none
-!
-      include "PPICLF"
-!
-! Internal:
-!
-      integer*4 nbin_total
-!
-
-      call ppiclf_prints(' *Begin SubBin Info$')
-
-      nbin_total = ppiclf_bx*ppiclf_by*ppiclf_bz
-
-      call ppiclf_printsi('  -Number of local bin    :$',nbin_total)
-      call ppiclf_printsi('  -Number of local bin (x):$',PPICLF_BX)
-      call ppiclf_printsi('  -Number of local bin (y):$',PPICLF_BY)
-      if (ppiclf_ndim .gt. 2)
-     >call ppiclf_printsi('  -Number of local bin (z):$',PPICLF_BZ)
-      call ppiclf_printsr('  -Bin width (x)          :$',ppiclf_rdx)
-      call ppiclf_printsr('  -Bin width (y)          :$',ppiclf_rdy)
-      if (ppiclf_ndim .gt. 2)
-     >call ppiclf_printsr('  -Bin width (z)          :$',ppiclf_rdz)
-      call ppiclf_printsr('  -Filter width           :$',ppiclf_filter)
-      call ppiclf_printsr('  -Filter cut-off         :$'
-     >                                                 ,ppiclf_d2chk(2))
-      call ppiclf_printsi('  -SubBins per filter res.:$',ppiclf_ngrids)
-
-      call ppiclf_prints('  End SubBin Info$')
 
       return
       end

@@ -130,6 +130,8 @@ USE RFLU_ModConvertCv, ONLY: RFLU_ConvertCvCons2Prim, &
 
 
 
+
+
 !DEC$ FREEFORM
 
 
@@ -163,10 +165,11 @@ TYPE(t_grid), POINTER :: pGrid
 
 
 !PPICLF Write
+   CALL MPI_Barrier(global%mpiComm,errorFlag)
 
    piclCurrentTime = REAL(global%currentTime,8)
 
-   call ppiclf_solve_WriteVTU(piclCurrentTime)
+   CALL ppiclf_solve_WriteVTU(piclCurrentTime)
 
 
 ! finalize --------------------------------------------------------------------

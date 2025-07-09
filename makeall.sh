@@ -1,5 +1,5 @@
 module purge
-module load gcc/12.2.0 openmpi/4.1.6
+module load gcc/14.2.0 openmpi/5.0.7
 module list
 cd libpicl
 make clean ; make 

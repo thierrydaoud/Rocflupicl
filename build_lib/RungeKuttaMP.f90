@@ -268,9 +268,7 @@ SUBROUTINE RungeKuttaMP( regions )
         pRegion => regions(iReg)
 
 ! ----- update solution; sum up residuals -------------------------------------
-
         CALL RKUpdateMP( regions(iReg),iReg,istage )
-
 
 !add picl here
 !Figure out if this should go here
@@ -364,7 +362,6 @@ END IF
     END DO ! iReg
 
     CALL RFLU_MPI_CopyWrapper(regions)
-
     DO iReg = 1,global%nRegionsLocal
       pRegion => regions(iReg)
 
@@ -379,8 +376,6 @@ END IF
 
       CALL RFLU_MPI_ClearRequestWrapper(pRegion)
     END DO ! iReg
-
-
 IF ( global%piclUsed .EQV. .true. ) THEN
 !Figure out where this should go
 !Going to attempt to move this up the code
@@ -389,26 +384,18 @@ IF ( global%piclUsed .EQV. .true. ) THEN
 !Update virtual cells with picl_vf
       DO iReg = 1,global%nRegionsLocal
         pRegion => regions(iReg)
-
         CALL RFLU_MPI_PLAG_ISendWrapper(pRegion)
       END DO ! iReg
-
       CALL RFLU_MPI_PLAG_CopyWrapper(regions)
-
       DO iReg = 1,global%nRegionsLocal
         pRegion => regions(iReg)
-
         CALL RFLU_MPI_PLAG_RecvWrapper(pRegion)
       END DO ! iReg
-
       DO iReg = 1,global%nRegionsLocal
         pRegion => regions(iReg)
-
         CALL RFLU_MPI_ClearRequestWrapper(pRegion)
       END DO ! iReg
-
 END IF
-
   END DO ! istage
 
 ! finalize ====================================================================

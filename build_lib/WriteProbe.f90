@@ -127,6 +127,8 @@ SUBROUTINE WriteProbe( regions,iReg )
 
 
 
+
+
 ! ... parameters
   TYPE(t_region), POINTER :: regions(:)
 
@@ -153,8 +155,7 @@ SUBROUTINE WriteProbe( regions,iReg )
 !BRAD
 
    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: phiP
-   REAL(KIND=8),DIMENSION(:,:,:,:), ALLOCATABLE :: vfP,vfD,vpx,vpy,vpz,vpt
-   integer :: lx,ly,lz          
+   REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: vfP,vfD,vpx,vpy,vpz,vpt
    REAL(RFREAL) :: tester, total_vol,tester1,tester2
    REAL(RFREAL) :: testerx,testery,testerz,testert
    REAL(RFREAL) :: vFrac,volFrac2
@@ -203,40 +204,40 @@ SUBROUTINE WriteProbe( regions,iReg )
 ! loop over all specified probes ----------------------------------------------
    !1 CODE HERE
     nCells = regions(iReg)%grid%nCells    
-    ALLOCATE(vfP(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vfP(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,178,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,177,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vfD(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vfD(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,184,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,183,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vpx(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vpx(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,190,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,189,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vpy(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vpy(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,196,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,195,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vpz(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vpz(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,202,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,201,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vpt(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vpt(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,208,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,207,'PPICLF:xGrid')
     END IF ! global%error
 
 !write(*,*) " Atempting to write probes"
@@ -314,41 +315,35 @@ pRegion => regions(iReg)
        testery = 0 
        testerz = 0 
        testert = 0 
-       do lz=1,2
-       do ly=1,2
-       do lx=1,2
 
 ! TLJ: This needs to be checked
 !particle volume
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, 1,&
-                        vfP(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, 1,&
+                        vfP(iCell))
 !density
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, 6,&
-                        vfD(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, 6,&
+                        vfD(iCell))
 !x-vel
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, 7,&
-                        vpx(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, 7,&
+                        vpx(iCell))
 !y-vel
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, 8,&
-                        vpy(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, 8,&
+                        vpy(iCell))
 !z-vel
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, 9,&
-                        vpz(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, 9,&
+                        vpz(iCell))
 !T-temperature
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, 10,&
-                        vpt(lx,ly,lz,iCell))
-
+       call ppiclf_solve_GetProFld(iCell, 10,&
+                        vpt(iCell))
        ! TLJ - modified 12/21/2024
-       tester1 = tester1 +(0.125*vfP(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       tester2 = tester2 +(0.125*vfD(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       testerx = testerx +(0.125*vpx(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       testery = testery +(0.125*vpy(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       testerz = testerz +(0.125*vpz(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       testert = testert +(0.125*vpt(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
+       ! AVERY - modified 5/16/2025
+       tester1 = (vfP(iCell))/pRegion%grid%vol(iCell)
+       tester2 = (vfD(iCell))/pRegion%grid%vol(iCell)
+       testerx = (vpx(iCell))/pRegion%grid%vol(iCell)
+       testery = (vpy(iCell))/pRegion%grid%vol(iCell)
+       testerz = (vpz(iCell))/pRegion%grid%vol(iCell)
+       testert = (vpt(iCell))/pRegion%grid%vol(iCell)
 
-       end do
-       end do
-       end do
     !number of picl particles
       ! TLJ - Commented out 12/21/2024
       !tester1 = tester1 / pRegion%grid%vol(iCell)
@@ -415,7 +410,7 @@ pRegion => regions(iReg)
 
       global%error = errorFlag
       IF (global%error /= 0) THEN
-        CALL ErrorStop( global,ERR_FILE_WRITE,433,'Probe file' )
+        CALL ErrorStop( global,ERR_FILE_WRITE,426,'Probe file' )
       ENDIF
 
 ! --- close and open probe file (instead of fflush)
@@ -437,37 +432,37 @@ pRegion => regions(iReg)
 DEALLOCATE(vfP,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,461,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,454,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vfD,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,467,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,460,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vpx,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,473,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,466,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vpy,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,479,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,472,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vpz,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,485,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,478,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vpt,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,491,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,484,'PPICLF:xGrid')
     END IF ! global%error
 
 

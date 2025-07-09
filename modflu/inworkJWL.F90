@@ -83,10 +83,11 @@ MODULE RFLU_ModJWL
                            MixtPerf_P_DEoGVm2, &
                            MixtPerf_T_DPR
   ! Josh - 1-Eqtn Model
+#ifdef SPEC
   USE ModSpecies, ONLY: t_spec_input
   USE ModInterfacesSpecies, ONLY: SPEC_GetSpeciesIndex 
   USE SPEC_RFLU_ModPBAUtils, ONLY: SPEC_RFLU_PBA_ComputeY
-
+#endif
 
   IMPLICIT NONE
 
@@ -101,24 +102,6 @@ MODULE RFLU_ModJWL
   CHARACTER(CHRLEN), PRIVATE :: & 
     RCSIdentString = '$RCSfile: RFLU_ModJWL.F90,v $'
   REAL(RFREAL), PRIVATE :: ATNT,BTNT,CTNT,wTNT,R1TNT,R2TNT,rhoTNT,shcvTNT,ETNT
-    !ATNT      = 371.213E9_RFREAL, & ! Pa
-    !BTNT      = 3.2306E9_RFREAL, &  ! Pa
-    !CTNT      = 1.04527E9_RFREAL, & ! Pa
-    !wTNT      = 0.30_RFREAL, &
-    !R1TNT     = 4.15_RFREAL, &
-    !R2TNT     = 0.95_RFREAL, &
-    !rhoTNT    = 1.63E3_RFREAL, &            ! Kg/m3
-    !shcvTNT   = 613.4969325153374_RFREAL, & ! 1e6/rhoTNT, J/(K-kg), Cv'=rhoTNT*Cv=1.0D6 (pa/K)
-    !kTNT      = 0.297_RFREAL, &
-    !muTNT     = 1.74E-6_RFREAL, &         ! NOTE: take air viscosity temporary
-    !PrTNT     = 0.4672491789056_RFREAL, & ! shcvTNT*(wTNT+1.0_RFREAL)*muTNT/kTNT
-    !MwTNT     = 24.6789_RFREAL, &
-    !mlfN2TNT  = 0.2_RFREAL, & ! 1.5_RFREAL/7.5_RFREAL
-    !mlfCOTNT  = 0.466666666666667_RFREAL, & ! 3.5_RFREAL/7.5_RFREAL
-    !mlfH2OTNT = 0.333333333333333, & ! 2.5_RFREAL/7.5_RFREAL
-    !MwAir     = 28.8501_RFREAL, &
-    !mlfN2Air  = 0.79_RFREAL, &
-    !mlfO2Air  = 0.21_RFREAL
   
 ! ==============================================================================
 ! Public functions
@@ -157,10 +140,12 @@ MODULE RFLU_ModJWL
 ! Description: None.
 !
 ! Input:
-!   e             Energy
-!   r             Density
+!   e             Energy (m^2/s^2)
+!   r             Density (kg/m^3)
+!   Y             Mass fraction of explosive (JWL) gas
 !
-! Output: None.
+! Output: 
+!   c             Speed of sound (m/s)
 !
 ! Notes: None.
 !
@@ -186,94 +171,92 @@ MODULE RFLU_ModJWL
 !   Locals
 ! ==============================================================================
     
-    
-    REAL(RFREAL) :: a,CTNT,w,mp,ma,mb,ra,eJ,An,Bn,p,eamb
+    REAL(RFREAL) :: a,CTNT,w,mp,ma,mb,ra,eJ,An,Bn,p,eamb,cv,T
     
     ATNT   = pRegion%mixtInput%prepRealVal14
     BTNT   = pRegion%mixtInput%prepRealVal15
     wTNT   = pRegion%mixtInput%prepRealVal17
     R1TNT  = pRegion%mixtInput%prepRealVal18
     R2TNT  = pRegion%mixtInput%prepRealVal19
-    rhoTNT = pRegion%mixtInput%prepRealVal4*pRegion%mixtInput%prepRealVal3
+    rhoTNT = pRegion%mixtInput%prepRealVal24
     ETNT   = pRegion%mixtInput%prepRealVal13  
 
 ! ******************************************************************************
 !   Start
 ! ******************************************************************************
 
-   ! ma = 1.655246553e+05_RFREAL ! (LX-10-1 LLNL 1985 Exp. Handbook)
-   ! mb = 3.450701342E+03_RFREAL 
-   ! ra = 1.2581927_RFREAL
-
-    ra = pRegion%mixtInput%prepRealVal3  
-
-    !eJ = ETNT/rhoTNT
-    eJ = ETNT/1758.000_RFREAL!1860.0000_RFREAL
-    eamb = 2.55750E+05_RFREAL 
-
-    ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
-    mb = (BTNT-0.00_RFREAL)/(eJ-eamb)
-
-    IF (r < ra) THEN
-    mp = 0.0_RFREAL
-    ELSE 
-  !  mp = -1.0731E-05_RFREAL
-    mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra) 
-  !  mp = (wTNT-0.4_RFREAL)/(1860.000_RFREAL-ra) 
-    END IF
-    
-    w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
-
-    !IF (r > 1.865E+03_RFREAL) THEN
-    !IF (r > 1860.000_RFREAL) THEN
-    IF (r > rhoTNT) THEN
-    mp = 0.0_RFREAL
-    w = wTNT 
-    END IF
-
-    IF ( Y .le. 0.99_RFREAL ) THEN
-    IF (e .GE. eJ) THEN
-     An = ATNT
-     Bn = BTNT
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-    !ELSE IF (e .LE. 2.55750E+05_RFREAL) THEN
-    ELSE IF (e .LE. eamb) THEN
-     An = 0.0_RFREAL
-     Bn = 0.0_RFREAL
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
+    IF(Y < 0.01) THEN
+      cv = 0.718_RFREAL
+      p = e*r*0.4_RFREAL
+      T = e/(cv*1000)
+      a = SQRT(1.4*287*T)
     ELSE
-     An = ATNT+ma*(e-eJ)
-     Bn = BTNT+mb*(e-eJ)
-    END IF !Linear fit + constants
-    ELSE
-     An = ATNT
-     Bn = BTNT
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-     w = wTNT
-     mp = 0.00_RFREAL
-    ENDIF ! Y .le. 0.99
+      ! ma = 1.655246553e+05_RFREAL ! (LX-10-1 LLNL 1985 Exp. Handbook)
+      ! mb = 3.450701342E+03_RFREAL 
+      ! ra = 1.2581927_RFREAL
 
-    p = RFLU_JWL_P_ER(pRegion,e,r,Y)
+      ra = pRegion%mixtInput%prepRealVal3  ! ambient density
 
-    CTNT = exp(-R1TNT*rhoTNT/r)*(An*(R1TNT*rhoTNT/r/r - w/r - w/R1TNT/rhoTNT &
-                               -r*mp/R1TNT/rhoTNT)+(ma*p/r/r)*(1.0_RFREAL &
-                                - (w*r/R1TNT/rhoTNT)))  + &
-           exp(-R2TNT*rhoTNT/r)*(Bn*(R2TNT*rhoTNT/r/r - w/r - w/R2TNT/rhoTNT &
-                               -r*mp/R2TNT/rhoTNT)+(mb*p/r/r)*(1.0_RFREAL &
-                                - (w*r/R2TNT/rhoTNT)))  + & 
-           w*(e + p/r) + mp*r*e
+      ! internal energy = density * specific internal energy
+      ! eamb = p_amb/rho/(ga-1); p_amb = 102,300 Pa; ga = 1.4; rho = 1.0 kg/m^3
+      ! rhoTNT replaced by 1860 following RocSDT scaling
+      !eJ = ETNT/rhoTNT                    ! explosive internal energy
+      eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
+      eamb = 2.55750E+05_RFREAL            ! ambient internal energy; m^2/s^2
+
+      ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
+      mb = (BTNT-0.00_RFREAL)/(eJ-eamb)
+
+      IF (r < ra) THEN
+         mp = 0.0_RFREAL
+      ELSE 
+         mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra) 
+      END IF
+      
+      w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
+
+      IF (r > rhoTNT) THEN
+         mp = 0.0_RFREAL
+         w = wTNT 
+      END IF
+
+      IF ( Y .le. 0.99_RFREAL ) THEN
+         IF (e .GE. eJ) THEN
+            An = ATNT
+            Bn = BTNT
+            ma = 0.0_RFREAL
+            mb = 0.0_RFREAL
+         ELSE IF (e .LE. eamb) THEN
+            An = 0.0_RFREAL
+            Bn = 0.0_RFREAL
+            ma = 0.0_RFREAL
+            mb = 0.0_RFREAL
+         ELSE
+            An = ATNT+ma*(e-eJ)
+            Bn = BTNT+mb*(e-eJ)
+         END IF !Linear fit + constants
+      ELSE
+         An = ATNT
+         Bn = BTNT
+         ma = 0.0_RFREAL
+         mb = 0.0_RFREAL
+         w = wTNT
+         mp = 0.00_RFREAL
+      ENDIF ! Y .le. 0.99
+
+      p = RFLU_JWL_P_ER(pRegion,e,r,Y)
+
+      CTNT = exp(-R1TNT*rhoTNT/r)*(An*(R1TNT*rhoTNT/r/r - w/r - w/R1TNT/rhoTNT &
+                                 -r*mp/R1TNT/rhoTNT)+(ma*p/r/r)*(1.0_RFREAL &
+                                  - (w*r/R1TNT/rhoTNT)))  + &
+             exp(-R2TNT*rhoTNT/r)*(Bn*(R2TNT*rhoTNT/r/r - w/r - w/R2TNT/rhoTNT &
+                                 -r*mp/R2TNT/rhoTNT)+(mb*p/r/r)*(1.0_RFREAL &
+                                  - (w*r/R2TNT/rhoTNT)))  + & 
+             w*(e + p/r) + mp*r*e
   
-    a    =  SQRT(CTNT)
- 
-     IF ( Y .le. 0.01_RFREAL ) THEN
-
-        a = sqrt(1.4_RFREAL*p/r)
-
-     end if 
-                               
+      a    =  SQRT(CTNT)
+    END IF
+                          
     RFLU_JWL_C_ER = a
 
 ! ******************************************************************************
@@ -281,8 +264,6 @@ MODULE RFLU_ModJWL
 ! ******************************************************************************
 
   END FUNCTION RFLU_JWL_C_ER
-
-
 
 
 
@@ -301,14 +282,14 @@ MODULE RFLU_ModJWL
 !   icg           Cell Number 
 !   g             Gamma, ratio of specific heats for mixture
 !   gc            R, gas constant for mixture
-!   p             Pressure
-!   r             Density
+!   p             Pressure (Pa)
+!   r             Density (kg/m^3)
 !   Y             Mass fraction of explosive (JWL) gas
 !
 ! Output:
-!   a             Speed of sound
-!   e             Energy
-!   T             Temperature
+!   a             Speed of sound (m/s)
+!   e             Energy (m^2/s^2)
+!   T             Temperature (K)
 !
 ! Notes: None.
 !
@@ -338,32 +319,19 @@ MODULE RFLU_ModJWL
     
     global => pRegion%global
 
-    ATNT   = pRegion%mixtInput%prepRealVal14
-    BTNT   = pRegion%mixtInput%prepRealVal15
-    wTNT   = pRegion%mixtInput%prepRealVal17
-    R1TNT  = pRegion%mixtInput%prepRealVal18
-    R2TNT  = pRegion%mixtInput%prepRealVal19
-    rhoTNT = pRegion%mixtInput%prepRealVal4*pRegion%mixtInput%prepRealVal3
-    shcvTNT  = pRegion%mixtInput%prepRealVal20
-
-
     IF (IsNaN(p) .EQV. .TRUE. .OR. &
         IsNaN(r) .EQV. .TRUE. ) THEN
       WRITE(*,*) 'Input variables to energy function are NaN'
-      WRITE(*,*) 'p,r', p,r,pRegion%irkStep
+      WRITE(*,*) 'icg,g,gc,p,r,Y,a,e,T',icg,g,gc,p,r,Y,a,e,T
       CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
     END IF
 
     IF (p .LE. 0.0_RFREAL .OR. &
         r .LE. 0.0_RFREAL ) THEN
       WRITE(*,*) 'Input variables to energy function are Negative'
-      WRITE(*,*) 'p,r', p,r,pRegion%irkStep
+      WRITE(*,*) 'icg,g,gc,p,r,Y,a,e,T',icg,g,gc,p,r,Y,a,e,T
       CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
     END IF
-
-   ! e = RFLU_JWL_E_PR(pRegion,p,r)
-   ! T = RFLU_JWL_T_PR(pRegion,p,r,e)
-   ! a = RFLU_JWL_C_ER(pRegion,e,r)
 
     e = RFLU_JWL_E_PR(pRegion,p,r,Y)
     T = RFLU_JWL_T_PR(pRegion,p,r,e,Y)
@@ -390,16 +358,16 @@ MODULE RFLU_ModJWL
 !   icg           Cell Number
 !   g             Gamma, ratio of specific heats for mixture
 !   gc            R, gas constant for mixture
-!   e             Energy
-!   r             Density
+!   e             Energy (m^2/s^2)
+!   r             Density (kg/m^3)
 !   Y             Mass fraction of explosive (JWL) gas
 !
 ! Output:
-!   a             Speed of sound
-!   eJWL          Mass fraction for detonation gas (JWL)
-!   ePerf         Mass fraction for perfect gas
-!   p             Pressure
-!   T             Temperature
+!   a             Speed of sound (m/s)
+!   eJWL          Energy for detonation gas (JWL) (m^2/s^2)
+!   ePerf         Energy for perfect gas (m^2/s^2)
+!   p             Pressure (Pa)
+!   T             Temperature (K)
 !
 ! Notes: None.
 !
@@ -428,37 +396,45 @@ MODULE RFLU_ModJWL
     TYPE(t_global),POINTER :: global
     global => pRegion%global
     
-    ATNT   = pRegion%mixtInput%prepRealVal14
-    BTNT   = pRegion%mixtInput%prepRealVal15
-    wTNT   = pRegion%mixtInput%prepRealVal17
-    R1TNT  = pRegion%mixtInput%prepRealVal18
-    R2TNT  = pRegion%mixtInput%prepRealVal19
-    rhoTNT = pRegion%mixtInput%prepRealVal4*pRegion%mixtInput%prepRealVal3
-    shcvTNT  = pRegion%mixtInput%prepRealVal20
+    ATNT    = pRegion%mixtInput%prepRealVal14
+    BTNT    = pRegion%mixtInput%prepRealVal15
+    wTNT    = pRegion%mixtInput%prepRealVal17
+    R1TNT   = pRegion%mixtInput%prepRealVal18
+    R2TNT   = pRegion%mixtInput%prepRealVal19
+    rhoTNT  = pRegion%mixtInput%prepRealVal24
+    shcvTNT = pRegion%mixtInput%prepRealVal20
     
     IF (IsNaN(e) .EQV. .TRUE. .OR. &
         IsNaN(r) .EQV. .TRUE. ) THEN
       WRITE(*,*) 'Input variables to pressure function are NaN'
+      WRITE(*,*) 'g,gc,e,r,Y,a,eJWL,ePerf,p,T', g,gc,e,r,Y,a,eJWL,ePerf,p,T
       WRITE(*,*) 'e,r,rkstep,icg,iReg',e,r,pRegion%irkStep,icg,pRegion%iRegionGlobal
-      CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
+      CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity 1 in ModJWL')
     END IF
-
+#ifdef PICL
     IF (e .LE. 0.0_RFREAL .OR. &
         r .LE. 0.0_RFREAL ) THEN
       WRITE(*,*) 'Input variables to pressure function are Negative'
-      WRITE(*,*) 'e,r,VF,rkstep,icg,iReg,xcoord,ycoord,time',e,r,pRegion%mixt%piclVF(icg),pRegion%irkStep,icg,pRegion%iRegionGlobal,pRegion%grid%cofg(XCOORD,icg),&
-                pRegion%grid%cofg(YCOORD,icg),global%currentTime
-      CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
+      WRITE(*,*) 'g,gc,e,r,Y,a,eJWL,ePerf,p,T', g,gc,e,r,Y,a,eJWL,ePerf,p,T
+      WRITE(*,*) 'e,r,VF,rkstep,icg,iReg',e,r,pRegion%mixt%piclVF(icg), &
+              pRegion%irkStep,icg,pRegion%iRegionGlobal
+      CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity 2 in ModJWL')
     END IF
+#else
+    IF (e .LE. 0.0_RFREAL .OR. &
+        r .LE. 0.0_RFREAL ) THEN
+      WRITE(*,*) 'Input variables to pressure function are Negative'
+      WRITE(*,*) 'g,gc,e,r,Y,a,eJWL,ePerf,p,T', g,gc,e,r,Y,a,eJWL,ePerf,p,T
+      WRITE(*,*) 'e,r,rkstep,icg,iReg',e,r,pRegion%irkStep,icg,pRegion%iRegionGlobal
+      CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity 3 in ModJWL')
+    END IF
+#endif
 
-   ! p = RFLU_JWL_P_ER(pRegion,e,r)
-   ! T = RFLU_JWL_T_PR(pRegion,p,r,e)
-   ! a = RFLU_JWL_C_ER(pRegion,e,r)
     p = RFLU_JWL_P_ER(pRegion,e,r,Y)
     T = RFLU_JWL_T_PR(pRegion,p,r,e,Y)
     a = RFLU_JWL_C_ER(pRegion,e,r,Y)
     ePerf = e
-    eJWL = ePerf
+    eJWL  = ePerf
     
 ! ******************************************************************************
 !   End  
@@ -476,9 +452,9 @@ MODULE RFLU_ModJWL
 ! Input:
 !   opt           Function where correction is applied - 1=Flux, 2=Dependent Var 
 !   c             cell index
-!   e             Energy
-!   r             Density
-!   p             Pressure
+!   e             Energy (m^2/s^2)
+!   r             Density (kg/m^3)
+!   p             Pressure (Pa)
 !   Y             Explosive Mass Fraction
 !
 ! Output: None.
@@ -513,42 +489,41 @@ MODULE RFLU_ModJWL
 !   Start
 ! ******************************************************************************
 
-   pCv    => pRegion%mixt%cv 
-   pCvOld => pRegion%mixt%cvOld
+    pCv    => pRegion%mixt%cv 
+    pCvOld => pRegion%mixt%cvOld
 
-   ef = ei
-   rf = ri
-   pf = pi
-   Yf = Yi !Default is to do nothing to values if Y is acceptable
+    ef = ei
+    rf = ri
+    pf = pi
+    Yf = Yi ! Default is to do nothing to values if Y is acceptable
 
-   IF (opt==1) THEN
-    IF ((IsNan(pi) .EQV. .TRUE.) .OR. (IsNan(ri) .EQV. .TRUE.) .OR. &
+    IF (opt==1) THEN 
+       ! TLJ: Checks for NaN and replaces with air values
+       IF ((IsNan(pi) .EQV. .TRUE.) .OR. (IsNan(ri) .EQV. .TRUE.) .OR. &
              (IsNan(Yi) .EQV. .TRUE.)) THEN
-            rf = pCvOld(CV_MIXT_DENS,c)
-            pf = rf*0.4_RFREAL*2.5E5_RFREAL
-            Yf = 0.0_RFREAL
-    END IF
+          rf = pCvOld(CV_MIXT_DENS,c)
+          pf = rf*0.4_RFREAL*2.5E+05_RFREAL 
+          Yf = 0.0_RFREAL
+       END IF
 
-   ELSEIF (opt==2) THEN
+    ELSEIF (opt==2) THEN 
+       ! TLJ: Only use for non-conservative values; ie,
+       !      actual mass fractions Y, not \rho*Y
+       IF (IsNan(Yi) .EQV. .TRUE. .OR. Yi .LE. 0.0_RFREAL) THEN
+          Yf = 0.0_RFREAL
+       END IF
 
- 
-   IF(IsNan(Yi) .EQV. .TRUE. .OR. Yi .LE. 0.0_RFREAL) THEN
-     Yf = 0.0_RFREAL
-   END IF
-
-   IF (Yi .GE. 1.0_RFREAL) THEN
-     Yf = 1.0_RFREAL
-   END IF !Fred - fixing Y update issue where the numerical solver pushes Y
-          !slightly past its limit points
-
-
-  END IF 
+       IF (Yi .GE. 1.0_RFREAL) THEN
+          Yf = 1.0_RFREAL
+       END IF !Fred - fixing Y update issue where the numerical solver pushes Y
+              !slightly past its limit points
+   
+     END IF 
 ! ******************************************************************************
 !   End
 ! ******************************************************************************
 
   END SUBROUTINE RFLU_JWL_Yfix
-
 
 
 
@@ -561,10 +536,12 @@ MODULE RFLU_ModJWL
 ! Description: None.
 !
 ! Input:
-!   p             Pressure
-!   r             Density
+!   p             Pressure (Pa)
+!   r             Density (kg/m^3)
+!   Y             Mass fraction of explosive (JWL) gas
 !
 ! Output: None.
+!   e             Energy (m^2/s^2)
 !
 ! Notes: None.
 !
@@ -592,138 +569,125 @@ MODULE RFLU_ModJWL
         
     ! Josh
      
-  CHARACTER(LEN=25) :: str2 
-  LOGICAL :: I_EXIST
-  REAL(RFREAL) :: Ynot
+    CHARACTER(LEN=25) :: str2 
+    LOGICAL :: I_EXIST
+    REAL(RFREAL) :: Ynot
     
     TYPE(t_global),POINTER :: global
     REAL(RFREAL) :: e,mp,ma,mb,ra,eJ,w,C1,C2,An,Bn,eamb
+    REAL(RFREAL) :: ea,pa
+
     ATNT   = pRegion%mixtInput%prepRealVal14
     BTNT   = pRegion%mixtInput%prepRealVal15
     wTNT   = pRegion%mixtInput%prepRealVal17
     R1TNT  = pRegion%mixtInput%prepRealVal18
     R2TNT  = pRegion%mixtInput%prepRealVal19
-    rhoTNT = pRegion%mixtInput%prepRealVal4*pRegion%mixtInput%prepRealVal3
+    rhoTNT = pRegion%mixtInput%prepRealVal24
     ETNT   = pRegion%mixtInput%prepRealVal13  
     
-
 
     global => pRegion%global
 ! ******************************************************************************
 !   Start
 ! ******************************************************************************
 
- 
-  !  ma = 1.655246553e+05_RFREAL
-  !  mb = 3.4507013E+03_RFREAL
-  !  ra = 1.258_RFREAL
-    Ynot = Y 
-    ra = pRegion%mixtInput%prepRealVal3  
+    IF(Y < 0.01) THEN
+      e = p/r/0.4_RFREAL  
+    ELSE
+      Ynot = Y 
+      ra = pRegion%mixtInput%prepRealVal3  
+      pa = pRegion%mixtInput%prepRealVal2  
+      ea = pa/ra/0.4_RFREAL
 
-   ! eJ = ETNT/rhoTNT
-    eJ = ETNT/1758.000_RFREAL!1860.000_RFREAL
-    eamb = 2.55750E+05_RFREAL 
+      ! internal energy = density * specific internal energy
+      ! eamb = p_amb/rho/(ga-1); p_amb = 102,300 Pa; ga = 1.4; rho = 1.0 kg/m^3
+      ! rhoTNT replaced by 1860 following RocSDT scaling
+      !eJ = ETNT/rhoTNT                    ! explosive internal energy
+      eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
+      eamb = 2.55750E+05_RFREAL            ! ambient internal energy; m^2/s^2
 
-    ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
-    mb = (BTNT-0.00_RFREAL)/(eJ-eamb)
+      ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
+      mb = (BTNT-0.00_RFREAL)/(eJ-eamb)
 
 
-    IF (r < ra) THEN
-    mp = 0.0_RFREAL
-    ELSE 
-  !  mp = -1.0731E-05_RFREAL
-  !  mp = (wTNT-0.4_RFREAL)/(1860.0000_RFREAL-ra) 
-    mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra) 
-    END IF
-    
-    w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
+      IF (r < ra) THEN
+         mp = 0.0_RFREAL
+      ELSE 
+         mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra) 
+      END IF
+      
+      w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
 
-    !IF (r > 1.865E+03_RFREAL) THEN
-    !IF (r > 1860.000_RFREAL) THEN
-    IF (r > rhoTNT) THEN
-    mp = 0.0_RFREAL
-    w = wTNT 
-    END IF
-    
-        ! Josh - Write Slopes mA,mB,mW
-   !   write (str2, "(A14)") "JWL_slopes.dat"
-   !     str2 = trim(str2)
-   !    INQUIRE (FILE=str2, EXIST=I_EXIST)
-   !     IF ( I_EXIST ) THEN
-   !     ELSE
-   !         OPEN(1117,file=str2,form='formatted',status='unknown')
-   !         WRITE(1117,*) 'ma,mb,mW',ma,mb,mp
-   !     ENDIF
+      IF (r > rhoTNT) THEN
+         mp = 0.0_RFREAL
+         w = wTNT 
+      END IF
+      
 
-!    IF (r < 1.258_RFREAL) THEN
-!    mp = 0.0_RFREAL
-!    ELSE
-!    mp = -1.0731E-05_RFREAL
-!    END IF
-!
-!    eJ = 5.576E+06_RFREAL
-!
-!    IF (r .LE. 1865_RFREAL) THEN
-!    w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
-!    ELSE
-!    w = wTNT
-!    END IF
 120 CONTINUE
-    ! Josh
-    !IF ( Y .le. 0.99_RFREAL ) THEN
-    IF ( Ynot .le. 0.99_RFREAL ) THEN
-    C1 = (1.0_RFREAL - ( (w*r)/(R1TNT*rhoTNT) ))*exp(-R1TNT*rhoTNT/r)
-    C2 = (1.0_RFREAL - ((w*r)/(R2TNT*rhoTNT)))*exp(-R2TNT*rhoTNT/r)
+      ! Josh
+      !IF ( Y .le. 0.99_RFREAL ) THEN
+      IF ( Ynot .le. 0.99_RFREAL ) THEN
+         C1 = (1.0_RFREAL - ( (w*r)/(R1TNT*rhoTNT) ))*exp(-R1TNT*rhoTNT/r)
+         C2 = (1.0_RFREAL - ((w*r)/(R2TNT*rhoTNT)))*exp(-R2TNT*rhoTNT/r)
 
-    e = ( p + (ma*eJ - ATNT)*C1 + (mb*eJ - BTNT)*C2)/(ma*C1 + mb*C2 + w*r)
-    !First attempt
+         e = ( p + (ma*eJ - ATNT)*C1 + (mb*eJ - BTNT)*C2)/(ma*C1 + mb*C2 + w*r)
 
-    !IF (e .LE. eJ .AND. e .GE. 2.5575E+05) THEN
-    IF (e .LE. eJ .AND. e .GE. eamb) THEN
-!     RFLU_JWL_E_PR = e
-    ELSE
-     An = ATNT
-     Bn = BTNT
-    
-     e = (p/r/w) - (An*((1.0_RFREAL/(w*r))-(1.0_RFREAL/rhoTNT/R1TNT))*exp(-R1TNT*rhoTNT/r)) &
-                 - (Bn*((1.0_RFREAL/(w*r))-(1.0_RFREAL/rhoTNT/R2TNT))*exp(-R2TNT*rhoTNT/r))
-     IF (e .LT. eJ) THEN
-      e = p/w/r
-     END IF ! e .LE. eJ Correction step in case assumption that e is in linear range is wrong
-    END IF ! e .LE. eJ .AND. e .GE. eAir
-    ELSE
-     An = ATNT
-     Bn = BTNT
-     w = wTNT
-    
-     e = (p/r/w) - (An*((1.0_RFREAL/(w*r))-(1.0_RFREAL/rhoTNT/R1TNT))*exp(-R1TNT*rhoTNT/r)) &
-                 - (Bn*((1.0_RFREAL/(w*r))-(1.0_RFREAL/rhoTNT/R2TNT))*exp(-R2TNT*rhoTNT/r))
-    ENDIF ! Y .le. 0.99
-    IF (IsNaN(e) .EQV. .TRUE.) THEN
-      WRITE(*,*) 'Energy in RFLU_JWL_E_PR function is NaN'
-      WRITE(*,*) 'e,r,p', e,r,p,pRegion%irkStep
-      CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
+         !First attempt
+
+         !IF (e .LE. eJ .AND. e .GE. 2.5575E+05) THEN
+         IF (e .LE. eJ .AND. e .GE. eamb) THEN
+            !RFLU_JWL_E_PR = e
+         ELSE
+            An = ATNT
+            Bn = BTNT
+      
+            e = (p/r/w) - (An*((1.0_RFREAL/(w*r))-(1.0_RFREAL/rhoTNT/R1TNT)) &
+                   *exp(-R1TNT*rhoTNT/r)) &
+                   - (Bn*((1.0_RFREAL/(w*r))-(1.0_RFREAL/rhoTNT/R2TNT)) &
+                   *exp(-R2TNT*rhoTNT/r))
+            IF (e .LT. eJ) THEN
+                  e = p/w/r
+            END IF ! e .LE. eJ Correction step in case assumption that e is in linear range is wrong
+         END IF ! e .LE. eJ .AND. e .GE. eAir
+      ELSE
+         An = ATNT
+         Bn = BTNT
+         w = wTNT
+      
+         e = (p/r/w) - (An*((1.0_RFREAL/(w*r))-(1.0_RFREAL/rhoTNT/R1TNT)) &
+                   *exp(-R1TNT*rhoTNT/r)) &
+                   - (Bn*((1.0_RFREAL/(w*r))-(1.0_RFREAL/rhoTNT/R2TNT)) &
+                   *exp(-R2TNT*rhoTNT/r))
+      ENDIF ! Y .le. 0.99
+
+      IF (IsNaN(e) .EQV. .TRUE.) THEN
+         WRITE(*,*) 'Energy in RFLU_JWL_E_PR function is NaN'
+         WRITE(*,*) 'e,r,p', e,r,p,pRegion%irkStep
+         CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
+      END IF
+
+      IF ( e .LE. 0.0_RFREAL ) THEN
+         IF ( Ynot .gt. 0.99_RFREAL ) THEN
+            !Ynot = Y
+            Ynot = 0.981230_RFREAL
+            GOTO 120
+         ELSE
+            WRITE(*,*) 'Energy in RFLU_JWL_E_PR function is negative'
+            WRITE(*,*) 'e,r,p', e,r,p,pRegion%irkStep
+            CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
+         ENDIF
+      ENDIF
+
+      ! TLJ added for safety 12/27/2024
+      !IF (e .LE. ea) THEN
+      !   e = ea
+      !ENDIF
+      !IF (e .LE. 1.0E+04_RFREAL) THEN
+      !   e = 1.0E+04_RFREAL
+      !ENDIF
     END IF
-
-
-    IF ( e .LE. 0.0_RFREAL ) THEN
-                IF ( Ynot .gt. 0.99_RFREAL ) THEN
-                      !Ynot = Y
-                      Ynot = 0.981230_RFREAL
-                      GOTO 120
-                ELSE
-      WRITE(*,*) 'Energy in RFLU_JWL_E_PR function is negative'
-      WRITE(*,*) 'e,r,p', e,r,p,pRegion%irkStep
-      CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
-                 ENDIF
-    ENDIF
-
-     IF ( Ynot .le. 0.01_RFREAL ) THEN
-
-        e = p/r/(0.4_RFREAL)
-
-     end if   
-
+ 
     RFLU_JWL_E_PR = e
 
 ! ******************************************************************************
@@ -731,8 +695,6 @@ MODULE RFLU_ModJWL
 ! ******************************************************************************
 
   END FUNCTION RFLU_JWL_E_PR
-
-
 
 
 
@@ -769,7 +731,7 @@ MODULE RFLU_ModJWL
             ENDIF
           END DO
         END DO   
-		
+
         !Ensure diagonal elements are non-zero
         DO k = 1,n-1
           DO j = k+1,n
@@ -785,12 +747,12 @@ MODULE RFLU_ModJWL
             ENDIF
           END DO
         END DO   
-		
+
         !Reduce augmented matrix to upper traingular form
         DO k =1, n-1
           DO j = k+1, n   
             m = augmatrix(j,k)/augmatrix(k,k)
-			!write(*,*) k, j, m
+            !write(*,*) k, j, m
             DO i = k, 2*n
               augmatrix(j,i) = augmatrix(j,i) - m*augmatrix(k,i)
             END DO
@@ -810,7 +772,7 @@ MODULE RFLU_ModJWL
             return
           ENDIF
         END DO
-       		
+       
         !Make diagonal elements as 1
         DO i = 1 , n
           m = augmatrix(i,i)
@@ -818,7 +780,7 @@ MODULE RFLU_ModJWL
             augmatrix(i,j) = (augmatrix(i,j) / m)
           END DO
         END DO
-		
+
         !Reduced right side half of augmented matrix to identity matrix
         DO k = n-1, 1, -1
           DO i =1, k
@@ -828,8 +790,8 @@ MODULE RFLU_ModJWL
             END DO
           END DO
         END DO        
-		
-		!store answer
+
+        !store answer
         DO i =1, n
           DO j = 1, n
             inverse(i,j) = augmatrix(i,j+n)
@@ -837,16 +799,13 @@ MODULE RFLU_ModJWL
         END DO
 
         !do i=1,n
-	    !write(26,99) augmatrix (i,1:2*n)
-	    !end do
-		
+        !write(26,99) augmatrix (i,1:2*n)
+        !end do
+
 !99  format(100(1X,E30.15)) 
 
   END SUBROUTINE RFLU_JWL_FindInverseMatrix 
 ! ###############################################
-
-
-
 
 
 
@@ -859,11 +818,12 @@ MODULE RFLU_ModJWL
 ! Description: None.
 !
 ! Input:
-!   e             Energy
-!   r             Density
+!   e             Energy (m^2/s^2)
+!   r             Density (kg/m^3)
+!   Y             Mass fraction of explosive (JWL) gas
 !
-! Output: None.
-!
+! Output:
+!   P             Pressure (Pa)
 ! Notes: None.
 !
 ! ******************************************************************************
@@ -889,81 +849,78 @@ MODULE RFLU_ModJWL
 ! ==============================================================================
     
     REAL(RFREAL) :: p,mp,ma,mb,ra,eJ,w,An,Bn,eamb
+    REAL(RFREAL) :: ea,pa
+
     ATNT   = pRegion%mixtInput%prepRealVal14
     BTNT   = pRegion%mixtInput%prepRealVal15
     wTNT   = pRegion%mixtInput%prepRealVal17
     R1TNT  = pRegion%mixtInput%prepRealVal18
     R2TNT  = pRegion%mixtInput%prepRealVal19
-    rhoTNT = pRegion%mixtInput%prepRealVal4*pRegion%mixtInput%prepRealVal3
+    rhoTNT = pRegion%mixtInput%prepRealVal24
     ETNT   = pRegion%mixtInput%prepRealVal13  
     
 ! ******************************************************************************
 !   Start
 ! ******************************************************************************
 
-    ra = pRegion%mixtInput%prepRealVal3  
+    ra = pRegion%mixtInput%prepRealVal3 
+    pa = pRegion%mixtInput%prepRealVal2  
+    ea = pa/ra/0.4_RFREAL
 
-   ! eJ = ETNT/rhoTNT
-    eJ = ETNT/1758.000_RFREAL!1860.000_RFREAL
-    eamb = 2.55750E+05_RFREAL 
+    ! internal energy = density * specific internal energy
+    ! eamb = p_amb/rho/(ga-1); p_amb = 102,300 Pa; ga = 1.4; rho = 1.0 kg/m^3
+    ! rhoTNT replaced by 1860 following RocSDT scaling
+    !eJ = ETNT/rhoTNT                    ! explosive internal energy
+    eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
+    eamb = 2.55750E+05_RFREAL            ! ambient internal energy; m^2/s^2
 
     ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
     mb = (BTNT-0.00_RFREAL)/(eJ-eamb)
 
     IF (r < ra) THEN
-    mp = 0.0_RFREAL
+       mp = 0.0_RFREAL
     ELSE 
-  !  mp = -1.0731E-05_RFREAL
-  !  mp = (wTNT-0.4_RFREAL)/(1860.000_RFREAL-ra) 
-    mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra) 
+       mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra) 
     END IF
     
     w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
 
-    !IF (r > 1.865E+03_RFREAL) THEN
-    !IF (r > 1860.000_RFREAL) THEN
     IF (r > rhoTNT) THEN
-    mp = 0.0_RFREAL
-    w = wTNT 
+       mp = 0.0_RFREAL
+       w = wTNT 
     END IF
     
     IF ( Y .le. 0.99_RFREAL ) THEN
-    IF (e .GE. eJ) THEN
-     An = ATNT
-     Bn = BTNT
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-    !ELSE IF (e .LE. 2.55750E+05_RFREAL) THEN
-    ELSE IF (e .LE. eamb) THEN
-     An = 0.0_RFREAL
-     Bn = 0.0_RFREAL
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
+       IF (e .GE. eJ) THEN
+          An = ATNT
+          Bn = BTNT
+          ma = 0.0_RFREAL
+          mb = 0.0_RFREAL
+       ELSE IF (e .LE. eamb) THEN
+          An = 0.0_RFREAL
+          Bn = 0.0_RFREAL
+          ma = 0.0_RFREAL
+          mb = 0.0_RFREAL
+       ELSE
+          An = ATNT+ma*(e-eJ)
+          Bn = BTNT+mb*(e-eJ)
+       END IF !Linear fit + constants
     ELSE
-     An = ATNT+ma*(e-eJ)
-     Bn = BTNT+mb*(e-eJ)
-    END IF !Linear fit + constants
-    ELSE
-     An = ATNT
-     Bn = BTNT
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-     w = wTNT
-    ENDIF ! Y .le. 0.99 
-    
-    p = An*(1.0_RFREAL - (w*r)/(R1TNT*rhoTNT))*exp(-R1TNT*rhoTNT/r) + &
-        Bn*(1.0_RFREAL - (w*r)/(R2TNT*rhoTNT))*exp(-R2TNT*rhoTNT/r) + &
-        w*e*r
-  
-     IF ( Y .le. 0.01_RFREAL ) THEN
-
-        p = e*r*(0.4_RFREAL)
-
-     end if   
-
-
-
-
+       An = ATNT
+       Bn = BTNT
+       ma = 0.0_RFREAL
+       mb = 0.0_RFREAL
+       w = wTNT
+    ENDIF ! Y .le. 0.99
+ 
+    IF ( Y .le. 0.01d0 ) THEN
+       p = e*r*(0.4d0)
+    ELSE 
+      p = An*(1.0_RFREAL - (w*r)/(R1TNT*rhoTNT))*exp(-R1TNT*rhoTNT/r) + &
+          Bn*(1.0_RFREAL - (w*r)/(R2TNT*rhoTNT))*exp(-R2TNT*rhoTNT/r) + &
+          w*e*r
+    END IF
+   
     RFLU_JWL_P_ER = p
 
 ! ******************************************************************************
@@ -973,6 +930,10 @@ MODULE RFLU_ModJWL
   END FUNCTION RFLU_JWL_P_ER
 
 
+
+
+
+
 ! ******************************************************************************
 !
 ! Purpose: Compute temperature from JWL equation of state.
@@ -980,10 +941,13 @@ MODULE RFLU_ModJWL
 ! Description: None.
 !
 ! Input:
-!   p             Pressure
-!   r             Density
+!   p             Pressure (Pa)
+!   r             Density (kg/m^3)
+!   e             Energy (m^2/s^2)
+!   Y             Mass fraction of explosive (JWL) gas
 !
-! Output: None.
+! Output:
+!   T             Temperature (K)
 !
 ! Notes: None.
 !
@@ -1004,97 +968,106 @@ MODULE RFLU_ModJWL
     TYPE(t_region),POINTER :: pRegion
     REAL(RFREAL), INTENT(IN) :: p,r,e,Y
     REAL(RFREAL) :: RFLU_JWL_T_PR
+    TYPE(t_global),POINTER :: global
     
 ! ==============================================================================
 !   Locals
 ! ==============================================================================
     
     REAL(RFREAL) :: T,mp,mcv,ma,mb,ra,eJ,w,cv,An,Bn,eamb,shcvair
-    ATNT   = pRegion%mixtInput%prepRealVal14
-    BTNT   = pRegion%mixtInput%prepRealVal15
-    wTNT   = pRegion%mixtInput%prepRealVal17
-    R1TNT  = pRegion%mixtInput%prepRealVal18
-    R2TNT  = pRegion%mixtInput%prepRealVal19
-    rhoTNT = pRegion%mixtInput%prepRealVal4*pRegion%mixtInput%prepRealVal3
-    shcvTNT  = pRegion%mixtInput%prepRealVal20
-    ETNT   = pRegion%mixtInput%prepRealVal13  
+    REAL(RFREAL) :: ea,pa,Ta
+
+    ATNT    = pRegion%mixtInput%prepRealVal14
+    BTNT    = pRegion%mixtInput%prepRealVal15
+    wTNT    = pRegion%mixtInput%prepRealVal17
+    R1TNT   = pRegion%mixtInput%prepRealVal18
+    R2TNT   = pRegion%mixtInput%prepRealVal19
+    rhoTNT  = pRegion%mixtInput%prepRealVal24
+    shcvTNT = pRegion%mixtInput%prepRealVal20
+    ETNT    = pRegion%mixtInput%prepRealVal13  
        
+    global => pRegion%global
  
 ! ******************************************************************************
 !   Start
 ! ******************************************************************************
 
-    ra = pRegion%mixtInput%prepRealVal3  
-
-   ! eJ = ETNT/rhoTNT
-    eJ = ETNT/1758.000_RFREAL!1860.000_RFREAL
-    eamb = 2.55750E+05_RFREAL
-    shcvair = 717.00_RFREAL 
-
-    ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
-    mb = (BTNT-0.00_RFREAL)/(eJ-eamb)
-
-    IF (r < ra) THEN
-    mp = 0.0_RFREAL
-    mcv = 0.0_RFREAL
+    IF(Y < 0.01) THEN
+      T = e/(1000*0.718_RFREAL)
     ELSE 
-  !  mp = -1.0731E-05_RFREAL
-  !  mcv = -0.10731802_RFREAL
-   ! mp = (wTNT-0.4_RFREAL)/(1860.000_RFREAL-ra)
-    mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra)
-   ! mcv = (shcvTNT-shcvair)/(1860.000_RFREAL-ra) 
-    mcv = (shcvTNT-shcvair)/(rhoTNT-ra) 
+      pa = pRegion%mixtInput%prepRealVal2
+      ra = pRegion%mixtInput%prepRealVal3  ! ambient density
+      ea = pa/ra/0.4_RFREAL
+      shcvair = 717.60_RFREAL              ! Cv for air; Cv = Cp/ga; J/kg-K
+      Ta = ea/shcvair
+
+      ! internal energy = density * specific internal energy
+      ! eamb = p_amb/rho/(ga-1); p_amb = 102,300 Pa; ga = 1.4; rho = 1.0 kg/m^3
+      ! rhoTNT replaced by 1860 following RocSDT scaling
+      !eJ = ETNT/rhoTNT                    ! explosive internal energy
+      eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
+      eamb = 2.55750E+05_RFREAL            ! ambient internal energy; m^2/s^2
+      shcvair = 717.60_RFREAL              ! Cv for air; Cv = Cp/ga; J/kg-K
+
+      ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
+      mb = (BTNT-0.00_RFREAL)/(eJ-eamb)
+
+      IF (r < ra) THEN
+         mp = 0.0_RFREAL
+         mcv = 0.0_RFREAL
+      ELSE 
+         mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra)
+         mcv = (shcvTNT-shcvair)/(rhoTNT-ra) 
+      END IF
+      
+      w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
+      cv = max(mcv*(r-ra)+shcvair,shcvTNT)
+
+      IF (r > rhoTNT) THEN
+         mp = 0.0_RFREAL
+         mcv = 0.00_RFREAL
+         w = wTNT
+         cv = shcvTNT 
+      END IF
+      
+      IF ( Y .le. 0.99_RFREAL ) THEN
+         IF (e .GE. eJ) THEN
+            An = ATNT
+            Bn = BTNT
+            ma = 0.0_RFREAL
+            mb = 0.0_RFREAL
+         ELSE IF (e .LE. eamb) THEN
+            An = 0.0_RFREAL
+            Bn = 0.0_RFREAL
+            ma = 0.0_RFREAL
+            mb = 0.0_RFREAL
+         ELSE
+            An = ATNT+ma*(e-eJ)
+            Bn = BTNT+mb*(e-eJ)
+         END IF !Linear fit + constants
+      ELSE
+         An = ATNT
+         Bn = BTNT
+         ma = 0.0_RFREAL
+         mb = 0.0_RFREAL
+         mp = 0.0_RFREAL
+         mcv = 0.00_RFREAL
+         w = wTNT
+         cv = shcvTNT
+      ENDIF ! Y .le. 0.99
+      
+      T = (p - An*EXP(-R1TNT*rhoTNT/r)  &
+             - Bn*EXP(-R2TNT*rhoTNT/r))*1.0_RFREAL/w/cv/r    
+
+      ! TLJ - 12/12/2024
+      ! Added for safety to possibly prevent negative temperatures
+      IF ( T .LE. 270.0_RFREAL .AND. Y .GT. 0.03 ) T = 270.0_RFREAL
+      IF ( T .LE. 0.0_RFREAL ) THEN
+         WRITE(*,*) 'Temperature in RFLU_JWL_T_PR function is negative'
+         WRITE(*,*) 'p,r,e,Y,T', p,r,e,Y,T
+         CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
+      ENDIF
     END IF
-    
-    w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
-    cv = max(mcv*(r-ra)+717.0_RFREAL,shcvTNT)
-
-    !IF (r > 1.865E+03_RFREAL) THEN
-    !IF (r > 1860.000_RFREAL) THEN
-    IF (r > rhoTNT) THEN
-    mp = 0.0_RFREAL
-    mcv = 0.00_RFREAL
-    w = wTNT
-    cv = shcvTNT 
-    END IF
-    
-    IF ( Y .le. 0.99_RFREAL ) THEN
-    IF (e .GE. eJ) THEN
-     An = ATNT
-     Bn = BTNT
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-    !ELSE IF (e .LE. 2.55750E+05_RFREAL) THEN
-    ELSE IF (e .LE. eamb) THEN
-     An = 0.0_RFREAL
-     Bn = 0.0_RFREAL
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-    ELSE
-     An = ATNT+ma*(e-eJ)
-     Bn = BTNT+mb*(e-eJ)
-    END IF !Linear fit + constants
-    ELSE
-     An = ATNT
-     Bn = BTNT
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-     mp = 0.0_RFREAL
-     mcv = 0.00_RFREAL
-     w = wTNT
-     cv = shcvTNT
-    ENDIF ! Y .le. 0.99
-    
-    T = (p - An*EXP(-R1TNT*rhoTNT/r)  &
-           - Bn*EXP(-R2TNT*rhoTNT/r))*1.0_RFREAL/w/cv/r    
-
-    IF ( Y .le. 0.01_RFREAL ) THEN
-
-        T = p/r/(287.04_RFREAL)
-
-     end if 
-
-
     RFLU_JWL_T_PR = T
 
 ! ******************************************************************************
@@ -1102,133 +1075,6 @@ MODULE RFLU_ModJWL
 ! ******************************************************************************
 
   END FUNCTION RFLU_JWL_T_PR
-
-!BRAD ADDED A JWL JUNCTION
-
-! ******************************************************************************
-!
-! Purpose: Compute Pressure from JWL equation of state.
-!
-! Description: None.
-!
-! Input:
-!   T             Temperature
-!   r             Density
-!
-! Output: None.
-!
-! Notes: None.
-!
-! ******************************************************************************
-
-  FUNCTION RFLU_JWL_P_TR(pRegion,t,r,e,Y)
-
-    IMPLICIT NONE
-        
-! ******************************************************************************
-!   Declarations and definitions
-! ******************************************************************************
-    
-! ==============================================================================
-!   Arguments
-! ==============================================================================
-    
-    TYPE(t_region),POINTER :: pRegion
-    REAL(RFREAL), INTENT(IN) :: t,r,e,Y
-    REAL(RFREAL) :: RFLU_JWL_P_TR
-    
-! ==============================================================================
-!   Locals
-! ==============================================================================
-    
-    REAL(RFREAL) :: P,mp,mcv,ma,mb,ra,eJ,w,cv,An,Bn,eamb,shcvair
-    ATNT   = pRegion%mixtInput%prepRealVal14
-    BTNT   = pRegion%mixtInput%prepRealVal15
-    wTNT   = pRegion%mixtInput%prepRealVal17
-    R1TNT  = pRegion%mixtInput%prepRealVal18
-    R2TNT  = pRegion%mixtInput%prepRealVal19
-    rhoTNT = pRegion%mixtInput%prepRealVal4*pRegion%mixtInput%prepRealVal3
-    shcvTNT  = pRegion%mixtInput%prepRealVal20
-    ETNT   = pRegion%mixtInput%prepRealVal13  
-       
- 
-! ******************************************************************************
-!   Start
-! ******************************************************************************
-
-    ra = pRegion%mixtInput%prepRealVal3  
-
-   ! eJ = ETNT/rhoTNT
-    eJ = ETNT/1758.000_RFREAL!1860.000_RFREAL
-    eamb = 2.55750E+05_RFREAL
-    shcvair = 717.00_RFREAL 
-
-    ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
-    mb = (BTNT-0.00_RFREAL)/(eJ-eamb)
-
-    IF (r < ra) THEN
-    mp = 0.0_RFREAL
-    mcv = 0.0_RFREAL
-    ELSE 
-  !  mp = -1.0731E-05_RFREAL
-  !  mcv = -0.10731802_RFREAL
-   ! mp = (wTNT-0.4_RFREAL)/(1860.000_RFREAL-ra)
-    mp = (wTNT-0.4_RFREAL)/(rhoTNT-ra)
-   ! mcv = (shcvTNT-shcvair)/(1860.000_RFREAL-ra) 
-    mcv = (shcvTNT-shcvair)/(rhoTNT-ra) 
-    END IF
-    
-    w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
-    cv = max(mcv*(r-ra)+717.0_RFREAL,shcvTNT)
-
-    !IF (r > 1.865E+03_RFREAL) THEN
-    !IF (r > 1860.000_RFREAL) THEN
-    IF (r > rhoTNT) THEN
-    mp = 0.0_RFREAL
-    mcv = 0.00_RFREAL
-    w = wTNT
-    cv = shcvTNT 
-    END IF
-    
-    IF ( Y .le. 0.99_RFREAL ) THEN
-    IF (e .GE. eJ) THEN
-     An = ATNT
-     Bn = BTNT
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-    !ELSE IF (e .LE. 2.55750E+05_RFREAL) THEN
-    ELSE IF (e .LE. eamb) THEN
-     An = 0.0_RFREAL
-     Bn = 0.0_RFREAL
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-    ELSE
-     An = ATNT+ma*(e-eJ)
-     Bn = BTNT+mb*(e-eJ)
-    END IF !Linear fit + constants
-    ELSE
-     An = ATNT
-     Bn = BTNT
-     ma = 0.0_RFREAL
-     mb = 0.0_RFREAL
-     mp = 0.0_RFREAL
-     mcv = 0.00_RFREAL
-     w = wTNT
-     cv = shcvTNT
-    ENDIF ! Y .le. 0.99
-    
-    !T = (p - An*EXP(-R1TNT*rhoTNT/r) - Bn*EXP(-R2TNT*rhoTNT/r))*1.0_RFREAL/w/cv/r    
-
-    P = (T * w*cv*r) + An*EXP(-R1TNT*rhoTNT/r) + Bn*EXP(-R2TNT*rhoTNT/r)  
-
-    RFLU_JWL_P_TR = P
-
-! ******************************************************************************
-!   End  
-! ******************************************************************************
-
-  END FUNCTION RFLU_JWL_P_TR
-
 
 
 END MODULE RFLU_ModJWL

@@ -1,7 +1,8 @@
-#define PPICLF_LPART 20000
+#define PPICLF_LPART 70000
 #define PPICLF_LRS 12
 #define PPICLF_LRP 64
-#define PPICLF_LEE 75000
+#define PPICLF_LRP3 0
+#define PPICLF_LEE 100000
 #define PPICLF_LEX 2
 #define PPICLF_LEY 2
 #define PPICLF_LEZ 2
@@ -9,7 +10,7 @@
 #define PPICLF_LRP_PRO 10
 
 ! number of timesteps kept in history kernels
-#define PPICLF_VU 5
+#define PPICLF_VU 0
 ! maximum number of triangular patch boundaries
 #define PPICLF_LWALL 20
 

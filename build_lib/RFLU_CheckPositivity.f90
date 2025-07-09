@@ -195,8 +195,8 @@ SUBROUTINE RFLU_CheckPositivity(pRegion)
       
       IF (pRegion%mixtInput%gasModel == GAS_MODEL_TCPERF) THEN
        WRITE(*,'(A,I8,F10.4,F14.4,F14.4,F10.4,A)') &
-               "  ========  Ideal Gas - Before fix values:{cell,rho,e,P,T}" &
-               ,icg,rho,Eo,p,t,"  ========  "
+               "  ========  Ideal Gas - Before fix values:{cell,rho,e,P,T,vf}" &
+               ,icg,rho,Eo,p,t,pRegion%mixt%piclVF(icg),"  ========  "
        Eo = 1.0e4_RFREAL + 0.5_RFREAL*Vm2 !Energy floor
        p = MixtPerf_P_DEoGVm2(rho,Eo,gamma,Vm2)
        t = MixtPerf_T_DPR(rho,p,rgas) !Recompute P,T

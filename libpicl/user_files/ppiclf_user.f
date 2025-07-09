@@ -51,7 +51,7 @@
      >   qs_fluct_filter_adapt_flag,
      >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
      >   sbNearest_flag, burnrate_flag, flow_model
-      real*8 :: rmu_ref, tref, suth, ksp, erest
+      real*8 :: rmu_ref, tref, suth, ksp, erest,maxFilter
       common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
      >   collisional_flag, heattransfer_flag, feedback_flag,
      >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
@@ -132,18 +132,18 @@
       ! Avery added 10/10/2024 for subbin nearest neighbor search
       
       INTEGER*4 SBin_map( 0 : (
-     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3)) 
+     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist) 
      >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3))
+     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)
      >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3)) 
+     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist) 
      >       + 1) - 1), (ppiclf_npart+ppiclf_npart_gp))
       INTEGER*4  SBin_counter( 0 : (
-     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3)) 
+     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist) 
      >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3))
+     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)
      >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3)) 
+     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist) 
      >       + 1) - 1))
       INTEGER*4 i_Bin(3), n_SBin(3), tot_SBin
 
@@ -253,11 +253,11 @@
 
          nbin_total = ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)
          nsubbin_size =
-     >     (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3))
+     >     (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist)
      >        + 1) *
-     >     (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3))
+     >     (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)
      >        + 1) *
-     >     (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_d2chk(3))/ppiclf_d2chk(3))
+     >     (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist)
      >       + 1) 
 
 !         if (ppiclf_time .EQ. 0.0) then
@@ -427,7 +427,7 @@
 
             if (qs_fluct_filter_flag==0) then
                ! box filter
-               phipmean = ppiclf_rprop(PPICLF_R_JVOLP,i)
+               phipmean = ppiclf_rprop(PPICLF_R_JVOLP,i)!***wrong index??
                upmean   = ppiclf_y(PPICLF_JVX,i)
                vpmean   = ppiclf_y(PPICLF_JVY,i)
                wpmean   = ppiclf_y(PPICLF_JVZ,i)
@@ -436,9 +436,11 @@
             else if (qs_fluct_filter_flag==1) then
                ! gaussian kernel
                ! r = 0
-               gkern = sqrt(rpi*ppiclf_filter**2/
+               maxFilter = MAX(ppiclf_filter(1),ppiclf_filter(2),
+     >                         ppiclf_filter(3))
+               gkern = sqrt(rpi*maxFilter**2/
      >                (4.0d0*log(2.0d0)))**(-ppiclf_ndim)
-               phipmean = gkern*ppiclf_rprop(PPICLF_R_JVOLP,i)
+               phipmean = gkern*ppiclf_rprop(PPICLF_R_JVOLP,i)!***wrong index??
                upmean   = gkern*ppiclf_y(PPICLF_JVX,i)*
      >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
                vpmean   = gkern*ppiclf_y(PPICLF_JVY,i)*
@@ -460,7 +462,7 @@
             CALL ppiclf_solve_NearestNeighborSB(
      >           i,tot_SBin,SBin_counter,SBin_map,n_SBin,i_Bin)
          ELSE
-             CALL ppiclf_solve_NearestNeighbor(i)
+!             CALL ppiclf_solve_NearestNeighbor(i)
          END IF
 
          end if ! end Step 1b; nearestneighbor
@@ -654,9 +656,6 @@
 !
 ! Step 11: Feed Back force to the gas phase
 !
-         ! Comment: ydotc represented the collisional force in the
-         !    particle eqautions above. Here, we over-write the
-         !    ydotc vectors for the feedback force used in Rocflu.
          !    Note that Rocflu uses a negative of the RHS, and
          !    so ppiclf must respect this odd convention.
          !
@@ -670,33 +669,50 @@
          !   - Durant et al. (2022)
          !   - Journal of Applied Physics
 
-         if (feedback_flag==0) then
-            ppiclf_ydotc(PPICLF_JVX,i) = 0.0d0 
-            ppiclf_ydotc(PPICLF_JVY,i) = 0.0d0 
-            ppiclf_ydotc(PPICLF_JVZ,i) = 0.0d0 
-            ppiclf_ydotc(PPICLF_JT,i)  = 0.0d0
-         endif
 
-         if (feedback_flag==1) then
-            ! Momentum equations feedback terms
-            ppiclf_ydotc(PPICLF_JVX,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
-     >         (ppiclf_ydot(PPICLF_JVX,i)*rmass - fcx)
-            ppiclf_ydotc(PPICLF_JVY,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
-     >         (ppiclf_ydot(PPICLF_JVY,i)*rmass - fcy)
-            ppiclf_ydotc(PPICLF_JVZ,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
-     >         (ppiclf_ydot(PPICLF_JVZ,i)*rmass - fcz)
+        IF(feedback_flag==0) THEN
+          ppiclf_feedbk(PPICLF_P_JFX,i) = 0.0d0 
+          ppiclf_feedbk(PPICLF_P_JFY,i) = 0.0d0 
+          ppiclf_feedbk(PPICLF_P_JFZ,i) = 0.0d0 
+          ppiclf_feedbk(PPICLF_P_JE,i)  = 0.0d0
+        END IF
 
-            ! Energy equation feedback term
-            ppiclf_ydotc(PPICLF_JT,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
-     >         ( (fqsx+fvux)*ppiclf_y(PPICLF_JVX,i) + 
-     >           (fqsy+fvuy)*ppiclf_y(PPICLF_JVY,i) + 
-     >           (fqsz+fvuz)*ppiclf_y(PPICLF_JVZ,i) +
-     >                  famx*ppiclf_rprop(PPICLF_R_JUX,i) +
-     >                  famy*ppiclf_rprop(PPICLF_R_JUY,i) +
-     >                  famz*ppiclf_rprop(PPICLF_R_JUZ,i) +
-     >           qq )
-            !ppiclf_ydotc(PPICLF_JT,i) = -1.0d0*ppiclf_ydotc(PPICLF_JT,i)
-         endif 
+        IF(feedback_flag==1) THEN
+          ! Momentum equations feedback terms
+          ppiclf_feedbk(PPICLF_P_JFX,i) = ppiclf_rprop(PPICLF_R_JSPL,i)*
+     >      (ppiclf_ydot(PPICLF_JVX,i)*rmass-fcx)
+          ppiclf_feedbk(PPICLF_P_JFY,i) = ppiclf_rprop(PPICLF_R_JSPL,i)*
+     >      (ppiclf_ydot(PPICLF_JVY,i)*rmass-fcy)
+          ppiclf_feedbk(PPICLF_P_JFZ,i) = ppiclf_rprop(PPICLF_R_JSPL,i)*
+     >      (ppiclf_ydot(PPICLF_JVZ,i)*rmass-fcz)
+
+! AVERY - troubleshooting
+!          ppiclf_feedbk(PPICLF_P_JE,i) = 0.0
+          ! Energy equation feedback term
+          ppiclf_feedbk(PPICLF_P_JE,i) = ppiclf_rprop(PPICLF_R_JSPL,i)*
+     >       ( (fqsx+fvux)*ppiclf_y(PPICLF_JVX,i) + 
+     >         (fqsy+fvuy)*ppiclf_y(PPICLF_JVY,i) + 
+     >         (fqsz+fvuz)*ppiclf_y(PPICLF_JVZ,i) +
+     >                famx*ppiclf_rprop(PPICLF_R_JUX,i) +
+     >                famy*ppiclf_rprop(PPICLF_R_JUY,i) +
+     >                famz*ppiclf_rprop(PPICLF_R_JUZ,i) +
+     >         qq )
+
+         END IF
+
+      ! Update volume fraction feedback quantities
+      ppiclf_feedbk(PPICLF_P_JPHIP,i) = ppiclf_rprop(PPICLF_R_JVOLP,i)
+     >   *ppiclf_rprop(PPICLF_R_JSPL,i)
+      ppiclf_feedbk(PPICLF_P_JPHIPD,i) =
+     >   ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_rprop(PPICLF_R_JRHOP,i)
+      ppiclf_feedbk(PPICLF_P_JPHIPU,i) = 
+     >   ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVX,i)
+      ppiclf_feedbk(PPICLF_P_JPHIPV,i) =
+     >   ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVY,i)
+      ppiclf_feedbk(PPICLF_P_JPHIPW,i) = 
+     >   ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVZ,i)
+      ppiclf_feedbk(PPICLF_P_JPHIPT,i) =
+     >   ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JT,i)
 
 !
 ! Step 12: If stationary, don't move particles. Feedback can still be on
@@ -737,9 +753,9 @@
          ppiclf_rprop(PPICLF_R_FQSX,i)  = fqsx
          ppiclf_rprop(PPICLF_R_FQSY,i)  = fqsy
          ppiclf_rprop(PPICLF_R_FQSZ,i)  = fqsz
-         ppiclf_rprop(PPICLF_R_FAMX,i)  = famx
-         ppiclf_rprop(PPICLF_R_FAMY,i)  = famy
-         ppiclf_rprop(PPICLF_R_FAMZ,i)  = famz
+         ppiclf_rprop(PPICLF_R_FAMX,i)  = famx-rmass_add*ppiclf_ydot(PPICLF_JVX,i)
+         ppiclf_rprop(PPICLF_R_FAMY,i)  = famy-rmass_add*ppiclf_ydot(PPICLF_JVY,i)
+         ppiclf_rprop(PPICLF_R_FAMZ,i)  = famz-rmass_add*ppiclf_ydot(PPICLF_JVZ,i)
          ppiclf_rprop(PPICLF_R_FAMBX,i) = FamBinary(1)
          ppiclf_rprop(PPICLF_R_FAMBY,i) = FamBinary(2)
          ppiclf_rprop(PPICLF_R_FAMBZ,i) = FamBinary(3)

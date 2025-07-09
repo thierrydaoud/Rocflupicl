@@ -118,8 +118,7 @@ SUBROUTINE WriteProbe( regions,iReg )
 
 #ifdef PICL
    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: phiP
-   REAL(KIND=8),DIMENSION(:,:,:,:), ALLOCATABLE :: vfP,vfD,vpx,vpy,vpz,vpt
-   integer :: lx,ly,lz          
+   REAL(KIND=8),DIMENSION(:), ALLOCATABLE :: vfP,vfD,vpx,vpy,vpz,vpt
 #endif
    REAL(RFREAL) :: tester, total_vol,tester1,tester2
    REAL(RFREAL) :: testerx,testery,testerz,testert
@@ -172,37 +171,37 @@ SUBROUTINE WriteProbe( regions,iReg )
    !PICL CODE HERE
 #ifdef PICL
     nCells = regions(iReg)%grid%nCells    
-    ALLOCATE(vfP(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vfP(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
       CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vfD(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vfD(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
       CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vpx(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vpx(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
       CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vpy(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vpy(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
       CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vpz(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vpz(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
       CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:xGrid')
     END IF ! global%error
 
-    ALLOCATE(vpt(2,2,2,nCells),STAT=errorFlag)
+    ALLOCATE(vpt(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
       CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:xGrid')
@@ -319,41 +318,35 @@ pRegion => regions(iReg)
        testery = 0 
        testerz = 0 
        testert = 0 
-       do lz=1,2
-       do ly=1,2
-       do lx=1,2
 
 ! TLJ: This needs to be checked
 !particle volume
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, PPICLF_P_JPHIP,&
-                        vfP(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, PPICLF_P_JPHIP,&
+                        vfP(iCell))
 !density
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, PPICLF_P_JPHIPD,&
-                        vfD(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, PPICLF_P_JPHIPD,&
+                        vfD(iCell))
 !x-vel
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, PPICLF_P_JPHIPU,&
-                        vpx(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, PPICLF_P_JPHIPU,&
+                        vpx(iCell))
 !y-vel
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, PPICLF_P_JPHIPV,&
-                        vpy(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, PPICLF_P_JPHIPV,&
+                        vpy(iCell))
 !z-vel
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, PPICLF_P_JPHIPW,&
-                        vpz(lx,ly,lz,iCell))
+       call ppiclf_solve_GetProFld(iCell, PPICLF_P_JPHIPW,&
+                        vpz(iCell))
 !T-temperature
-       call ppiclf_solve_GetProFldIJKEF(lx, ly, lz, iCell, PPICLF_P_JPHIPT,&
-                        vpt(lx,ly,lz,iCell))
-
+       call ppiclf_solve_GetProFld(iCell, PPICLF_P_JPHIPT,&
+                        vpt(iCell))
        ! TLJ - modified 12/21/2024
-       tester1 = tester1 +(0.125*vfP(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       tester2 = tester2 +(0.125*vfD(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       testerx = testerx +(0.125*vpx(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       testery = testery +(0.125*vpy(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       testerz = testerz +(0.125*vpz(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
-       testert = testert +(0.125*vpt(lx,ly,lz,iCell))!*pRegion%grid%vol(iCell)
+       ! AVERY - modified 5/16/2025
+       tester1 = (vfP(iCell))/pRegion%grid%vol(iCell)
+       tester2 = (vfD(iCell))/pRegion%grid%vol(iCell)
+       testerx = (vpx(iCell))/pRegion%grid%vol(iCell)
+       testery = (vpy(iCell))/pRegion%grid%vol(iCell)
+       testerz = (vpz(iCell))/pRegion%grid%vol(iCell)
+       testert = (vpt(iCell))/pRegion%grid%vol(iCell)
 
-       end do
-       end do
-       end do
     !number of picl particles
       ! TLJ - Commented out 12/21/2024
       !tester1 = tester1 / pRegion%grid%vol(iCell)

@@ -120,13 +120,12 @@
          ! 07/09/2024 - TLJ - Updated
          ! 07/14/2024 - Thierry - Updated overlapping particles if statement
 
-         ! Filter widths are input values from *.inp
-         ! ppiclf_d2chk(1 & 2) are 1/2 filter width - user defined
-         !   = FILTERWIDTH / 2
-         ! ppiclf_d2chk(3) is neighbor width - user defined
+         ! Filter widths are set to be equal to 2*cell length in x,y,z
+         ! directions (1:3)
+         ! ppiclf_nndist is neighbor width - user defined
          !   = max(NEIGHBORWIDTH,4*Dp)
         
-         if (am_flag == 2 .and. rdiff <= ppiclf_d2chk(3)) then
+         if (am_flag == 2 .and. rdiff <= ppiclf_nndist) then
             ! Do not overwrite rxdiff, rydiff, rzdiff
             rxdiff1 = rxdiff
             rydiff1 = rydiff
@@ -170,7 +169,7 @@
                Wdot_neighbor_mean(k) = Wdot_neighbor_mean(k)
      >                               + rpropj(kk)
             end do ! k-loop
-         end if ! am_flag==2 .and. rdiff <= ppiclf_d2chk(3)
+         end if ! am_flag==2 .and. rdiff <= ppiclf_nndist
 
 !-----------------------------------------------------------------------
 !
@@ -335,20 +334,18 @@
 !
          ! Feedback fluctuation mean
 
-         dist2 = ppiclf_d2chk(2)
+         dist2 = MAX(ppiclf_filter(1),ppiclf_filter(2),ppiclf_filter(3))
 
          ! Box filter half-width dist2
-         if (qs_fluct_filter_adapt_flag==0) then
-            dist2 = ppiclf_d2chk(2)
-         else if (qs_fluct_filter_adapt_flag>=1) then
+         IF(qs_fluct_filter_adapt_flag.NE.0) THEN
             ! Adaptive filter defined wrt particle i
             ! Used for adaptive box or gaussian
             dpl = rpropi(PPICLF_R_JDP)
             phip = rpropi(PPICLF_R_JPHIP)
             adptfilter = ( 10.*(dpl**3)/max(1.e-4,phip) )**(1./3.)
             adptfilter = adptfilter/2.0
-            dist2 = max(ppiclf_d2chk(2),adptfilter)
-         endif
+            IF(adptfilter .GT. dist2) dist2 = adptfilter
+         END IF
 
          ! Check if particle lies inside box or gaussian filter
          xdist2 = abs(yi(PPICLF_JX)-yj(PPICLF_JX))
@@ -378,9 +375,9 @@
          else if (qs_fluct_filter_flag==1) then
             ! See https://dpzwick.github.io/ppiclF-doc/algorithms/overlap_mesh.html
             dist = sqrt(xdist2**2 + ydist2**2 + zdist2**2)
-            gkern = sqrt(pi*ppiclf_filter**2/
+            gkern = sqrt(pi*dist2**2/
      >              (4.0d0*log(2.0d0)))**(-ppiclf_ndim) * 
-     >              exp(-dist**2/(ppiclf_filter**2/(4.0d0*log(2.0d0))))
+     >              exp(-dist**2/(dist2**2/(4.0d0*log(2.0d0))))
 
             phipmean = phipmean + gkern*rpropj(PPICLF_R_JVOLP)
             upmean   = upmean +
