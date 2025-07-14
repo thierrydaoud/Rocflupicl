@@ -1136,6 +1136,8 @@ c----------------------------------------------------------------------
       IF(ppiclf_overlap) THEN
         ! Interpolate fluid solver grid to particle
         CALL ppiclf_solve_InterpParticleGrid
+        ! Project particle feedback to fluid solver grid
+        CALL ppiclf_solve_ProjectParticleGrid
       END IF
 
 !      IF(ppiclf_gprequired) THEN
@@ -1144,10 +1146,6 @@ c----------------------------------------------------------------------
         CALL ppiclf_comm_MoveGhost
 !      END IF
 
-      ! Project particle feedback to fluid solver grid
-      IF(ppiclf_overlap) THEN
-        CALL ppiclf_solve_ProjectParticleGrid
-      END IF
       ! Zero collisions 
       ppiclf_ydotc = 0.0D0
 
@@ -1175,9 +1173,13 @@ c----------------------------------------------------------------------
          CALL ppiclf_solve_InterpField(j)
       END DO
       
+      CALL MPI_BARRIER(ppiclf_comm,ierr) 
+
       ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Mesh
       ! elements that map to ppiclf domain.
       CALL ppiclf_solve_InterpTupleTransfer
+
+      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
@@ -1360,7 +1362,7 @@ c----------------------------------------------------------------------
       INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
      >          CellID_nearest(28), partCount, ierr
       REAL*8    dSQl, dSQi, dSQ(28), xp(3),  
-     >          CellCenter(3,28), w(27), binlength(3),  
+     >          CellCenter(3,28), w(27), binblength(3),  
      >          Max_CellLen(3), Max_CellLenSQ(3), dSQchk(3)
       LOGICAL   added, farAway
  
@@ -1370,7 +1372,7 @@ c----------------------------------------------------------------------
      > (FLOOR((ppiclf_bins_dx(2) + 2*ppiclf_interp_dchk(2))
      >                       /ppiclf_interp_dchk(2)) + 1) *
      > (FLOOR((ppiclf_bins_dx(3) + 2*ppiclf_interp_dchk(3))
-     >                       /ppiclf_interp_dchk(3)) + 1))
+     >                       /ppiclf_interp_dchk(3)) + 1) - 1)
      > ,ppiclf_nCells_Interp*2)
       INTEGER*4  SBin_counter( 0 : (
      > (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))
@@ -1386,25 +1388,24 @@ c----------------------------------------------------------------------
 
       CALL MPI_BARRIER(ppiclf_comm,ierr)
 
-      PRINT*, 'Proc, variables initialized!',ppiclf_nid
-
       IF(ppiclf_npart .LT. 1) RETURN
       IF(ppiclf_nCells_Interp .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
-        PRINT*,'No cells mapped to ppiclf bin. Num Particles/Proc ID:',
-     >  ppiclf_npart, ppiclf_nid
+        PRINT*,'ERROR: ',ppiclf_npart, 'Particles mapped to bin:'
+     >         ,ppiclf_nid
+        PRINT*,'No cells mapped to bin for Interpolation/Projection.'
         CALL ppiclf_exittr('Failure in particle to cell mapping',0.D0,0)
       END IF
  
       DO l = 1,3
-        binlength(l) = ppiclf_binb(2*l) - ppiclf_binb((2*l)-1)
+        binblength(l) = ppiclf_binb(2*l) - ppiclf_binb((2*l)-1)
         i_Bin(l) = ppiclf_iprop((4+l),1)
         bin_Min(l) = ppiclf_bin_pos(1,l) - ppiclf_interp_dchk(l)
         n_SBin(l) = FLOOR((ppiclf_bins_dx(l) + 2*ppiclf_interp_dchk(l))
-     >                                          /ppiclf_interp_dchk(l)) 
+     >                                     / ppiclf_interp_dchk(l)) + 1 
         dSQchk(l) = ppiclf_interp_dchk(l)**2
       END DO
  
-      tot_SBin = (n_SBin(1)+1)*(n_SBin(2)+1)*(n_SBin(3)+1)
+      tot_SBin = n_SBin(1)*n_SBin(2)*n_SBin(3)
       SBin_Counter = 0
 
       
@@ -1424,8 +1425,8 @@ c----------------------------------------------------------------------
         DO i = 0,1
           IF(i .EQ. 1) THEN 
             IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)) THEN
-              IF(i_SBin(1) .LE. 0) iTemp_SBin(1) = n_SBin(1)
-              IF(i_SBin(1) .GE. n_SBin(1)) iTemp_SBin(1) = 0
+              IF(i_SBin(1) .LE. 0) iTemp_SBin(1) = n_SBin(1) - 1
+              IF(i_SBin(1) .GE. n_SBin(1) - 1) iTemp_SBin(1) = 0
             ELSE
               CYCLE
             END IF
@@ -1434,8 +1435,8 @@ c----------------------------------------------------------------------
             IF(j .EQ. 1) THEN 
               IF(ppiclf_linperiodic(2) .AND. 
      >                                     ppiclf_EqualDomain(2)) THEN
-                IF(i_SBin(2) .LE. 0) iTemp_SBin(2) = n_SBin(2)
-                IF(i_SBin(2) .GE. n_SBin(2)) iTemp_SBin(2) = 0
+                IF(i_SBin(2) .LE. 0) iTemp_SBin(2) = n_SBin(2) - 1
+                IF(i_SBin(2) .GE. n_SBin(2) - 1) iTemp_SBin(2) = 0
               ELSE
                 CYCLE
               END IF
@@ -1444,8 +1445,8 @@ c----------------------------------------------------------------------
               IF(k .EQ. 1) THEN
                 IF(ppiclf_linperiodic(3) .AND.
      >                                     ppiclf_EqualDomain(3)) THEN
-                  IF(i_SBin(3) .LE. 0) iTemp_SBin(3) = n_SBin(3)
-                  IF(i_SBin(3) .GE. n_SBin(3)) iTemp_SBin(3) = 0
+                  IF(i_SBin(3) .LE. 0) iTemp_SBin(3) = n_SBin(3) - 1
+                  IF(i_SBin(3) .GE. n_SBin(3) - 1) iTemp_SBin(3) = 0
                 ELSE
                   CYCLE
                 END IF
@@ -1453,7 +1454,8 @@ c----------------------------------------------------------------------
               IF(i .EQ. 0 .AND. j .EQ. 0 .AND. k .EQ. 0) THEN
                 DO l = 1,3
                   IF(i_SBin(l) .LT. 0) iTemp_SBin(l) = 0
-                  IF(i_SBin(l) .GT. n_SBin(l)) iTemp_SBin(l) = n_SBin(l)
+                  IF(i_SBin(l) .GT. (n_SBin(l) - 1))
+     >                            iTemp_SBin(l) = n_SBin(l) - 1
                 END DO !l
               END IF
               temp_SBin = iTemp_SBin(1) + iTemp_SBin(2)*n_SBin(1) +
@@ -1464,7 +1466,7 @@ c----------------------------------------------------------------------
           END DO !j 
         END DO !i
       END DO !ie
-      PRINT*,ppiclf_nid,'made it past cell mapping!'
+
       partCount = 0
       DO ip=1,ppiclf_npart !Loop all particles in this bin
         nnearest = 0 ! number of nearest elements
@@ -1480,10 +1482,10 @@ c----------------------------------------------------------------------
           i_SBin(l) = FLOOR((xp(l) - bin_Min(l)) 
      >                /ppiclf_interp_dchk(l))
           IF(i_SBin(l) .LT. 0) i_SBin(l) = 0
-          IF(i_SBin(l) .GT. n_SBin(l)) i_SBin(l) = n_SBin(l)
+          IF(i_SBin(l) .GT. n_SBin(l) - 1) i_SBin(l) = n_SBin(l) - 1
         END DO
-        temp_SBin = i_SBin(1) + i_SBin(2)*(n_SBin(1)+1) +
-     >              i_SBin(3)*(n_SBin(1)+1)*(n_SBin(2)+1)
+        temp_SBin = i_SBin(1) + i_SBin(2)*n_SBin(1) +
+     >              i_SBin(3)*n_SBin(1)*n_SBin(2)
         DO iSB = 1,3      ! -1,+0,+1 subbin in x-dir
           DO jSB = 1,3    ! -1,+0,+1 subbin in y-dir
             DO kSB = 1,3  ! -1,+0,+1 subbin in z-dir
@@ -1500,7 +1502,7 @@ c----------------------------------------------------------------------
                     IF(ppiclf_linperiodic(l) .AND.
      >                                      ppiclf_EqualDomain(l)) THEN
                       dSQl = MIN((ppiclf_picl_grid(l,ie) - xp(l))**2, 
-     >                       (binlength(l)-ABS(ppiclf_picl_grid(l,ie)
+     >                       (binblength(l)-ABS(ppiclf_picl_grid(l,ie)
      >                        - xp(l)))**2)
                     ELSE
                       dSQl = (ppiclf_picl_grid(l,ie) - xp(l))**2
@@ -1510,7 +1512,7 @@ c----------------------------------------------------------------------
                   END DO !l
                   ! skip to next fluid cell if greater than 1.5*max cell
                   ! distance in respective x,y,z direction.
-                  if (farAWAY) CYCLE !ie
+                  if (farAWAY) CYCLE !i_count
                   ! Sort closest fluid cell centers
                   added = .FALSE.
                   DO i=1,27
@@ -1553,8 +1555,8 @@ c----------------------------------------------------------------------
             ppiclf_Part2Cell_map(partCount,i) = CellID_nearest(i) ! Cell ID
             ! Particle center to cell center distance
             ppiclf_Part2Cell_dist(partCount,i) = SQRT(dSQ(i)) 
-          END DO
-        END IF 
+          END DO !i
+        END IF !nnearest
       END DO !ip
 
 
@@ -1579,7 +1581,7 @@ c----------------------------------------------------------------------
       INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
      >          CellID_nearest(28), partCount
       REAL*8    dSQl, dSQi, dSQ(28), xp(3), dSQchk(3), 
-     >          CellCenter(3,28), w(27),binlength(3),  
+     >          CellCenter(3,28), w(27),binblength(3),  
      >          Max_CellLen(3),Max_CellLenSQ(3)
       LOGICAL   added, farAway
 
@@ -1594,7 +1596,7 @@ c----------------------------------------------------------------------
 
       ! Find bin lengths for linear periodicity calculations
       DO l = 1,3
-        binlength(l) = ppiclf_binb(2*l) - ppiclf_binb((2*l)-1)
+        binblength(l) = ppiclf_binb(2*l) - ppiclf_binb((2*l)-1)
         dSQchk(l) = (ppiclf_interp_dchk(l))**2
       END DO
 
@@ -1617,7 +1619,7 @@ c----------------------------------------------------------------------
           DO l=1,3
             IF(ppiclf_linperiodic(l) .AND. ppiclf_EqualDomain(l)) THEN
               dSQl = MIN((ppiclf_picl_grid(l,ie) - xp(l))**2, 
-     >            (binlength(l)-ABS(ppiclf_picl_grid(l,ie) - xp(l)))**2)
+     >           (binblength(l)-ABS(ppiclf_picl_grid(l,ie) - xp(l)))**2)
             ELSE
               dSQl = (ppiclf_picl_grid(l,ie) - xp(l))**2
             END IF
@@ -1775,7 +1777,9 @@ c----------------------------------------------------------------------
 
       RETURN
       END
-c----------------------------------------------------------------------
+
+!----------------------------------------------------------------------
+
       SUBROUTINE ppiclf_solve_ProjectParticleGrid
 !
       IMPLICIT NONE
@@ -1784,7 +1788,7 @@ c----------------------------------------------------------------------
 
       ! Internal:
       INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj,
-     >          nrr, nkey(2), iee
+     >          nrr, nkey(2), iee, ierr
       REAL*8    CellVol, GaussianConst, dist, w(27), wsum
       LOGICAL   partl 
 !      REAL*8    fxsum,fysum,fzsum,fxabssum,fyabssum,fzabssum   
@@ -1830,6 +1834,8 @@ c----------------------------------------------------------------------
      >         ppiclf_cell_map_interp(1,i),PPICLF_LRMAX)
       END DO
 
+      CALL MPI_BARRIER(ppiclf_comm,ierr)
+
       nl = 0
       nii = PPICLF_LRMAX
       njj = 2 ! original processor with cell for fluid grid
@@ -1848,6 +1854,8 @@ c----------------------------------------------------------------------
      >      ,partl,nl                       ! Logical data
      >      ,ppiclf_pro_fld_picl,nrr        ! Real data
      >      ,nkey,2)                        ! Sorting order
+
+      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ppiclf_pro_fld = 0.0d0
       DO ie=1,ppiclf_nCells_Proj

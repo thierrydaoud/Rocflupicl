@@ -52,16 +52,16 @@
         DO l = 1,3
           IF (l .LT. 3 .OR. ppiclf_ndim .GT. 2) THEN
             n_SBin(l) = FLOOR((ppiclf_bins_dx(l)+2*ppiclf_nndist)
-     >                       /ppiclf_nndist)
+     >                       /ppiclf_nndist) + 1
           ELSE
             n_SBin(l) = 0
           END IF
         END DO
 
         ! Determine total number of subbins
-        tot_SBin = (n_SBin(1)+1)*(n_SBin(2)+1)
+        tot_SBin = n_SBin(1)*n_SBin(2)
         IF (ppiclf_ndim .EQ. 3) THEN
-          tot_SBin = tot_SBin*(n_SBin(3)+1)
+          tot_SBin = tot_SBin*n_SBin(3)
         END IF
         ! Assign Subbin counters to 0
         SBin_counter = 0

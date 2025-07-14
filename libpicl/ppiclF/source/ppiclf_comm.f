@@ -488,17 +488,9 @@
       DO i=1,ppiclf_npart
          ! Calculates particle's bin index
          ii  = FLOOR((ppiclf_y(1,i)-ppiclf_binb(1))/ppiclf_bins_dx(1))
-         IF(ii .LT. 0) ii = 0
-         IF(ii .GT. ppiclf_n_bins(1)) ii = ppiclf_n_bins(1)
- 
          jj  = FLOOR((ppiclf_y(2,i)-ppiclf_binb(3))/ppiclf_bins_dx(2)) 
-         IF(jj .LT. 0) jj = 0
-         IF(jj .GT. ppiclf_n_bins(2)) jj = ppiclf_n_bins(2)
-
          kk  = FLOOR((ppiclf_y(3,i)-ppiclf_binb(5))/ppiclf_bins_dx(3)) 
-         IF(kk .LT. 0) kk = 0
-         IF(kk .GT. ppiclf_n_bins(3)) kk = ppiclf_n_bins(3)
-
+        
          ! Calculates particle's bin
          nrank  = ii + ppiclf_n_bins(1)*jj + 
      >                ppiclf_n_bins(1)*ppiclf_n_bins(2)*kk
