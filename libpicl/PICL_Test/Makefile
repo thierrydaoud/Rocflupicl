@@ -15,7 +15,7 @@ SRC = main.f
 OBJ = main.o
 
 # Make commands
-default: getObjs linkObjs test
+default: getObjs linkObjs
 
 linkObjs:  $(OBJ)
 	$(FC) $(FFLAGS) -o $(ENAME) $(OBJ) $(USR_LFLAGS)

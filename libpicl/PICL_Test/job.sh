@@ -4,7 +4,7 @@
 #SBATCH --error=run.err
 #SBATCH --mail-type=none
 #SBATCH --ntasks=8
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --mem-per-cpu=8gb                     # Per node
 #SBATCH --time=00-00:02:00             # Walltime in hh:mm:ss or d-hh:mm:ss
 #SBATCH --account=bala1s
@@ -26,4 +26,5 @@ echo "Executable =" $EXEC
 echo "Current Directory =" `pwd`
 
 echo Using `which mpirun`
-srun -N $(($nodes)) -n $(($ntasks)) --mpi=${HPC_PMIX} $EXEC -v 2
+srun -N 2 -n 8 --mpi=${HPC_PMIX} $EXEC -v 2
+srun -N 1 -n 4 --mpi=${HPC_PMIX} $EXEC -v 2
