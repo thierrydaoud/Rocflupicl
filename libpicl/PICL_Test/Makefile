@@ -8,11 +8,18 @@ FFLAGS          +=  -z muldefs -w -std=legacy -g -fmax-errors=1
 
 # PPICLF LIBRARY
 SOURCE_ROOT_PPICLF=../ppiclF/source
+NEW_SOURCE_ROOT_PPICLF= ../ppiclF/source
 PPICLF_IFLAGS+=-I $(SOURCE_ROOT_PPICLF)
-USR_LFLAGS+=-L $(SOURCE_ROOT_PPICLF) -lppiclF
+USR_LFLAGS+=-L $(NEW_SOURCE_ROOT_PPICLF) -lppiclF
+TEST_SOURCE=source
 
-SRC = main.f
-OBJ = main.o
+SRC = $(TEST_SOURCE)/test_main.f    \
+      $(TEST_SOURCE)/test_grid.f      \
+      $(TEST_SOURCE)/test_particles.f 
+
+ OBJ = $(TEST_SOURCE)/test_main.o   \
+      $(TEST_SOURCE)/test_grid.o      \
+      $(TEST_SOURCE)/test_particles.o 
 
 # Make commands
 default: getObjs linkObjs
@@ -26,7 +33,8 @@ linkObjs:  $(OBJ)
 	@echo "                         "
 
 getObjs: $(SRC)
-	$(FC) $(FFLAGS) -c $(SRC) $(PPICLF_IFLAGS) 
+	$(FC) $(FFLAGS) -c $(SRC) $(PPICLF_IFLAGS)
+	mv *.o $(TEST_SOURCE) 
 	@echo "                           "
 	@echo "***************************"
 	@echo "*** USER OBJECT SUCCESS ***"
@@ -35,4 +43,5 @@ getObjs: $(SRC)
 
 # Cleaning stuff
 clean:
-	@rm $(ENAME) *.o run*
+	@rm $(ENAME)
+	@rm $(OBJ)
