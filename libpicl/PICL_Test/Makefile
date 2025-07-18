@@ -43,5 +43,8 @@ getObjs: $(SRC)
 
 # Cleaning stuff
 clean:
-	@rm $(ENAME)
-	@rm $(OBJ)
+	rm $(ENAME)
+	rm $(OBJ)
+	rm run.err
+	rm ppiclF_test.txt
+	rm core*

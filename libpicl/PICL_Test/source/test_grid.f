@@ -3,10 +3,11 @@
       IMPLICIT NONE
 
       ! Input/Output
-      ! gridIn(1:2,1:3) - fluid domain 1:min,2:max faces in x,y,&z
-      ! Cells - per processor
-      ! Num Proc - number of processors
-      ! gridOut 1:3 - centroids, 4:6 - cell lengths, 7 - cell volume
+      ! gIn(1:2,1:3) - fluid domain 1:min,2:max faces in x,y,&z
+      ! NCells - per processor
+      ! ProcID - Processor executing this subroutine
+      ! NProc - number of processors
+      ! gOut 1:3 - centroids, 4:6 - cell lengths, 7 - cell volume
       INTEGER*4 NCells, NProc, ProcID
       REAL*8    gIn(2,3),gOut(7,NCells)
 
@@ -19,15 +20,15 @@
       DO i = 1,3
         !processors fluid domain length
         delta(i) = (gIn(2,1) - gIn(1,1))/NProc
-        xMin(i)  = delta(i)*NProc ! This processors Min x,y,z
+        xMin(i)  = delta(i)*ProcID ! This processors Min x,y,z
         dx(i)    = delta(i)/NCellsPerDim
       END DO
-
       cellCount = 0
       DO i = 1,NCellsPerDim 
         DO j = 1,NCellsPerDim
           DO k = 1,NCellsPerDim
             cellCount = cellCount + 1
+            IF(cellCount .GT. NCells) EXIT
             gOut(1,cellCount) = xMin(1) + (i+0.5-1)*dx(1) !x centroid
             gOut(2,cellCount) = xMin(2) + (j+0.5-1)*dx(2) !y centroid
             gOut(3,cellCount) = xMin(3) + (k+0.5-1)*dx(3) !z centroid
