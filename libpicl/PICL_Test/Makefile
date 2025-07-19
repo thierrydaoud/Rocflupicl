@@ -8,9 +8,9 @@ FFLAGS          +=  -z muldefs -w -std=legacy -g -fmax-errors=1
 
 # PPICLF LIBRARY
 SOURCE_ROOT_PPICLF=../ppiclF/source
-NEW_SOURCE_ROOT_PPICLF= ../ppiclF/source
+SOURCE_ROOT_USER= ../user_files
 PPICLF_IFLAGS+=-I $(SOURCE_ROOT_PPICLF)
-USR_LFLAGS+=-L $(NEW_SOURCE_ROOT_PPICLF) -lppiclF
+USR_LFLAGS+=-L $(SOURCE_ROOT_PPICLF) -lppiclF
 TEST_SOURCE=source
 
 SRC = $(TEST_SOURCE)/test_main.f    \

@@ -15,7 +15,7 @@
       INTEGER*4 i, j, k, cellCount, NCellsPerDim
       REAL*8    delta(3), xMin(3), dx(3)
 
-      NCellsPerDim = INT(NCells**(1.0/3.0))
+      NCellsPerDim = INT(NCells**(1.0/3.0)+0.5)
       ! Create uniform rectangular grid
       DO i = 1,3
         !processors fluid domain length

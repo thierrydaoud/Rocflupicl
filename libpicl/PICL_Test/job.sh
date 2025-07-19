@@ -3,7 +3,7 @@
 #SBATCH --output=ppiclF_test.txt
 #SBATCH --error=run.err
 #SBATCH --mail-type=none
-#SBATCH --ntasks=16
+#SBATCH --ntasks=27
 #SBATCH --nodes=1
 #SBATCH --mem-per-cpu=18gb                     # Per node
 #SBATCH --time=00-00:02:00             # Walltime in hh:mm:ss or d-hh:mm:ss
@@ -24,7 +24,7 @@ nodes=$SLURM_JOB_NUM_NODES
 echo "Current Directory =" `pwd`
 
 srun -N 1 -n 1 --mpi=${HPC_PMIX} $EXEC -v 2
-srun -N 1 -n 2 --mpi=${HPC_PMIX} $EXEC -v 2
+srun -N 1 -n 27 --mpi=${HPC_PMIX} $EXEC -v 2
 # srun -N 1 -n 3 --mpi=${HPC_PMIX} $EXEC -v 2
 # srun -N 1 -n 4 --mpi=${HPC_PMIX} $EXEC -v 2
 # srun -N 1 -n 5 --mpi=${HPC_PMIX} $EXEC -v 2
