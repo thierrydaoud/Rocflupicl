@@ -52,7 +52,9 @@
       time = 0.0d0
 
       fH     = 0.75d0 + .105d0*reyL
-      factor = 3.0d0*rpi*rnu*dp*ppiclf_dt
+      ! Sangani's volume fraction correction for dilute random arrays
+      ! Capping volume fraction at 0.5
+      factor = 3.0d0*rpi*rnu*dp*ppiclf_dt*(1.0+2.28*MIN(rphip,0.5))
 
       if (ppiclf_nTimeBH > 1) then
          do iT = 2,ppiclf_nTimeBH-1

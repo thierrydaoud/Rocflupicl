@@ -432,6 +432,8 @@
                vpmean   = ppiclf_y(PPICLF_JVY,i)
                wpmean   = ppiclf_y(PPICLF_JVZ,i)
                u2pmean  = upmean**2
+               v2pmean  = vpmean**2
+               w2pmean  = wpmean**2
                icpmean  = 1
             else if (qs_fluct_filter_flag==1) then
                ! gaussian kernel

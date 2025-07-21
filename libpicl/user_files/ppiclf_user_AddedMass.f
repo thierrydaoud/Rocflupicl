@@ -54,8 +54,9 @@
       endif
       rcd_am = rcd_am * 0.5
 
-      ! Volume fraction correction
-      rcd_am = rcd_am*(1.0+2.0*rphip)
+      ! Sangani's volume fraciton correction for dilute random arrays
+      ! Capping volume fraction at 0.5
+      rcd_am = rcd_am*(1.0+3.32*MIN(rphip,0.5))
 
       rmass_add = rhof*ppiclf_rprop(PPICLF_R_JVOLP,i)*rcd_am
 

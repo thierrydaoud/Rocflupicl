@@ -106,6 +106,10 @@
        end if ! mp
       endif    ! re
 
+      ! Sangani's volume fraction correction for dilute random arrays
+      ! Capping volume fraction at 0.5
+      phi_corr = (1.0+5.94*MIN(rphip,0.5)
+
       cd = (24.0/re)*rcd1*(1.+2.*phi)/((1.-phi)**3)
 
       beta = rcd1*3.0*rpi*rmu*dp
