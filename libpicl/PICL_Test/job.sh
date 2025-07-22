@@ -23,7 +23,7 @@ nodes=$SLURM_JOB_NUM_NODES
 
 echo "Current Directory =" `pwd`
 
-srun -N 1 -n 1 --mpi=${HPC_PMIX} $EXEC -v 2
+srun -N 1 -n 2 --mpi=${HPC_PMIX} $EXEC -v 2
 srun -N 1 -n 27 --mpi=${HPC_PMIX} $EXEC -v 2
 # srun -N 1 -n 3 --mpi=${HPC_PMIX} $EXEC -v 2
 # srun -N 1 -n 4 --mpi=${HPC_PMIX} $EXEC -v 2

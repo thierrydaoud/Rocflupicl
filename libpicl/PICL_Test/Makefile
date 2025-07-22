@@ -1,6 +1,9 @@
 ENAME            = PICL_Test
 FC               = mpif77
-FFLAGS          +=  -z muldefs -w -std=legacy -g -fmax-errors=1
+FFLAGS          += -cpp           \
+ 		   -z muldefs     \
+ 	           -Wall          \
+             	   -fbacktrace        
 
 ####################
 # DO NOT TOUCH BELOW
@@ -8,18 +11,11 @@ FFLAGS          +=  -z muldefs -w -std=legacy -g -fmax-errors=1
 
 # PPICLF LIBRARY
 SOURCE_ROOT_PPICLF=../ppiclF/source
-SOURCE_ROOT_USER= ../user_files
 PPICLF_IFLAGS+=-I $(SOURCE_ROOT_PPICLF)
 USR_LFLAGS+=-L $(SOURCE_ROOT_PPICLF) -lppiclF
-TEST_SOURCE=source
 
-SRC = $(TEST_SOURCE)/test_main.f    \
-      $(TEST_SOURCE)/test_grid.f      \
-      $(TEST_SOURCE)/test_particles.f 
-
- OBJ = $(TEST_SOURCE)/test_main.o   \
-      $(TEST_SOURCE)/test_grid.o      \
-      $(TEST_SOURCE)/test_particles.o 
+SRC = test.f    
+OBJ = test.o   
 
 # Make commands
 default: getObjs linkObjs
@@ -34,7 +30,6 @@ linkObjs:  $(OBJ)
 
 getObjs: $(SRC)
 	$(FC) $(FFLAGS) -c $(SRC) $(PPICLF_IFLAGS)
-	mv *.o $(TEST_SOURCE) 
 	@echo "                           "
 	@echo "***************************"
 	@echo "*** USER OBJECT SUCCESS ***"
@@ -45,6 +40,3 @@ getObjs: $(SRC)
 clean:
 	rm $(ENAME)
 	rm $(OBJ)
-	rm run.err
-	rm ppiclF_test.txt
-	rm core*
