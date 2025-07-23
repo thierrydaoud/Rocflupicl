@@ -17,10 +17,11 @@
       REAL*8    grid(7,PPICLF_LEE), gridDomain(2,3), filter(3), 
      >          filterTemp(3), nFilterCells
       ! Particle variables
-      REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, dx_part, 
+      REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, dx_part(3), 
      >          dx_ratio, part_r(PPICLF_LRP,PPICLF_LPART)
       INTEGER*4 nPcells, npart_local
-      ! Periodicity variables
+
+!     These are already included in PPICLF header
 !      INTEGER*4 x_per_flag, y_per_flag, z_per_flag, ang_per_flag 
 !      REAL*8    x_per_min, x_per_max, y_per_min, y_per_max,
 !     >          z_per_min, z_per_max, ang_per_angle, ang_per_xangle,
@@ -66,9 +67,11 @@
 
       IF(nid .EQ. 0) THEN
         ! Create particle positions
-        dx_ratio = 10.0D0 !cell_dx/part_dx = 10
-        pdia = grid(4,1)/dx_ratio ! 10**3=1000 particles per cell (grid(4,1) = cell dx)
-        dx_part = pdia ! particles are not overlapping
+        dx_ratio = 5.0D0 !cell_dx/part_dx = 10
+        dx_part(1) = grid(4,1)/dx_ratio ! 10**3=1000 particles per cell (grid(4,1) = cell dx)
+        dx_part(2) = grid(5,1)/dx_ratio ! 10**3=1000 particles per cell (grid(4,1) = cell dx)
+        dx_part(3) = grid(6,1)/dx_ratio ! 10**3=1000 particles per cell (grid(4,1) = cell dx)
+        pdia = MIN(dx_part(1),dx_part(2),dx_part(3)) ! particles are not overlapping 
         !Numbers of cells to fill with particles per dimension = 3
         nPcells = 3
         !27,007 particles total
@@ -236,7 +239,7 @@
 !----------------------------------------------------------------------
 
       SUBROUTINE test_CreateParticles(gDom,dxr,dp,dxp,ncell,part_y,np)
-      
+       
       ! Input/Output
       ! gDom(1:2,1:3) - fluid domain min/max in x,y,z
       ! dxr - particle size to grid dx size ratio
@@ -246,7 +249,9 @@
       ! part_y(1:3,1:30,000) - particle centroid x,y,z coordinates
       ! np - number of particles created on this processor 
       IMPLICIT NONE
-      REAL*8    dxr, dp, dxp, gDom(2,3), part_y(3,30000)
+      
+      REAL*8    dxr, dp, dxp(3), gDom(2,3), 
+     >          part_y(PPICLF_LRS,PPICLF_LPART)
       INTEGER*4 ncell, Pcount, PartDomain, i, j, k, ii, np
 
       PartDomain = INT(dxr)*ncell
@@ -255,9 +260,9 @@
         DO j = 1,PartDomain
           DO k = 1,PartDomain
             Pcount = Pcount + 1
-            part_y(1,Pcount) = gDom(1,1) + dxp*(i-1)
-            part_y(2,Pcount) = gDom(1,2) + dxp*(j-1)
-            part_y(3,Pcount) = gDom(1,3) + dxp*(k-1)
+            part_y(1,Pcount) = gDom(1,1) + dxp(1)*(i-1)
+            part_y(2,Pcount) = gDom(1,2) + dxp(2)*(j-1)
+            part_y(3,Pcount) = gDom(1,3) + dxp(3)*(k-1)
           END DO
         END DO
       END DO
