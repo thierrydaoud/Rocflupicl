@@ -60,30 +60,29 @@
       ang_per_rin    = 0.0D0
       ang_per_rout   = 0.0D0
 
-      nCells = 8 !Per processor & must be equal to grid() Num columns
+      nCells = 8 !Number of cells per processor
       CALL test_CreateGrid(gridDomain,nCells,nid,nproc,grid)
 
       CALL MPI_BARRIER(icomm,ierr)
 
       IF(nid .EQ. 0) THEN
         ! Create particle positions
-        dx_ratio = 5.0D0 !cell_dx/part_dx = 10
-        dx_part(1) = grid(4,1)/dx_ratio ! 10**3=1000 particles per cell (grid(4,1) = cell dx)
-        dx_part(2) = grid(5,1)/dx_ratio ! 10**3=1000 particles per cell (grid(4,1) = cell dx)
-        dx_part(3) = grid(6,1)/dx_ratio ! 10**3=1000 particles per cell (grid(4,1) = cell dx)
-        pdia = MIN(dx_part(1),dx_part(2),dx_part(3)) ! particles are not overlapping 
-        !Numbers of cells to fill with particles per dimension = 3
+        dx_ratio = 5.0D0 !cell_dx/part_dx
+        dx_part(1) = grid(4,1)/dx_ratio 
+        dx_part(2) = grid(5,1)/dx_ratio 
+        dx_part(3) = grid(6,1)/dx_ratio 
+        pdia = MIN(dx_part(1),dx_part(2),dx_part(3)) ! so that particles are not overlapping 
+        !Numbers of cells to fill with particles per dimension
         nPcells = 3
-        !27,007 particles total
         CALL test_CreateParticles(gridDomain,dx_ratio,pdia,dx_part
      >                            ,nPcells,part_y,npart_local)
-        part_r = 0.0D0
-        nndistTemp       = 4.0D0*pdia
+        part_r       = 0.0D0
+        nndistTemp   = 4.0D0*pdia
         filterTemp   = 1.0D-10
         nFilterCells = 1.0
         ! Loop through all cells to find biggest cell dx
         DO j = 1,nCells
-          DO i = 1,3
+          DO i = 4,6
             IF(grid(i,j) > filterTemp(i)) filterTemp(i) = grid(i,j)
           END DO
         END DO
@@ -99,13 +98,13 @@
         part_y        = 0D0
         part_r        = 0.0D0
       END IF
-      rhop = 7730.0D0
+      rhop = 7730.0D0 ! steel particles
       IF(npart_local .GT. 0) THEN
         DO i = 1,npart_local
            part_y(PPICLF_JVX,i) = 0.0D0
            part_y(PPICLF_JVY,i) = 0.0D0
            part_y(PPICLF_JVZ,i) = 0.0D0
-           part_y(PPICLF_JT, i) = 300.0D0
+           part_y(PPICLF_JT, i) = 300.0D0 ! particle temp
            part_y(PPICLF_JOX,i) = 0.0D0
            part_y(PPICLF_JOY,i) = 0.0D0
            part_y(PPICLF_JOZ,i) = 0.0D0
