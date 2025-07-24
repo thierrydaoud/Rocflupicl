@@ -307,6 +307,11 @@
      >                   ((binb_length(2)**(1.0D0/3.0D0))*
      >                   (binb_length(1))**(1.0D0/3.0D0)))
 
+      IF(ppiclf_nid .EQ. 0) THEN
+        PRINT*, 'Int math bins:', ppiclf_n_bins(1),
+     >           ppiclf_n_bins(2),ppiclf_n_bins(3)
+      END IF
+
       iBinTot = 0
 
       DO i = 1,3
@@ -345,66 +350,76 @@
               DO i = 1,3
                 Temp_iBin(i) = iBin(i)
               END DO
-              ! These loops are to make sure the dimension with the longest
-              ! ppiclf_binb length gets more bins in the case where two or
-              ! more dimensions are within 1 bin division of each other.
-              ! BinLenCheck is a logical flag to ensure that the
-              ! BenMinLen is never violated.
+              IF(LBMax .NE. LBMin) THEN
+                ! These loops are to make sure the dimension with the longest
+                ! ppiclf_binb length gets more bins in the case where two or
+                ! more dimensions are within 1 bin division of each other.
+                ! BinLenCheck is a logical flag to ensure that the
+                ! BenMinLen is never violated.
 
-              tempi = 0
-              nBinMax = MAX(Temp_iBin(1),Temp_iBin(2),
-     >                      Temp_iBin(3))
-              nBinMin = MIN(Temp_iBin(1),Temp_iBin(2),
-     >                      Temp_iBin(3))
-              ! Dummy integer to see if Max,Med,Min different values
-              nBinMed = -99
-              DO i = 1,3
-                IF(Temp_iBin(i).LT.nBinMax .AND. 
-     >             Temp_iBin(i).GT.nBinMin)
-     >             nBinMed = Temp_iBin(i)
-              END DO
-              IF(nBinMed.EQ. -99) THEN 
-              ! Two or three number of bins are equal
+                tempi = 0
+                nBinMax = MAX(Temp_iBin(1),Temp_iBin(2),
+     >                        Temp_iBin(3))
+                nBinMin = MIN(Temp_iBin(1),Temp_iBin(2),
+     >                        Temp_iBin(3))
+                ! Dummy integer to see if Max,Med,Min different values
+                nBinMed = -99
                 DO i = 1,3
-                  IF(Temp_iBin(i).EQ.nBinMax) tempi = tempi + 1
-                  IF(Temp_iBin(i).EQ.nBinMin) tempi = tempi + 10
+                  IF(Temp_iBin(i).LT.nBinMax .AND. 
+     >               Temp_iBin(i).GT.nBinMin)
+     >               nBinMed = Temp_iBin(i)
                 END DO
-                IF(tempi .EQ. 2) THEN
-                  nBinMed = nBinMax
-                ELSE ! Either two nBinMin or all 3 equal
-                  nBinMed = nBinMin
+                IF(nBinMed.EQ. -99) THEN 
+                ! Two or three number of bins are equal
+                  DO i = 1,3
+                    IF(Temp_iBin(i).EQ.nBinMax) tempi = tempi + 1
+                    IF(Temp_iBin(i).EQ.nBinMin) tempi = tempi + 10
+                  END DO
+                  IF(tempi .EQ. 12) THEN
+                    nBinMed = nBinMax
+                  ELSE ! Either two nBinMin or all 3 equal
+                    nBinMed = nBinMin
+                  END IF
                 END IF
-              END IF
-              ! This combination violates BinMinLen condition if 
-              ! BinLenCheck .EQ. .FALSE.
-              BinLenCheck = .TRUE.
-              DO i = 1,3
-                IF(i .EQ. LBMax) THEN
-                  Temp_iBin(i)=nBinMax
-                  IF(binb_length(i)/Temp_iBin(i) .LT. BinMinLen(i))
-     >               BinLenCheck = .FALSE.
-                ELSE IF(i .EQ. LBMin) THEN
-                  Temp_iBin(i)=nBinMin
-                  IF(binb_length(i)/Temp_iBin(i) .LT. BinMinLen(i))
-     >               BinLenCheck = .FALSE.
-                ELSE
-                  Temp_iBin(i)=nBinMed 
-                  IF(binb_length(i)/Temp_iBin(i) .LT. BinMinLen(i))
-     >               BinLenCheck = .FALSE.
-                END IF
-              END DO
-              IF(BinLenCheck) THEN
-                total_bin = 1
+                ! This combination violates BinMinLen condition if 
+                ! BinLenCheck .EQ. .FALSE.
+                BinLenCheck = .TRUE.
+                DO i = 1,3
+                  IF(i .EQ. LBMax) THEN
+                    Temp_iBin(i)=nBinMax
+                    IF(binb_length(i)/Temp_iBin(i) .LT. BinMinLen(i))
+     >                 BinLenCheck = .FALSE.
+                  ELSE IF(i .EQ. LBMin) THEN
+                    Temp_iBin(i)=nBinMin
+                    IF(binb_length(i)/Temp_iBin(i) .LT. BinMinLen(i))
+     >                 BinLenCheck = .FALSE.
+                  ELSE
+                    Temp_iBin(i)=nBinMed 
+                    IF(binb_length(i)/Temp_iBin(i) .LT. BinMinLen(i))
+     >                 BinLenCheck = .FALSE.
+                  END IF
+                END DO
+                IF(BinLenCheck) THEN
+                  total_bin = 1
+                  DO i = 1,3
+                    idealBin(i) = Temp_iBin(i)
+                    total_bin = total_bin*Temp_iBin(i)
+                  END DO
+                END IF 
+              ELSE
                 DO i = 1,3
                   idealBin(i) = Temp_iBin(i)
-                  total_bin = total_bin*Temp_iBin(i)
                 END DO
-              END IF 
+              END IF
             END IF
           END DO !iz
         END DO !iy
       END DO !ix
 
+      IF(ppiclf_nid .EQ. 0) THEN
+        PRINT*, 'After loops:', idealBin(1),
+     >           idealBin(2),idealBin(3)
+      END IF
 
       tempi = 0
       total_bin = 1
