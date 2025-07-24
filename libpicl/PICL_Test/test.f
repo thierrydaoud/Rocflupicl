@@ -13,21 +13,14 @@
       INTEGER*4 i, j, nproc, nid, icomm, ierr
       REAL*8    nndistTemp, nndist
       ! Grid variables
-      INTEGER*4 nCells
+      INTEGER*4 nCells(3), proc_ncells
       REAL*8    grid(7,PPICLF_LEE), gridDomain(2,3), filter(3), 
-     >          filterTemp(3), nFilterCells
+     >          filterTemp(3), nFilterCells 
       ! Particle variables
       REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, dx_part(3), 
      >          dx_ratio, part_r(PPICLF_LRP,PPICLF_LPART)
       INTEGER*4 nPcells, npart_local
 
-!     These are already included in PPICLF header
-!      INTEGER*4 x_per_flag, y_per_flag, z_per_flag, ang_per_flag 
-!      REAL*8    x_per_min, x_per_max, y_per_min, y_per_max,
-!     >          z_per_min, z_per_max, ang_per_angle, ang_per_xangle,
-!     >          ang_per_rin, ang_per_rout
-! 
-     
       ! MPI Setup
       CALL MPI_Init(ierr)
       icomm = MPI_COMM_WORLD
@@ -37,37 +30,40 @@
       CALL test_PrintBanner(1,nid,nproc)
 
       ! Grid Setup
-      ! Create uniform rectangular grid
-      DO i = 1,3 !3D uniform grid
-        gridDomain(1,i) = 0.0D-2 !Min
-        gridDomain(2,i) = 1.0D-2 !Max
-      END DO
-      ! Fluid Domain Min/Max
+      ! Create rectangular grid
+      gridDomain(1,1) = 0.0D-2 !x Min
+      gridDomain(2,1) = 1.0D-2 !x Max
+      gridDomain(1,2) = 0.0D-2 !y Min
+      gridDomain(2,2) = 1.0D-2 !y Max
+      gridDomain(1,3) = 0.0D-2 !z Min
+      gridDomain(2,3) = 1.0D-2 !z Max
+
+      ! ppiclf input - Fluid Domain Min/Max
       x_per_min = gridDomain(1,1)
       x_per_max = gridDomain(2,1)
       y_per_min = gridDomain(1,2)
       y_per_max = gridDomain(2,2)
       z_per_min = gridDomain(1,3)
       z_per_max = gridDomain(2,3)
-
       ! Periodicity Setup
-      x_per_flag     = 1
-      y_per_flag     = 1
-      z_per_flag     = 1
+      x_per_flag     = 0
+      y_per_flag     = 0
+      z_per_flag     = 0
       ang_per_flag   = 0
       ang_per_angle  = 0.0D0
       ang_per_xangle = 0.0D0
       ang_per_rin    = 0.0D0
       ang_per_rout   = 0.0D0
-
-      nCells = 8 !Number of cells per processor
-      CALL test_CreateGrid(gridDomain,nCells,nid,nproc,grid)
-
-      CALL MPI_BARRIER(icomm,ierr)
+      nCells(1) = 3 !Number of x cells per processor
+      nCells(2) = 3 !Number of y cells per processor
+      nCells(3) = 3 !Number of z cells per processor
+      CALL test_CreateGrid(gridDomain,nCells,nid,nproc,grid,proc_ncells)
+      CALL MPI_BARRIER(icomm, ierr)
 
       IF(nid .EQ. 0) THEN
         ! Create particle positions
         dx_ratio = 5.0D0 !cell_dx/part_dx
+        !Assumes dx, dy, dz are constant
         dx_part(1) = grid(4,1)/dx_ratio 
         dx_part(2) = grid(5,1)/dx_ratio 
         dx_part(3) = grid(6,1)/dx_ratio 
@@ -81,7 +77,7 @@
         filterTemp   = 1.0D-10
         nFilterCells = 1.0
         ! Loop through all cells to find biggest cell dx
-        DO j = 1,nCells
+        DO j = 1,proc_ncells
           DO i = 4,6
             IF(grid(i,j) > filterTemp(i)) filterTemp(i) = grid(i,j)
           END DO
@@ -136,7 +132,7 @@
      >                             ang_per_xangle, ang_per_rin,
      >                                                  ang_per_rout)
 
-      CALL ppiclf_comm_InitOverlapMesh(nCells,grid)
+      CALL ppiclf_comm_InitOverlapMesh(proc_ncells,grid)
       IF(nid .EQ. 0) THEN
         PRINT*,'Number of x bins:',ppiclf_n_bins(1)
         PRINT*,'Number of y bins:',ppiclf_n_bins(2)
@@ -187,50 +183,45 @@
 
 !----------------------------------------------------------------------
 
-      SUBROUTINE test_CreateGrid(gIn,NCells,ProcID,NProc,gOut)
+      SUBROUTINE test_CreateGrid(gIn,NCells,ProcID,NProc,gOut,totcells)
       
       ! Input/Output
       ! gIn(1:2,1:3) - fluid domain 1:min,2:max faces in x,y,&z
-      ! NCells - per processor
+      ! NCells(3) - x,y,z cells per processor
       ! ProcID - Processor executing this subroutine
       ! NProc - number of processors
       ! gOut 1:3 - centroids, 4:6 - cell lengths, 7 - cell volume
       IMPLICIT NONE
-      INTEGER*4 NCells, NProc, ProcID
-      REAL*8    gIn(2,3),gOut(7,PPICLF_LEE)
+      INTEGER*4 NCells(3), NProc, ProcID, totcells
+      REAL*8    gIn(2,3),gOut(7,PPICLF_LEE),xMin
 
       ! Local
-      INTEGER*4 i, j, k, cellCount, NCellsPerDim
-      REAL*8    delta(3), xMin(3), dx(3)
+      INTEGER*4 i, j, k 
+      REAL*8    dx(3), ProcDomain(3)
 
-      NCellsPerDim = INT(NCells**(1.0/3.0)+0.5)
-      ! Create uniform rectangular grid
+      ! Creates rectangular grid
       DO i = 1,3
-        !processors fluid domain length
-        delta(i) = (gIn(2,1) - gIn(1,1))/NProc
-        xMin(i)  = delta(i)*ProcID ! This processors Min x,y,z
-        dx(i)    = delta(i)/NCellsPerDim
+        ProcDomain(i) = (gIn(2,i) - gIn(1,i))/REAL(NProc)
+        dx(i)         = ProcDomain(i)/NCells(i)
       END DO
-      cellCount = 0
-      DO i = 1,NCellsPerDim 
-        DO j = 1,NCellsPerDim
-          DO k = 1,NCellsPerDim
-            cellCount = cellCount + 1
-            IF(cellCount .GT. NCells) EXIT
-            gOut(1,cellCount) = xMin(1) + (i+0.5-1)*dx(1) !x centroid
-            gOut(2,cellCount) = xMin(2) + (j+0.5-1)*dx(2) !y centroid
-            gOut(3,cellCount) = xMin(3) + (k+0.5-1)*dx(3) !z centroid
-            gOut(4,cellCount) = dx(1)
-            gOut(5,cellCount) = dx(2)
-            gOut(6,cellCount) = dx(3)
-            gOut(7,cellCount) = dx(1)*dx(2)*dx(3)
+      ! Build full y & z domain on each processor
+      ! Split x domain by number of processors
+      xMin = ProcDomain(1)*ProcID ! This processors Min x
+      totcells = 0
+      DO i = 1,NCells(1) 
+        DO j = 1,NCells(2)*NProc
+          DO k = 1,NCells(3)*NProc
+            totcells = totcells + 1
+            gOut(1,totcells) = xMin     + (i+0.5-1)*dx(1) !x centroid
+            gOut(2,totcells) = gIn(1,2) + (j+0.5-1)*dx(2) !y centroid
+            gOut(3,totcells) = gIn(1,3) + (k+0.5-1)*dx(3) !z centroid
+            gOut(4,totcells) = dx(1)
+            gOut(5,totcells) = dx(2)
+            gOut(6,totcells) = dx(3)
+            gOut(7,totcells) = dx(1)*dx(2)*dx(3)
           END DO !k
         END DO !j
       END DO !i
-
-      IF(cellCount .NE. NCells) THEN
-        PRINT*,'ERROR, wrong NCells generated on proc', NProc
-      END IF
 
       RETURN
       END SUBROUTINE
@@ -277,7 +268,7 @@
             part_y(2,Pcount) = gDom(2,2)*(j-1) - dp/4
             part_y(3,Pcount) = gDom(2,3)*(k-1) - dp/4
             DO ii = 1,3
-              IF(part_y(ii,Pcount) .LT. 0.0D0) part_y(ii,Pcount) = 0.0D0
+              IF(part_y(ii,Pcount) .LT. 0.0D0) part_y(ii,Pcount) = dp/4
             END DO
           END DO
         END DO
@@ -289,33 +280,3 @@
       END SUBROUTINE
 
 !----------------------------------------------------------------------
-
-!!*******ADD BELOW TO MAIN TO TEST GRID OUTPUT*******
-!!*** START grid test ***
-!      DO i = 1,3
-!        xMin(i) = 1.0D9
-!        xMax(i) = 1.0D-9
-!      END DO
-!      DO j = 1,nCells
-!        DO i = 1,3
-!          IF(grid(i,j) .LT. xMin(i)) xMin(i) = grid(i,j)
-!          IF(grid(i,j) .GT. xMax(i)) xMax(i) = grid(i,j)
-!        END DO
-!      END DO
-!      DO i = 1,3 !shift from min/max center to min/max face     
-!        xMin(i) = xMin(i) - grid(3+i,1)/2
-!        xMax(i) = xMax(i) + grid(3+i,1)/2
-!      END DO
-!      IF(nid .EQ. 0) THEN
-!        PRINT*, 'dx, dy, dz, vol:', grid(4,1), grid(5,1),
-!     >            grid(6,1), grid(7,1)
-!        PRINT*, 'Input Domain:', gridDomain(1,1), gridDomain(2,1)
-!      END IF
-!      CALL MPI_BARRIER(icomm,ierr)
-!      DO i = 1,1
-!        PRINT*, 'Proc, xMin, xMax:', nid, i, xMin(i), xMax(i)
-!      END DO 
-!      CALL MPI_BARRIER(icomm,ierr)
-!!*** END grid test ***
-
-
