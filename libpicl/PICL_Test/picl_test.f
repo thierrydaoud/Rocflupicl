@@ -19,9 +19,9 @@
       ! Particle variables
       REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, dx_part(3), 
      >          dx_ratio, xp, yp, zp,
-     >          part_r(PPICLF_LRP,PPICLF_LPART),T_real(PPICLF_LPART),
-     >          totErr
-      INTEGER*4 nPcells(3), npart_local, numErr
+     >          part_r(PPICLF_LRP,PPICLF_LPART),T_truth(PPICLF_LPART),
+     >          totErr, numErr
+      INTEGER*4 nPcells(3), npart_local
 
       PI = 4.0D0*ATAN(1.0) ! pi
       k  = 1.0D0 ! wave number
@@ -42,9 +42,9 @@
         gridDomain(1,i) = 0.0D0  !x Min
         gridDomain(2,i) = 1.0D0 !x Max
       END DO
-      nCells(1) = 2 !Number of x cells per processor
-      nCells(2) = 2 !Number of y cells per processor
-      nCells(3) = 2 !Number of z cells per processor
+      nCells(1) = 3 !Number of x cells per processor
+      nCells(2) = 3 !Number of y cells per processor
+      nCells(3) = 3 !Number of z cells per processor
       CALL test_CreateGrid(gridDomain,nCells,nid,nproc,grid,proc_ncells)
       CALL MPI_BARRIER(icomm, ierr)
 
@@ -57,9 +57,9 @@
       dx_part(3) = grid(6,1)/dx_ratio 
       pdia = MIN(dx_part(1),dx_part(2),dx_part(3))  
       !Numbers of cells to fill with particles per dimension per processor
-      nPcells(1) = 1
-      nPcells(2) = 1
-      nPcells(3) = 1
+      nPcells(1) = 3
+      nPcells(2) = 3
+      nPcells(3) = 3
       CALL test_CreateParticles(gridDomain,dx_ratio,pdia,dx_part,
      >                          nPcells,part_y,npart_local,nid,nproc)
       part_r       = 0.0D0
@@ -76,22 +76,20 @@
         filterTemp(i) = nFilterCells*filterTemp(i)
       END DO
       rhop = 7730.0D0 ! steel particles
-      IF(npart_local .GT. 0) THEN
-        DO i = 1,npart_local
-          part_y(PPICLF_JVX,i) = 0.0D0
-          part_y(PPICLF_JVY,i) = 0.0D0
-          part_y(PPICLF_JVZ,i) = 0.0D0
-          part_y(PPICLF_JT, i) = 3000.0D0 ! particle temp
-          part_y(PPICLF_JOX,i) = 0.0D0
-          part_y(PPICLF_JOY,i) = 0.0D0
-          part_y(PPICLF_JOZ,i) = 0.0D0
-          part_r(PPICLF_R_JRHOP,i) = rhop ! particle density
-          part_r(PPICLF_R_JDP,i)   = pdia ! particle diameter
-          part_r(PPICLF_R_JVOLP,i) = (4.0D0/3.0D0)*PI
-     >                                *(0.5D0*pdia)**3 ! particle volume
-          part_r(PPICLF_R_JSPL,i) = 1.0D0 ! Super Particle Loading 
-        END DO
-      END IF
+      DO i = 1,npart_local
+        part_y(PPICLF_JVX,i) = 0.0D0
+        part_y(PPICLF_JVY,i) = 0.0D0
+        part_y(PPICLF_JVZ,i) = 0.0D0
+        part_y(PPICLF_JT, i) = 3000.0D0 ! particle temp
+        part_y(PPICLF_JOX,i) = 0.0D0
+        part_y(PPICLF_JOY,i) = 0.0D0
+        part_y(PPICLF_JOZ,i) = 0.0D0
+        part_r(PPICLF_R_JRHOP,i) = rhop ! particle density
+        part_r(PPICLF_R_JDP,i)   = pdia ! particle diameter
+        part_r(PPICLF_R_JVOLP,i) = (4.0D0/3.0D0)*PI
+     >                              *(0.5D0*pdia)**3 ! particle volume
+        part_r(PPICLF_R_JSPL,i) = 1.0D0 ! Super Particle Loading 
+      END DO
       CALL MPI_BARRIER(icomm,ierr)
   
 ! ppiclF Inputs
@@ -105,9 +103,9 @@
       z_per_max = gridDomain(2,3)
    
       ! Periodicity Setup
-      x_per_flag     = 1
-      y_per_flag     = 1
-      z_per_flag     = 1
+      x_per_flag     = 0
+      y_per_flag     = 0
+      z_per_flag     = 0
       ang_per_flag   = 0
       ang_per_angle  = 0.0D0
       ang_per_xangle = 0.0D0
@@ -117,10 +115,14 @@
       ! Setup fluid temperature field
       DO j = 1,proc_ncells
         tpF(j) = 1.0D0 
-     >     + 1.0D0*grid(1,j)/(gridDomain(2,1)-gridDomain(1,1))
-     >     + 1.0D0*grid(2,j)/(gridDomain(2,2)-gridDomain(1,2))
-     >     + 1.0D0*grid(3,j)/(gridDomain(2,3)-gridDomain(1,3))
-      END DO 
+     >     + 1.0D0*SIN((k/(2*PI))*
+     >     (grid(1,j)/(gridDomain(2,1)-gridDomain(1,1))))
+     >     + 1.0D0*SIN((k/(2*PI))*
+     >     (grid(2,j)/(gridDomain(2,2)-gridDomain(1,2))))
+     >     + 1.0D0*SIN((k/(2*PI))*
+     >     (grid(3,j)/(gridDomain(2,3)-gridDomain(1,3))))
+        END DO
+      ! Setup filter(1:3) and nearest neighbor search distance 
       DO i = 1,3
         CALL MPI_Allreduce(filterTemp(i),filter(i),1,MPI_DOUBLE,
      >                                      MPI_MAX,iComm,ierr)
@@ -131,8 +133,10 @@
       
 ! Start ppiclF Calls
 !**********************************************************************
-      CALL ppiclf_solve_InitParticle(2,3,0,npart_local,
+      IF(npart_local .GT. 0) THEN
+        CALL ppiclf_solve_InitParticle(2,3,0,npart_local,
      >                               part_y,part_r,filter,nndist)
+      END IF
       CALL ppiclf_solve_Initialize(x_per_flag, x_per_min, x_per_max,
      >                             y_per_flag, y_per_min, y_per_max, 
      >                             z_per_flag, z_per_min, z_per_max, 
@@ -150,33 +154,39 @@
       !  CALL test_BinTest()
       END IF
  
-      DO i = 1,ppiclf_npart
-        xp = ppiclf_y(PPICLF_JX,i)
-        yp = ppiclf_y(PPICLF_JY,i)
-        zp = ppiclf_y(PPICLF_JZ,i) 
-        T_real(i) = 1.0D0 
-     >     + 1.0D0*xp/(gridDomain(2,1)-gridDomain(1,1))
-     >     + 2.0D0*yp/(gridDomain(2,2)-gridDomain(1,2))
-     >     + 3.0D0*zp/(gridDomain(2,3)-gridDomain(1,3))
-      END DO
-      CALL MPI_BARRIER(icomm,ierr)
-      totErr = 0.0D0
-      numErr = 0
-      DO i = 1,ppiclf_npart
-!        PRINT*,i,ppiclf_rprop(PPICLF_R_JT,i),T_real(i)
-!        PRINT*,'Proc, Error:', nid, ABS(ppiclf_rprop(PPICLF_R_JT,i) -
-!     >                                  T_real(i))/T_real(i)*100.0D0,"%"
-        totErr = totErr + ABS(ppiclf_rprop(PPICLF_R_JT,i)-T_real(i))
-     >          /T_real(i)*100.0D0
-        numErr = numErr + 1
-        !PRINT*,i,ppiclf_y(1,i),ppiclf_y(2,i),ppiclf_y(3,i)
-      END DO
-
-      CALL MPI_BARRIER(icomm,ierr)
       IF(ppiclf_npart .GT. 0) THEN
-        PRINT*,'Proc,Avg Error:',nid,totErr/numErr
+        DO i = 1,ppiclf_npart
+          xp = ppiclf_y(PPICLF_JX,i)
+          yp = ppiclf_y(PPICLF_JY,i)
+          zp = ppiclf_y(PPICLF_JZ,i) 
+          T_truth(i) = 1.0D0 
+     >       + 1.0D0*SIN((k/(2*PI))*
+     >       (xp/(gridDomain(2,1)-gridDomain(1,1))))
+     >       + 1.0D0*SIN((k/(2*PI))*
+     >       (yp/(gridDomain(2,2)-gridDomain(1,2))))
+     >       + 1.0D0*SIN((k/(2*PI))*
+     >       (zp/(gridDomain(2,3)-gridDomain(1,3))))
+        END DO
+        totErr = 0.0D0
+        numErr = 0.0D0
+        DO i = 1,ppiclf_npart
+          totErr = totErr + ABS(ppiclf_rprop(PPICLF_R_JT,i)-T_truth(i))
+     >            /T_truth(i)*100.0D0
+          numErr = numErr + 1.0D0
+        END DO
+      ELSE
+        totErr = 0.0D0
+        numErr = 0.0D0
       END IF
+      CALL MPI_BARRIER(icomm,ierr)
+      CALL MPI_Allreduce(totErr,totErr,1,MPI_DOUBLE,
+     >                                      MPI_SUM,iComm,ierr)
+      CALL MPI_Allreduce(numErr,numErr,1,MPI_DOUBLE,
+     >                                      MPI_SUM,iComm,ierr)
+      CALL MPI_BARRIER(icomm,ierr)
+      ! Print Bin Data
       IF(nid .EQ. 0) THEN
+        PRINT*,'Avgeraged Error:',totErr/numErr,'%'
         PRINT*,'Number of x bins:',ppiclf_n_bins(1)
         PRINT*,'Number of y bins:',ppiclf_n_bins(2)
         PRINT*,'Number of z bins:',ppiclf_n_bins(3)
@@ -186,12 +196,12 @@
         PRINT*,'Number of total bins:',
      >       ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)
       END IF
-
+       CALL MPI_BARRIER(icomm,ierr)
 ! Close out program
 !********************************************************************** 
-      CALL test_PrintBanner(0,nid,nproc)
       CALL MPI_BARRIER(icomm,ierr)
       CALL MPI_FINALIZE(ierr)
+      CALL test_PrintBanner(0,nid,nproc)
       END PROGRAM
 
 !----------------------------------------------------------------------
