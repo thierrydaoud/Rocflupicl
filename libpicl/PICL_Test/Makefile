@@ -10,12 +10,12 @@ FFLAGS          += -cpp           \
 ####################
 
 # PPICLF LIBRARY
-SOURCE_ROOT_PPICLF=../ppiclF/source
+SOURCE_ROOT_PPICLF= ../ppiclF/source
 PPICLF_IFLAGS+=-I $(SOURCE_ROOT_PPICLF)
 USR_LFLAGS+=-L $(SOURCE_ROOT_PPICLF) -lppiclF
 
-SRC = test.f    
-OBJ = test.o   
+SRC = testCode/picl_test.f    
+OBJ = testCode/picl_test.o   
 
 # Make commands
 default: getObjs linkObjs
@@ -35,8 +35,8 @@ getObjs: $(SRC)
 	@echo "*** USER OBJECT SUCCESS ***"
 	@echo "***************************"
 	@echo "                           "
-
+	@mv *.o testCode
 # Cleaning stuff
 clean:
-	rm $(ENAME)
-	rm $(OBJ)
+	@rm $(ENAME)
+	@rm $(OBJ)
