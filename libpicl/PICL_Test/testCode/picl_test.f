@@ -12,16 +12,18 @@
 
       INTEGER*4 i, j, nproc, nid, icomm, ierr
       REAL*8    nndistTemp, nndist, PI, k
+
       ! Grid variables
       INTEGER*4 nCells(3), proc_ncells
       REAL*8    grid(7,PPICLF_LEE), gridDomain(2,3), filter(3), 
-     >          filterTemp(3), nFilterCells, tpF(PPICLF_LEE), num_bins 
+     >          filterTemp(3), nFilterCells, tpF(PPICLF_LEE), num_bins,
+     >          dx_min(3) 
+
       ! Particle variables
-      REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, dx_part(3), 
-     >          dx_ratio, xp, yp, zp,
+      REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, C2Pratio, 
      >          part_r(PPICLF_LRP,PPICLF_LPART),T_truth(PPICLF_LPART),
-     >          totErr, numErr
-      INTEGER*4 nPcells(3), npart_local
+     >          totErr, numErr, xp, yp, zp
+      INTEGER*4 npart_local
 
       PI = 4.0D0*ATAN(1.0) ! pi
       k  = 1.0D0 ! wave number
@@ -39,60 +41,23 @@
 ! Grid Setup
 !**********************************************************************
       ! Create rectangular grid
-      DO i = 1,3
-        gridDomain(1,i) = 0.0D0  !x Min
-        gridDomain(2,i) = 1.0D0 !x Max
-      END DO
-      nCells(1) = 50 !Number of x cells per processor
-      nCells(2) = 50 !Number of y cells per processor
-      nCells(3) = 50 !Number of z cells per processor
+      gridDomain(1,2) = 0.0D0 !x domain min
+      gridDomain(2,2) = 1.0D0 !x domain max
+      nCells(1)       = 10 !Number of x cells in domain
+
+      gridDomain(1,2) = 0.0D0 !y domain min
+      gridDomain(2,2) = 1.0D0 !y domain max     
+      nCells(2)       = 10 !Number of y cells in domain
+
+      gridDomain(1,3) = 0.0D0 !z domain min
+      gridDomain(2,3) = 1.0D0 !z domain max     
+      nCells(3)       = 10 !Number of z cells in domain
+
       CALL test_CreateGrid(gridDomain,nCells,nid,nproc,grid,proc_ncells)
       CALL MPI_BARRIER(icomm, ierr)
+      PRINT*,'proccessor id, total processors, cells on processor',
+     >        nid,nproc,proc_ncells
 
-! Particle Setup   
-!**********************************************************************
-      dx_ratio = 5.0D0 !cell_dx/part_dx
-      !Assumes dx, dy, dz are constant
-      dx_part(1) = grid(4,1)/dx_ratio 
-      dx_part(2) = grid(5,1)/dx_ratio 
-      dx_part(3) = grid(6,1)/dx_ratio 
-      pdia = MIN(dx_part(1),dx_part(2),dx_part(3))  
-      !Numbers of cells to fill with particles per dimension per processor
-      nPcells(1) = 3
-      nPcells(2) = 3
-      nPcells(3) = 3
-      CALL test_CreateParticles(gridDomain,dx_ratio,pdia,dx_part,
-     >                          nPcells,part_y,npart_local,nid,nproc)
-      part_r       = 0.0D0
-      nndistTemp   = 4.0D0*pdia
-      filterTemp   = 1.0D-10
-      nFilterCells = 2.0
-      ! Loop through all cells to find biggest cell dx
-      DO j = 1,proc_ncells
-        DO i = 4,6
-          IF(grid(i,j) > filterTemp(i)) filterTemp(i) = grid(i,j)
-        END DO
-      END DO
-      DO i = 1,3
-        filterTemp(i) = nFilterCells*filterTemp(i)
-      END DO
-      rhop = 7730.0D0 ! steel particles
-      DO i = 1,npart_local
-        part_y(PPICLF_JVX,i) = 0.0D0
-        part_y(PPICLF_JVY,i) = 0.0D0
-        part_y(PPICLF_JVZ,i) = 0.0D0
-        part_y(PPICLF_JT, i) = 3000.0D0 ! particle temp
-        part_y(PPICLF_JOX,i) = 0.0D0
-        part_y(PPICLF_JOY,i) = 0.0D0
-        part_y(PPICLF_JOZ,i) = 0.0D0
-        part_r(PPICLF_R_JRHOP,i) = rhop ! particle density
-        part_r(PPICLF_R_JDP,i)   = pdia ! particle diameter
-        part_r(PPICLF_R_JVOLP,i) = (4.0D0/3.0D0)*PI
-     >                              *(0.5D0*pdia)**3 ! particle volume
-        part_r(PPICLF_R_JSPL,i) = 1.0D0 ! Super Particle Loading 
-      END DO
-      CALL MPI_BARRIER(icomm,ierr)
-  
 ! ppiclF Inputs
 !**********************************************************************
       ! Fluid Domain Min/Max
@@ -112,6 +77,21 @@
       ang_per_xangle = 0.0D0
       ang_per_rin    = 0.0D0
       ang_per_rout   = 0.0D0
+
+      ! Find cell filter search distance
+      filterTemp   = 1.0D-9 !dummy
+      dx_min       = 1.0D9  !dummy
+      nFilterCells = 2.0
+      DO j = 1,proc_ncells
+        DO i = 4,6
+          ! Find largest & smallest grid dx, dy, dz
+          IF(grid(i,j) > filterTemp(i-3)) filterTemp(i-3) = grid(i,j)
+          IF(grid(i,j) < dx_min(i-3)) dx_min(i-3) = grid(i,j)
+        END DO
+      END DO
+      DO i = 1,3
+        filterTemp(i) = nFilterCells*filterTemp(i)
+      END DO
       
       ! Setup fluid temperature field
       DO j = 1,proc_ncells
@@ -123,15 +103,46 @@
      >     + 1.0D0*SIN((k/(2*PI))*
      >     (grid(3,j)/(gridDomain(2,3)-gridDomain(1,3))))
         END DO
-      ! Setup filter(1:3) and nearest neighbor search distance 
+
+      ! Setup filter(1:3) and smallest cell dx across processors 
       DO i = 1,3
         CALL MPI_Allreduce(filterTemp(i),filter(i),1,MPI_DOUBLE,
      >                                      MPI_MAX,iComm,ierr)
+        CALL MPI_Allreduce(dx_min(i),dx_min(i),1,MPI_DOUBLE,
+     >                                      MPI_MIN,iComm,ierr)
       END DO
+      CALL MPI_BARRIER(icomm,ierr)
+
+! Particle Setup   
+!********************************************************************** 
+      C2Pratio = 3.0 ! C2Pratio = cell dx / particle dx
+      pdia     = MIN(dx_min(1)/C2Pratio,
+     >               dx_min(2)/C2Pratio,
+     >               dx_min(3)/C2Pratio)
+      CALL test_CreateParticles(gridDomain,C2Pratio,pdia,dx_min,
+     >                          npart_local,part_y,nid,nproc)
+      part_r = 0.0D0
+      rhop   = 7730.0D0 ! steel particles
+      DO i = 1,npart_local
+        part_y(PPICLF_JVX,i) = 0.0D0
+        part_y(PPICLF_JVY,i) = 0.0D0
+        part_y(PPICLF_JVZ,i) = 0.0D0
+        part_y(PPICLF_JT, i) = 3000.0D0 ! particle temp
+        part_y(PPICLF_JOX,i) = 0.0D0
+        part_y(PPICLF_JOY,i) = 0.0D0
+        part_y(PPICLF_JOZ,i) = 0.0D0
+        part_r(PPICLF_R_JRHOP,i) = rhop ! particle density
+        part_r(PPICLF_R_JDP,i)   = pdia ! particle diameter
+        part_r(PPICLF_R_JVOLP,i) = (4.0D0/3.0D0)*PI
+     >                              *(0.5D0*pdia)**3 ! particle volume
+        part_r(PPICLF_R_JSPL,i) = 1.0D0 ! Super Particle Loading 
+      END DO
+      nndistTemp   = 4.0D0*pdia
       CALL MPI_Allreduce(nndistTemp,nndist,1,MPI_DOUBLE,
      >                                      MPI_MAX,iComm,ierr)
       CALL MPI_BARRIER(icomm,ierr)
-      
+  
+     
 ! Start ppiclF Calls
 !**********************************************************************
       IF(npart_local .GT. 0) THEN
@@ -192,6 +203,7 @@
      >         ,totErr/numErr,'%'
       END IF
       CALL MPI_BARRIER(icomm,ierr)
+
 ! Test CreateBin variations
 !********************************************************************** 
       IF(nproc .EQ. 1) THEN
@@ -254,44 +266,45 @@
       RETURN
       END SUBROUTINE
 !----------------------------------------------------------------------
-      SUBROUTINE test_CreateGrid(gIn,NCells,ProcID,NProc,gOut,totcells)
+      SUBROUTINE test_CreateGrid(gIn,NCells,ProcID,NProc,gOut,procCells)
       
       ! Input/Output
       ! gIn(1:2,1:3) - fluid domain 1:min,2:max faces in x,y,&z
-      ! NCells(3) - x,y,z cells per processor
+      ! NCells(3) - x,y,z cells in domain
       ! ProcID - Processor executing this subroutine
       ! NProc - number of processors
       ! gOut 1:3 - centroids, 4:6 - cell lengths, 7 - cell volume
   
       IMPLICIT NONE
       
-      INTEGER*4 NCells(3), NProc, ProcID, totcells
-      REAL*8    gIn(2,3),gOut(7,PPICLF_LEE),xMin
+      INTEGER*4 NCells(3), NProc, ProcID, procCells
+      REAL*8    gIn(2,3), gOut(7,PPICLF_LEE)
 
       ! Local
-      INTEGER*4 i, j, k 
-      REAL*8    dx(3), ProcDomain(3)
+      INTEGER*4 i, j, k, nx_per_proc
+      REAL*8    dx(3)
 
       ! Creates rectangular grid
       DO i = 1,3
-        ProcDomain(i) = (gIn(2,i) - gIn(1,i))/REAL(NProc)
-        dx(i)         = ProcDomain(i)/NCells(i)
+        dx(i) = (gIn(2,i) - gIn(1,i))/REAL(NCells(i))
       END DO
       ! Build full y & z domain on each processor
       ! Split x domain by number of processors
-      xMin = ProcDomain(1)*ProcID ! This processors Min x
-      totcells = 0
-      DO i = 1,NCells(1) 
-        DO j = 1,NCells(2)*NProc
-          DO k = 1,NCells(3)*NProc
-            totcells = totcells + 1
-            gOut(1,totcells) = xMin     + (i+0.5-1)*dx(1) !x centroid
-            gOut(2,totcells) = gIn(1,2) + (j+0.5-1)*dx(2) !y centroid
-            gOut(3,totcells) = gIn(1,3) + (k+0.5-1)*dx(3) !z centroid
-            gOut(4,totcells) = dx(1)
-            gOut(5,totcells) = dx(2)
-            gOut(6,totcells) = dx(3)
-            gOut(7,totcells) = dx(1)*dx(2)*dx(3)
+      nx_per_proc = CEILING(REAL(NCells(1))/REAL(NProc))
+      IF(ProcID .EQ. 0) PRINT*,'nx per proc:',nx_per_proc
+      procCells = 0
+      DO i = nx_per_proc*ProcID, nx_per_proc*(ProcID+1)
+        IF(i .GT. NCells(1)) EXIT 
+        DO j = 1,NCells(2)
+          DO k = 1,NCells(3)
+            procCells = procCells + 1
+            gOut(1,procCells) = gIn(1,1) + (i+0.5-1)*dx(1) !x centroid
+            gOut(2,procCells) = gIn(1,2) + (j+0.5-1)*dx(2) !y centroid
+            gOut(3,procCells) = gIn(1,3) + (k+0.5-1)*dx(3) !z centroid
+            gOut(4,procCells) = dx(1)
+            gOut(5,procCells) = dx(2)
+            gOut(6,procCells) = dx(3)
+            gOut(7,procCells) = dx(1)*dx(2)*dx(3)
           END DO !k
         END DO !j
       END DO !i
@@ -299,63 +312,54 @@
       RETURN
       END SUBROUTINE
 !----------------------------------------------------------------------
-      SUBROUTINE test_CreateParticles(gDom,dxr,dp,dxp,nc,
-     >                                part_y,npar,pid,np)
+      SUBROUTINE test_CreateParticles(gDom,dxr,pdia,dx,npar,
+     >                                part_y,pid,np)
        
       ! Input/Output
-      ! gDom(1:2,1:3) - fluid domain min/max in x,y,z
-      ! dxr - particle size to grid dx size ratio
-      ! dp  - particle diameter
-      ! dxp - particle spacing
-      ! nc - number of fluid cells to fill with particles
+      ! gDom(1:2,1:3)        - fluid domain min/max in x,y,z
+      ! dxr                  - ratio of min fluid cell dx and particle dx
+      ! pdia                 - particle diameter
+      ! dx(1:3)              - minimum fluid cell dx, dy, dz in domain
+      ! npar                 - number of particles created on this processor 
       ! part_y(1:3,1:30,000) - particle centroid x,y,z coordinates
-      ! npar - number of particles created on this processor 
-      ! pid - Processor ID
-      ! np - Number of processors in use
+      ! pid                  - processor ID
+      ! np                   - number of processors in use
   
       IMPLICIT NONE
       
-      REAL*8    dxr, dp, dxp(3), gDom(2,3), 
-     >          part_y(PPICLF_LRS,PPICLF_LPART),
-     >          procDomain(3)
-      INTEGER*4 nc(3), Pcount, PartDomain(3), i, j, k, ii, npar,pid,np
+      REAL*8    dxr, dx(3), gDom(2,3), pdia,
+     >          part_y(PPICLF_LRS,PPICLF_LPART), part_dx(3)
+      INTEGER*4 Pcount, i, j, k, ii, npar, pid, np, n(3),
+     >          nx_perProc
 
+      
       DO i = 1,3
-        ProcDomain(i) = (gDom(2,i)-gDom(1,i))/REAL(np)*REAL(pid)
-        PartDomain(i) = INT(dxr)*nc(i)
+        part_dx(i) = dx(i)/dxr
+        n(i) = INT((gDom(2,i)-gDom(1,i))/part_dx(i)) ! Num particles per dimension
+        IF(n(i) .GT. INT(PPICLF_LPART**(1.0/3.0)))
+     >    n(i) = INT(PPICLF_LPART**(1.0/3.0))
       END DO
+
+      nx_perProc = INT(n(1)/np)
 
       Pcount = 0
-      DO i = 1,PartDomain(1)
-        DO j = 1,PartDomain(2)
-          DO k = 1,PartDomain(3)
+      DO i = nx_perProc*pid, nx_perProc*(pid+1)
+        DO j = 1,n(2)
+          DO k = 1,n(3)
             Pcount = Pcount + 1
-            part_y(1,Pcount) = ProcDomain(1) + dxp(1)*(i-0.5)
-            part_y(2,Pcount) = ProcDomain(2) + dxp(2)*(j-0.5)
-            part_y(3,Pcount) = ProcDomain(3) + dxp(3)*(k-0.5)
-          END DO
-        END DO
-      END DO
-
-      ! Add a single particle in all domain corners besides origin for
-      ! periodicity testing
-      IF(pid .EQ. 0) THEN
-        DO i = 1,2
-          DO j = 1,2
-            DO k = 1,2
-              IF(i .EQ. 1 .AND. j. EQ. 1 .AND. k .EQ. 1) CYCLE
-              Pcount = Pcount + 1
-              part_y(1,Pcount) = gDom(2,1)*(i-1) - dp/4
-              part_y(2,Pcount) = gDom(2,2)*(j-1) - dp/4
-              part_y(3,Pcount) = gDom(2,3)*(k-1) - dp/4
-              DO ii = 1,3
-                IF(part_y(ii,Pcount) .LT. 0.0D0) 
-     >                         part_y(ii,Pcount) = dp/4
-              END DO
+            part_y(1,Pcount) = gDom(1,1) + pdia + part_dx(1)*(i-1)
+            part_y(2,Pcount) = gDom(1,2) + pdia + part_dx(2)*(j-1)
+            part_y(3,Pcount) = gDom(1,3) + pdia + part_dx(3)*(k-1)
+            ! Ensure particles are within domain
+            DO ii = 1,3
+              IF(part_y(ii,Pcount) .GT. gDom(2,ii) - pdia) THEN
+                Pcount = Pcount - 1
+                EXIT
+              END IF
             END DO
           END DO
         END DO
-      END IF
+      END DO
 
       npar = Pcount
 
