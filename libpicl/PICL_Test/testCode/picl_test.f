@@ -22,8 +22,8 @@
       ! Particle variables
       REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, C2Pratio, 
      >          part_r(PPICLF_LRP,PPICLF_LPART),T_truth(PPICLF_LPART),
-     >          totErr, numErr, xp, yp, zp
-      INTEGER*4 npart_local
+     >          totErr, numErr, xp, yp, zp,r_npl,r_npt
+      INTEGER*4 npart_local,totalParticles
 
       PI = 4.0D0*ATAN(1.0) ! pi
       k  = 1.0D0 ! wave number
@@ -41,8 +41,8 @@
 ! Grid Setup
 !**********************************************************************
       ! Create rectangular grid
-      gridDomain(1,2) = 0.0D0 !x domain min
-      gridDomain(2,2) = 1.0D0 !x domain max
+      gridDomain(1,1) = 0.0D0 !x domain min
+      gridDomain(2,1) = 1.0D0 !x domain max
       nCells(1)       = 10 !Number of x cells in domain
 
       gridDomain(1,2) = 0.0D0 !y domain min
@@ -55,8 +55,6 @@
 
       CALL test_CreateGrid(gridDomain,nCells,nid,nproc,grid,proc_ncells)
       CALL MPI_BARRIER(icomm, ierr)
-      PRINT*,'proccessor id, total processors, cells on processor',
-     >        nid,nproc,proc_ncells
 
 ! ppiclF Inputs
 !**********************************************************************
@@ -120,7 +118,14 @@
      >               dx_min(2)/C2Pratio,
      >               dx_min(3)/C2Pratio)
       CALL test_CreateParticles(gridDomain,C2Pratio,pdia,dx_min,
-     >                          npart_local,part_y,nid,nproc)
+     >                        npart_local,part_y,nid,nproc)
+      CALL MPI_BARRIER(icomm,ierr)
+      r_npl = REAL(npart_local)
+      CALL MPI_Allreduce(r_npl,r_npt,1,MPI_DOUBLE,
+     >                                      MPI_SUM,iComm,ierr)
+      totalParticles = INT(r_npt)
+      CALL MPI_BARRIER(icomm,ierr)
+      IF(nid .EQ. 0) PRINT*,'Total Particles:',totalParticles 
       part_r = 0.0D0
       rhop   = 7730.0D0 ! steel particles
       DO i = 1,npart_local
@@ -137,7 +142,7 @@
      >                              *(0.5D0*pdia)**3 ! particle volume
         part_r(PPICLF_R_JSPL,i) = 1.0D0 ! Super Particle Loading 
       END DO
-      nndistTemp   = 4.0D0*pdia
+      nndistTemp  = 4.0D0*pdia
       CALL MPI_Allreduce(nndistTemp,nndist,1,MPI_DOUBLE,
      >                                      MPI_MAX,iComm,ierr)
       CALL MPI_BARRIER(icomm,ierr)
@@ -145,10 +150,10 @@
      
 ! Start ppiclF Calls
 !**********************************************************************
-      IF(npart_local .GT. 0) THEN
-        CALL ppiclf_solve_InitParticle(2,3,0,npart_local,
+      PPICLF_TEST = .TRUE.
+      CALL ppiclf_solve_InitParticle(2,3,0,npart_local,
      >                               part_y,part_r,filter,nndist)
-      END IF
+      PPICLF_TEST = .TRUE.
       CALL ppiclf_solve_Initialize(x_per_flag, x_per_min, x_per_max,
      >                             y_per_flag, y_per_min, y_per_max, 
      >                             z_per_flag, z_per_min, z_per_max, 
@@ -281,30 +286,35 @@
       REAL*8    gIn(2,3), gOut(7,PPICLF_LEE)
 
       ! Local
-      INTEGER*4 i, j, k, nx_per_proc
+      INTEGER*4 i, j, k, ii, nx_per_proc
       REAL*8    dx(3)
 
       ! Creates rectangular grid
       DO i = 1,3
         dx(i) = (gIn(2,i) - gIn(1,i))/REAL(NCells(i))
       END DO
+
       ! Build full y & z domain on each processor
       ! Split x domain by number of processors
-      nx_per_proc = CEILING(REAL(NCells(1))/REAL(NProc))
-      IF(ProcID .EQ. 0) PRINT*,'nx per proc:',nx_per_proc
+      nx_per_proc = CEILING(REAL(NCells(1))/REAL(NProc))+1
       procCells = 0
-      DO i = nx_per_proc*ProcID, nx_per_proc*(ProcID+1)
-        IF(i .GT. NCells(1)) EXIT 
+      DO i = nx_per_proc*ProcID+1, nx_per_proc*(ProcID+1)
         DO j = 1,NCells(2)
           DO k = 1,NCells(3)
             procCells = procCells + 1
-            gOut(1,procCells) = gIn(1,1) + (i+0.5-1)*dx(1) !x centroid
-            gOut(2,procCells) = gIn(1,2) + (j+0.5-1)*dx(2) !y centroid
-            gOut(3,procCells) = gIn(1,3) + (k+0.5-1)*dx(3) !z centroid
+            gOut(1,procCells) = gIn(1,1) + (i-0.5)*dx(1) !x centroid
+            gOut(2,procCells) = gIn(1,2) + (j-0.5)*dx(2) !y centroid
+            gOut(3,procCells) = gIn(1,3) + (k-0.5)*dx(3) !z centroid
             gOut(4,procCells) = dx(1)
             gOut(5,procCells) = dx(2)
             gOut(6,procCells) = dx(3)
             gOut(7,procCells) = dx(1)*dx(2)*dx(3)
+            DO ii = 1,3
+              IF(gOut(ii,procCells) .GT. gIn(2,ii)) THEN
+                procCells = procCells - 1
+                EXIT
+              END IF
+            END DO
           END DO !k
         END DO !j
       END DO !i
@@ -323,14 +333,14 @@
       ! npar                 - number of particles created on this processor 
       ! part_y(1:3,1:30,000) - particle centroid x,y,z coordinates
       ! pid                  - processor ID
-      ! np                   - number of processors in use
+      ! np                   - number of processors in operation
   
       IMPLICIT NONE
       
       REAL*8    dxr, dx(3), gDom(2,3), pdia,
      >          part_y(PPICLF_LRS,PPICLF_LPART), part_dx(3)
       INTEGER*4 Pcount, i, j, k, ii, npar, pid, np, n(3),
-     >          nx_perProc
+     >          nx_perProc 
 
       
       DO i = 1,3
@@ -340,10 +350,10 @@
      >    n(i) = INT(PPICLF_LPART**(1.0/3.0))
       END DO
 
-      nx_perProc = INT(n(1)/np)
+      nx_perProc = INT(REAL(n(1))/REAL(np))+2
 
       Pcount = 0
-      DO i = nx_perProc*pid, nx_perProc*(pid+1)
+      DO i = nx_perProc*pid+1, nx_perProc*(pid+1)
         DO j = 1,n(2)
           DO k = 1,n(3)
             Pcount = Pcount + 1
@@ -360,7 +370,25 @@
           END DO
         END DO
       END DO
-
+      IF(pid .EQ. np-1 .AND. nx_perProc*(pid+1) .NE. n(1)) THEN
+        DO i = nx_perProc*(pid+1),n(1)
+          DO j = 1,n(2)
+            DO k = 1,n(3)
+              Pcount = Pcount + 1
+              part_y(1,Pcount) = gDom(1,1) + pdia + part_dx(1)*(i-1)
+              part_y(2,Pcount) = gDom(1,2) + pdia + part_dx(2)*(j-1)
+              part_y(3,Pcount) = gDom(1,3) + pdia + part_dx(3)*(k-1)
+              ! Ensure particles are within domain
+              DO ii = 1,3
+                IF(part_y(ii,Pcount) .GT. gDom(2,ii) - pdia) THEN
+                  Pcount = Pcount - 1
+                  EXIT
+                END IF
+              END DO
+            END DO
+          END DO
+        END DO  
+      END IF
       npar = Pcount
 
       RETURN
