@@ -10,23 +10,28 @@
       INCLUDE 'mpif.h'
       INCLUDE 'PPICLF'
 
-      INTEGER*4 i, j, nproc, nid, icomm, ierr
+      INTEGER*4 i, j, l, nproc, nid, icomm, ierr
       REAL*8    nndistTemp, nndist, PI, k
 
       ! Grid variables
-      INTEGER*4 nCells(3), proc_ncells
+      INTEGER*4 nCells(3), proc_ncells, ie
       REAL*8    grid(7,PPICLF_LEE), gridDomain(2,3), filter(3), 
      >          filterTemp(3), nFilterCells, tpF(PPICLF_LEE), num_bins,
-     >          dx_min(3) 
+     >          dx_min(3), feedback(PPICLF_LEE) 
 
       ! Particle variables
       REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, C2Pratio, 
      >          part_r(PPICLF_LRP,PPICLF_LPART),T_truth(PPICLF_LPART),
      >          totErr, numErr, xp, yp, zp,r_npl,r_npt
-      INTEGER*4 npart_local,totalParticles
+      INTEGER*4 npart_local,totalParticles, ip
+
+      ! Projection variables
+      REAL*8    wsum, dSQl, dSQi, dist, CellVol, GaussianConst,
+     >          w(PPICLF_LEE),part_feedbk(PPICLF_LPART),
+     >          TrueFeedback(PPICLF_LEE), error
 
       PI = 4.0D0*ATAN(1.0) ! pi
-      k  = 1.0D0 ! wave number
+      k  = 3.0D0 ! wave number
 
 ! MPI Setup
 !**********************************************************************
@@ -67,9 +72,9 @@
       z_per_max = gridDomain(2,3)
    
       ! Periodicity Setup
-      x_per_flag     = 0
-      y_per_flag     = 0
-      z_per_flag     = 0
+      x_per_flag     = 1
+      y_per_flag     = 1
+      z_per_flag     = 1
       ang_per_flag   = 0
       ang_per_angle  = 0.0D0
       ang_per_xangle = 0.0D0
@@ -96,7 +101,7 @@
         tpF(j) = 1.0D0 
      >     + 1.0D0*SIN((k/(2*PI))*
      >     (grid(1,j)/(gridDomain(2,1)-gridDomain(1,1))))
-     >     + 1.0D0*SIN((k/(2*PI))*
+     >     + 1.0D0*COS((k/(2*PI))*
      >     (grid(2,j)/(gridDomain(2,2)-gridDomain(1,2))))
      >     + 1.0D0*SIN((k/(2*PI))*
      >     (grid(3,j)/(gridDomain(2,3)-gridDomain(1,3))))
@@ -151,9 +156,11 @@
 ! Start ppiclF Calls
 !**********************************************************************
       PPICLF_TEST = .TRUE.
+      PPICLF_PERTEST = .TRUE.
       CALL ppiclf_solve_InitParticle(2,3,0,npart_local,
      >                               part_y,part_r,filter,nndist)
       PPICLF_TEST = .TRUE.
+      PPICLF_PERTEST = .TRUE.
       CALL ppiclf_solve_Initialize(x_per_flag, x_per_min, x_per_max,
      >                             y_per_flag, y_per_min, y_per_max, 
      >                             z_per_flag, z_per_min, z_per_max, 
@@ -161,16 +168,18 @@
      >                             ang_per_xangle, ang_per_rin,
      >                                                  ang_per_rout)
       PPICLF_TEST = .TRUE.
+      PPICLF_PERTEST = .TRUE.
       CALL ppiclf_comm_InitOverlapMesh(proc_ncells,grid)
       CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JT,tpF)
       CALL ppiclf_solve_InitSolve
       CALL MPI_BARRIER(icomm,ierr)
+      DO ie = 1,proc_ncells
+        CALL ppiclf_solve_GetProFld(ie,1,feedback(ie))
+      END DO
+      CALL MPI_BARRIER(icomm,ierr)
 
 ! Print Interpolation results 
 !**********************************************************************
-      IF(nid .EQ. 0) THEN
-      !  CALL test_BinTest()
-      END IF
  
       IF(ppiclf_npart .GT. 0) THEN
         DO i = 1,ppiclf_npart
@@ -180,7 +189,7 @@
           T_truth(i) = 1.0D0 
      >       + 1.0D0*SIN((k/(2*PI))*
      >       (xp/(gridDomain(2,1)-gridDomain(1,1))))
-     >       + 1.0D0*SIN((k/(2*PI))*
+     >       + 1.0D0*COS((k/(2*PI))*
      >       (yp/(gridDomain(2,2)-gridDomain(1,2))))
      >       + 1.0D0*SIN((k/(2*PI))*
      >       (zp/(gridDomain(2,3)-gridDomain(1,3))))
@@ -209,25 +218,114 @@
       END IF
       CALL MPI_BARRIER(icomm,ierr)
 
+! Print Projection Results
+!**********************************************************************
+      ! Find true projection result
+      IF(nproc .EQ. 1) THEN
+        TrueFeedback = 0.0D0
+        DO ip = 1,npart_local
+          w     = 0.0D0
+          wsum  = 0.0D0
+          ! Loop to find individual cell weightings
+          DO ie = 1,proc_ncells
+            dSQi = 0.0D0
+            dSQl = 0.0D0
+            DO l = 1,3
+              IF(ppiclf_linperiodic(l) .AND. ppiclf_EqualDomain(l)) THEN
+                dSQl = MIN( (grid(l,ie) - part_y(l,ip))**2, 
+     >           ( (gridDomain(2,l) - gridDomain(1,l)) -
+     >                 ABS(grid(l,ie) - part_y(l,ip)) )**2 )
+              ELSE
+                dSQl = (grid(l,ie) - part_y(l,ip))**2
+              END IF
+              dSQi = dSQi + dSQl
+            END DO !l
+
+            dist = SQRT(dSQi)
+            CellVol = grid(7,ie)
+            GaussianConst = 2.305D0
+            w(ie) = ABS(CellVol*EXP(-GaussianConst*(dist**2)
+     >                / (CellVol**(2.0D0/3.0D0))))
+            wsum = wsum + w(ie)
+          END DO !ie
+
+          ! Will range from 0 to 3
+          part_feedbk(ip) = part_y(1,ip)
+     >            /(gridDomain(2,1) - gridDomain(1,1)) +       
+     >            part_y(2,ip)
+     >            /(gridDomain(2,2) - gridDomain(1,2)) +       
+     >            part_y(3,ip)
+     >            /(gridDomain(2,3) - gridDomain(1,3))        
+          DO ie = 1,proc_ncells
+            TrueFeedback(ie) = TrueFeedback(ie) + 
+     >                         w(ie)/wsum*part_feedbk(ip)
+          END DO !ie
+        END DO !ip
+        PRINT*, '**********************************************'
+        PRINT*, 'Lets see how many cells 1 particle projects to'
+        PRINT*, 'Cell feedback weight loop!'
+        DO ie = 1,proc_ncells
+          IF(w(ie)/wsum .gt. 0.001) PRINT*,'cell feedback weight > 0.1%'
+     >                                ,ie,w(ie)/wsum
+        END DO
+
+        WRITE(499,*) 'Feedback true solution'
+        WRITE(499+nid,*) 'Cell ID, x_centroid, y_centroid,
+     >                      z_centroid, feedback., Percent error'
+        DO ie = 1,proc_ncells
+          error = ABS(feedback(ie) - TrueFeedback(ie))
+     >            / TrueFeedback(ie) * 100.0
+          WRITE(499,*) ie, grid(1,ie), grid(2,ie),
+     >                         grid(3,ie),TrueFeedback(ie) ,error
+        END DO
+      END IF
+
+      CALL MPI_BARRIER(icomm,ierr)
+
+      IF(proc_ncells .GT. 0) THEN
+          WRITE(401+nid,*) 'Cell ID, x_centroid, y_centroid,
+     >                      z_centroid, feedback.'
+        DO ie = 1,proc_ncells
+          WRITE(401+nid,*) ie, grid(1,ie), grid(2,ie),
+     >                         grid(3,ie),feedback(ie)
+        END DO
+      END IF
+
 ! Test CreateBin variations
 !********************************************************************** 
       IF(nproc .EQ. 1) THEN
         PRINT*,'******************************************************'
         PRINT*,'CreateBin Testing:'
-        !DO j = 1,3
-          
+!        DO j = 0,3
+!          ! Tests 4 cases
+!          ! a) bin x = 1.00; bin y = 1.00; bin z = 1.00
+!          !    Number of bins equal in all direcitons.
+!          ! b) bin x = 2.01; bin y = 1.00; bin z = 1.00
+!          !    More bins in x.  Bins and y and z equal.
+!          ! c) bin x = 2.01; bin y = 2.02; bin z = 1.00
+!          !    More bins in x, then y, then z
+!          ! d) bin x = 2.03; bin y = 2.01, bin z = 2.03
+!          !    More ins in x or z.  less Bins in y
+!          IF(j .NE. 0)
+!     >     ppiclf_xdrange(2,j) = 2.0*gridDomain(2,j)*(j/100) 
+!          IF(j .EQ. 3) ppiclf_xdrange(2,1) = ppiclf_xdrange(2,j)
+!
+!          WRITE(100+j,*) 'x domain:', ppiclf_xdrange(2,1)
+!          WRITE(100+j,*) 'y domain:', ppiclf_xdrange(2,2)
+!          WRITE(100+j,*) 'z domain:', ppiclf_xdrange(2,3)
+!
+          WRITE(100,*) 'Number of Processors, x bins, y bins, z bins,
+     >                  , total bins, Percent of Processors In Use:' 
           DO i = 1,512
             ppiclf_np = i
             num_bins = ppiclf_n_bins(1)*
      >                 ppiclf_n_bins(2)*ppiclf_n_bins(3)
             CALL ppiclf_comm_CreateBin
-!            PRINT*,'Num Proc:',i,
-!     >           'Num Bins(x,y,z,tot):',ppiclf_n_bins(1),
-!     >            ppiclf_n_bins(2),ppiclf_n_bins(3),
-!     >            num_bins 
-            PRINT*,'Num Bins/Num Proc:', num_bins/ppiclf_np
-          END DO
-        !END DO
+            WRITE(100+j,*) ppiclf_np, 
+     >         ppiclf_n_bins(1), ppiclf_n_bins(2), ppiclf_n_bins(3),
+     >         num_bins , num_bins/ppiclf_np*100
+!          END DO
+        END DO
       END IF
 
 
@@ -288,6 +386,7 @@
       ! Local
       INTEGER*4 i, j, k, ii, nx_per_proc
       REAL*8    dx(3)
+      LOGICAL   GOOD
 
       ! Creates rectangular grid
       DO i = 1,3
@@ -296,11 +395,13 @@
 
       ! Build full y & z domain on each processor
       ! Split x domain by number of processors
-      nx_per_proc = CEILING(REAL(NCells(1))/REAL(NProc))+1
+      nx_per_proc = CEILING(REAL(NCells(1))/REAL(NProc))
+      IF(NProc .EQ. 1) nx_per_proc = NCells(1)
       procCells = 0
-      DO i = nx_per_proc*ProcID+1, nx_per_proc*(ProcID+1)
+      DO i = (nx_per_proc*ProcID)+1, nx_per_proc*(ProcID+1)
         DO j = 1,NCells(2)
           DO k = 1,NCells(3)
+            GOOD = .TRUE.
             procCells = procCells + 1
             gOut(1,procCells) = gIn(1,1) + (i-0.5)*dx(1) !x centroid
             gOut(2,procCells) = gIn(1,2) + (j-0.5)*dx(2) !y centroid
@@ -312,9 +413,14 @@
             DO ii = 1,3
               IF(gOut(ii,procCells) .GT. gIn(2,ii)) THEN
                 procCells = procCells - 1
+                GOOD = .FALSE.
                 EXIT
               END IF
             END DO
+            IF(GOOD) THEN
+              WRITE(200+ProcID,*) procCells, gOut(1,procCells),
+     >                        gOut(2,procCells),gOut(3,procCells)
+            END IF
           END DO !k
         END DO !j
       END DO !i
@@ -340,7 +446,7 @@
       REAL*8    dxr, dx(3), gDom(2,3), pdia,
      >          part_y(PPICLF_LRS,PPICLF_LPART), part_dx(3)
       INTEGER*4 Pcount, i, j, k, ii, npar, pid, np, n(3),
-     >          nx_perProc 
+     >          nx_perProc, istart, iend 
 
       
       DO i = 1,3
@@ -351,17 +457,19 @@
       END DO
 
       nx_perProc = INT(REAL(n(1))/REAL(np))+2
-
+      istart = nx_perProc*pid + 1
+      iend   = nx_perProc*(pid+1)
+      IF(pid .EQ. np-1) iend = n(1) !ensures all particles are made
       Pcount = 0
-      DO i = nx_perProc*pid+1, nx_perProc*(pid+1)
+      DO i = istart, iend 
         DO j = 1,n(2)
           DO k = 1,n(3)
             Pcount = Pcount + 1
             part_y(1,Pcount) = gDom(1,1) + pdia + part_dx(1)*(i-1)
             part_y(2,Pcount) = gDom(1,2) + pdia + part_dx(2)*(j-1)
             part_y(3,Pcount) = gDom(1,3) + pdia + part_dx(3)*(k-1)
-            ! Ensure particles are within domain
             DO ii = 1,3
+              ! deletes particles inadvertently created outside of domain
               IF(part_y(ii,Pcount) .GT. gDom(2,ii) - pdia) THEN
                 Pcount = Pcount - 1
                 EXIT
@@ -370,25 +478,6 @@
           END DO
         END DO
       END DO
-      IF(pid .EQ. np-1 .AND. nx_perProc*(pid+1) .NE. n(1)) THEN
-        DO i = nx_perProc*(pid+1),n(1)
-          DO j = 1,n(2)
-            DO k = 1,n(3)
-              Pcount = Pcount + 1
-              part_y(1,Pcount) = gDom(1,1) + pdia + part_dx(1)*(i-1)
-              part_y(2,Pcount) = gDom(1,2) + pdia + part_dx(2)*(j-1)
-              part_y(3,Pcount) = gDom(1,3) + pdia + part_dx(3)*(k-1)
-              ! Ensure particles are within domain
-              DO ii = 1,3
-                IF(part_y(ii,Pcount) .GT. gDom(2,ii) - pdia) THEN
-                  Pcount = Pcount - 1
-                  EXIT
-                END IF
-              END DO
-            END DO
-          END DO
-        END DO  
-      END IF
       npar = Pcount
 
       RETURN
