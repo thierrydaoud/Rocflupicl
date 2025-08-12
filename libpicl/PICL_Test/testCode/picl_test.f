@@ -43,7 +43,8 @@
       CALL MPI_Comm_size(icomm,nproc,ierr)
       CALL MPI_Comm_rank(icomm,nid,ierr)
       WRITE(procString, '(I0)') nid
-      IF(nid .LT. 11) procString = '0' // procString
+      IF(nid .LT. 10) procString = '0' // TRIM(procString)
+
 ! Grid Setup
 !**********************************************************************
       ! Create rectangular grid
@@ -197,12 +198,14 @@
  
         IF(ppiclf_npart .GT. 0) THEN
           filename = ''
-          filename = TRIM(testcase) // '_' // 'Interpolation Proc_'
+          filename = TRIM(testcase) // '_' // 'Interpolation_Proc_'
      >                  // TRIM(procString) // '.txt'
           OPEN(UNIT=300,FILE=TRIM(filename), STATUS='REPLACE',
      >                                      ACTION='WRITE')
           WRITE(300,*) 'Particle ID, x, y,',
      >                        'z, Interpolation Error (%).'
+          totErr = 0.0D0
+          numErr = 0.0D0
           DO i = 1,ppiclf_npart
             xp = ppiclf_y(PPICLF_JX,i)
             yp = ppiclf_y(PPICLF_JY,i)
@@ -214,10 +217,6 @@
      >         (yp/(gridDomain(2,2)-gridDomain(1,2))))
      >         + 1.0D0*SIN((k/(2*PI))*
      >         (zp/(gridDomain(2,3)-gridDomain(1,3))))
-          END DO
-          totErr = 0.0D0
-          numErr = 0.0D0
-          DO i = 1,ppiclf_npart
             i_err = ABS(ppiclf_rprop(PPICLF_R_JT,i)-T_truth(i))
      >                  /T_truth(i)*100.0D0
             totErr = totErr + i_err 
@@ -286,24 +285,16 @@
      >                           w(ie)/wsum*part_feedbk(ip)
             END DO !ie
           END DO !ip
-          PRINT*, '**********************************************'
-          PRINT*, 'Lets see how many cells 1 particle projects to'
-          PRINT*, 'Cell feedback weight loop!'
-          DO ie = 1,proc_ncells
-            IF(w(ie)/wsum .gt. 0.001) PRINT*,'cell feedback weight >',
-     >                                            '0.1%',ie,w(ie)/wsum
-          END DO
 
           filename = TRIM(testcase) // '_' //'FeedbackSolution.txt'
           OPEN(UNIT=499,FILE=filename, STATUS='REPLACE',ACTION='WRITE')
-          WRITE(499,*) 'Feedback true solution'
           WRITE(499,*) 'Cell ID, x_centroid, y_centroid,',
-     >                        'z_centroid, feedback., Percent error'
+     >                        'z_centroid, True Feedback Solution'
           DO ie = 1,proc_ncells
             error = ABS(feedback(ie) - TrueFeedback(ie))
      >              / TrueFeedback(ie) * 100.0
             WRITE(499,*) ie, grid(1,ie), grid(2,ie),
-     >                           grid(3,ie),TrueFeedback(ie) ,error
+     >                           grid(3,ie),TrueFeedback(ie)
           END DO
           CLOSE(UNIT=499)
         END IF
@@ -312,7 +303,7 @@
         filename = ''
         CALL MPI_BARRIER(icomm,ierr)
         IF(proc_ncells .GT. 0) THEN
-          filename = TRIM(testcase) // '_' // 'Feedback      Proc_' //
+          filename = TRIM(testcase) // '_' // 'Feedback_Proc_' //
      >                              TRIM(procString) // '.txt'
           OPEN(UNIT=400,FILE=filename, STATUS='REPLACE',ACTION='WRITE')
           WRITE(400,*) 'Cell ID, x_centroid, y_centroid,',
@@ -347,7 +338,7 @@
 !          WRITE(100+j,*) 'y domain:', ppiclf_xdrange(2,2)
 !          WRITE(100+j,*) 'z domain:', ppiclf_xdrange(2,3)
 !
-          filename = 'CreateBinResults.txt'
+          filename = 'CreateBin_Results.txt'
           OPEN(UNIT=100,FILE=filename, STATUS='REPLACE',ACTION='WRITE')
           WRITE(100,*) 'Number of Processors, x bins, y bins, z bins,',
      >                  ', total bins, Percent of Processors In Use:' 
@@ -457,8 +448,8 @@
             END DO
             IF(GOOD) THEN
               IF(FIRST) THEN
-                WRITE(filename,'(A,I0,A)') 'GridList              ',
-     >         ' Proc_0', ProcID, '.txt'
+                WRITE(filename,'(A,I0,A)') 'Grid_Proc_0',
+     >            ProcID, '.txt'
                 OPEN(UNIT=200,FILE=filename, STATUS='REPLACE',
      >            ACTION='WRITE')
               END IF
@@ -524,6 +515,29 @@
           END DO
         END DO
       END DO
+
+      ! Add a particle in all 8 corners
+      IF(pid .EQ. np-1) THEN
+        Pcount = Pcount + 1
+        part_y(1,Pcount) = gDom(1,1) + pdia/4
+        part_y(2,Pcount) = gDom(1,2) + pdia/4
+        part_y(3,Pcount) = gDom(1,3) + pdia/4
+        DO i = 1,2
+          DO j = 1,2
+            DO k = 1,2
+              IF(i .EQ. 1 .AND. j .EQ. 1 .AND. k .EQ. 1) CYCLE
+              Pcount = Pcount + 1
+              part_y(1,Pcount) = gDom(1,1) + gDom(2,1)*(i-1) - pdia/4
+              part_y(2,Pcount) = gDom(1,2) + gDom(2,2)*(j-1) - pdia/4
+              part_y(3,Pcount) = gDom(1,3) + gDom(2,3)*(k-1) - pdia/4
+              DO ii = 1,3
+                IF(part_y(ii,Pcount) .LT. 0.0) part_y(ii,Pcount) = 0.0D0
+              END DO
+            END DO
+          END DO
+        END DO
+      END IF
+
       npar = Pcount
 
       RETURN
@@ -579,4 +593,3 @@
       RETURN
       END SUBROUTINE
 !----------------------------------------------------------------------
- 
