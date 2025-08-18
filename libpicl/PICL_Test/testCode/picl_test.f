@@ -28,12 +28,12 @@
      >          p_part_r(PPICLF_LRP,PPICLF_LPART),T_truth(PPICLF_LPART),
      >          xp, yp, zp, i_err, p_err, totErr, InteriorErr, xFaceErr,
      >          yFaceErr, zFaceErr, xyEdgeErr, xzEdgeErr, yzEdgeErr,
-     >          xyzCornerErr
-
-      INTEGER*4 particlesPerCell(3), particlesPerProc, npart_local,
-     >          totalParticles, ip, np(3), totCnt, InteriorCnt,
+     >          xyzCornerErr, totCnt, InteriorCnt,
      >          xFaceCnt, yFaceCnt, zFaceCnt, xyEdgeCnt, xzEdgeCnt,
      >          yzEdgeCnt, xyzCornerCnt
+
+      INTEGER*4 particlesPerCell(3), particlesPerProc, npart_local,
+     >          totalParticles, ip, np(3)
 
       LOGICAL   xFace, yFace, zFace
 
@@ -325,15 +325,15 @@
           xzEdgeErr    = 0.0D0  
           yzEdgeErr    = 0.0D0   
           xyzCornerErr = 0.0D0    
-          totCnt       = 0          
-          InteriorCnt  = 0          
-          xFaceCnt     = 0          
-          yFaceCnt     = 0          
-          zFaceCnt     = 0          
-          xyEdgeCnt    = 0          
-          xzEdgeCnt    = 0          
-          yzEdgeCnt    = 0          
-          xyzCornerCnt = 0          
+          totCnt       = 0.0D0          
+          InteriorCnt  = 0.0D0          
+          xFaceCnt     = 0.0D0          
+          yFaceCnt     = 0.0D0          
+          zFaceCnt     = 0.0D0          
+          xyEdgeCnt    = 0.0D0          
+          xzEdgeCnt    = 0.0D0          
+          yzEdgeCnt    = 0.0D0          
+          xyzCornerCnt = 0.0D0          
   
         IF(ppiclf_npart .GT. 0) THEN
           filename = TRIM(testcase) // '_' // 'Interpolation_Proc_'
@@ -374,38 +374,38 @@
             p_err = i_err/ABS(T_truth(i))*100
 
             totErr = totErr + p_err 
-            totCnt = totCnt + 1
+            totCnt = totCnt + 1.0D0
             ! Interior cell particles
             IF(.NOT. xFace .AND. .NOT. yFace .AND. .NOT. zFace) THEN
               InteriorErr = InteriorErr + p_err
-              InteriorCnt = InteriorCnt + 1
+              InteriorCnt = InteriorCnt + 1.0D0
 
             ! Single Face cell particles
             ELSE IF(xFace .AND. .NOT. yFace .AND. .NOT. zFace) THEN
               xFaceErr = xFaceErr + p_err
-              xFaceCnt = xFaceCnt + 1
+              xFaceCnt = xFaceCnt + 1.0D0
             ELSE IF(.NOT. xFace .AND. yFace .AND. .NOT. zFace) THEN
               yFaceErr = yFaceErr + p_err
-              yFaceCnt = yFaceCnt + 1
+              yFaceCnt = yFaceCnt + 1.0D0
             ELSE IF(.NOT. xFace .AND. .NOT. yFace .AND. zFace) THEN
               zFaceErr = zFaceErr + p_err
-              zFaceCnt = zFaceCnt + 1
+              zFaceCnt = zFaceCnt + 1.0D0
 
             ! Two Face (Edge) cell particles
             ELSE IF(xFace .AND. yFace .AND. .NOT. zFace) THEN
               xyEdgeErr = xyEdgeErr + p_err
-              xyEdgeCnt = xyEdgeCnt + 1
+              xyEdgeCnt = xyEdgeCnt + 1.0D0
             ELSE IF(xFace .AND. .NOT. yFace .AND. zFace) THEN
               xzEdgeErr = xzEdgeErr + p_err
-              xzEdgeCnt = xzEdgeCnt + 1
+              xzEdgeCnt = xzEdgeCnt + 1.0D0
             ELSE IF(.NOT. xFace .AND. yFace .AND. zFace) THEN
               yzEdgeErr = yzEdgeErr + p_err
-              yzEdgeCnt = yzEdgeCnt + 1
+              yzEdgeCnt = yzEdgeCnt + 1.0D0
 
             ! Three Face (Corner) cell particles
             ELSE IF(xFace .AND. yFace .AND. zFace) THEN
               xyzCornerErr = xyzCornerErr + p_err
-              xyzCornerCnt = xyzCornerCnt + 1
+              xyzCornerCnt = xyzCornerCnt + 1.0D0
             ! Something went wrong if not caught yet
             ELSE
               PRINT*,'Interp boolean error. Particle not',
@@ -422,45 +422,38 @@
      >                                        MPI_SUM,iComm,ierr)
         CALL MPI_Allreduce(InteriorErr,InteriorErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-
         CALL MPI_Allreduce(xFaceErr,xFaceErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-
         CALL MPI_Allreduce(yFaceErr,yFaceErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-
         CALL MPI_Allreduce(zFaceErr,zFaceErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-
         CALL MPI_Allreduce(xyEdgeErr,xyEdgeErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-
         CALL MPI_Allreduce(xzEdgeErr,xzEdgeErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-
         CALL MPI_Allreduce(yzEdgeErr,yzEdgeErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-
         CALL MPI_Allreduce(xyzCornerErr,xyzCornerErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
         ! Counter MPI Sums
-        CALL MPI_IAllreduce(totCnt,totCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(totCnt,totCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_IAllreduce(InteriorCnt,InteriorCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(InteriorCnt,InteriorCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_IAllreduce(xFaceCnt,xFaceCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(xFaceCnt,xFaceCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_IAllreduce(yFaceCnt,yFaceCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(yFaceCnt,yFaceCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_IAllreduce(zFaceCnt,zFaceCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(zFaceCnt,zFaceCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_IAllreduce(xyEdgeCnt,xyEdgeCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(xyEdgeCnt,xyEdgeCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_IAllreduce(xzEdgeCnt,xzEdgeCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(xzEdgeCnt,xzEdgeCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_IAllreduce(yzEdgeCnt,yzEdgeCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(yzEdgeCnt,yzEdgeCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_IAllreduce(xyzCornerCnt,xyzCornerCnt,1,MPI_INTEGER4,
+        CALL MPI_Allreduce(xyzCornerCnt,xyzCornerCnt,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
         CALL MPI_BARRIER(icomm,ierr)
         ! Print Bin Data
