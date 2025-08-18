@@ -309,7 +309,26 @@
 
 ! Print Interpolation results 
 !**********************************************************************
- 
+          ! Zero out errors and counters
+          totErr       = 0.0D0
+          InteriorErr  = 0.0D0
+          xFaceErr     = 0.0D0  
+          yFaceErr     = 0.0D0    
+          zFaceErr     = 0.0D0    
+          xyEdgeErr    = 0.0D0    
+          xzEdgeErr    = 0.0D0  
+          yzEdgeErr    = 0.0D0   
+          xyzCornerErr = 0.0D0    
+          totCnt       = 0          
+          InteriorCnt  = 0          
+          xFaceCnt     = 0          
+          yFaceCnt     = 0          
+          zFaceCnt     = 0          
+          xyEdgeCnt    = 0          
+          xzEdgeCnt    = 0          
+          yzEdgeCnt    = 0          
+          xyzCornerCnt = 0          
+  
         IF(ppiclf_npart .GT. 0) THEN
           filename = TRIM(testcase) // '_' // 'Interpolation_Proc_'
      >                  // TRIM(procString) // '.txt'
@@ -317,32 +336,39 @@
      >                                      ACTION='WRITE')
           WRITE(300,*) 'Particle ID, x, y,',
      >                        'z, Interpolation Error (%).'
-          totErr = 0.0D0
-          numErr = 0.0D0
           DO i = 1,ppiclf_npart
+            xFace = .FALSE.
+            yFace = .FALSE.
+            zFace = .FALSE.
             xp = ppiclf_y(PPICLF_JX,i)
             yp = ppiclf_y(PPICLF_JY,i)
             zp = ppiclf_y(PPICLF_JZ,i) 
+
+            IF( (xp - gridDomain(1,1)) .LT. gridDX(1) .OR.
+     >          (gridDomain(2,1) - xp) .LT. gridDX(1) ) xFace = .TRUE.
+            IF( (yp - gridDomain(1,2)) .LT. gridDX(2) .OR.
+     >          (gridDomain(2,2) - yp) .LT. gridDX(2) ) yFace = .TRUE.
+            IF( (zp - gridDomain(1,3)) .LT. gridDX(3) .OR.
+     >          (gridDomain(2,3) - zp) .LT. gridDX(3) ) zFace = .TRUE.
+
             x_norm = (xp - gridDomain(1,1))
-     >               /(gridDomain(2,1)-gridDomain(1,1))
+     >              /(gridDomain(2,1)-gridDomain(1,1))
             y_norm = (yp - gridDomain(1,2))
-     >               /(gridDomain(2,2)-gridDomain(1,2))
+     >              /(gridDomain(2,2)-gridDomain(1,2))
             z_norm = (zp - gridDomain(1,3))
-     >               /(gridDomain(2,3)-gridDomain(1,3))
+     >              /(gridDomain(2,3)-gridDomain(1,3))
+
             T_truth(i) = 3 + COS(2*PI*x_norm) +
-     >                       COS(2*PI*y_norm) +
-     >                       COS(2*PI*z_norm)
+     >                      COS(2*PI*y_norm) +
+     >                      COS(2*PI*z_norm)
             i_err = ABS(ABS(ppiclf_rprop(PPICLF_R_JT,i))
-     >                      - ABS(T_truth(i)))
+     >                     - ABS(T_truth(i)))
             p_err = i_err/ABS(T_truth(i))*100
             totErr = totErr + p_err 
             numErr = numErr + 1.0D0
             WRITE(300,*) i, xp, yp, zp, i_err, p_err,'%'
           END DO
           CLOSE(UNIT=300)
-        ELSE
-          totErr = 0.0D0
-          numErr = 0.0D0
         END IF
         CALL MPI_BARRIER(icomm,ierr)
         CALL MPI_Allreduce(totErr,totErr,1,MPI_DOUBLE,
