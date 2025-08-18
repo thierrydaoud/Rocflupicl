@@ -122,7 +122,6 @@
 
       IF(nid .EQ. 0) PRINT*, 'Total Grid Cells:',
      >                       nCells(1)*nCells(2)*nCells(3)
-      PRINT*, 'Proc, # ppiclf cells:',nid,proc_ncells
       CALL MPI_BARRIER(icomm, ierr)
 
       ! Find cell filter search distance
@@ -411,20 +410,18 @@
 
           filename = TRIM(testcase) // '_' //'FeedbackSolution.txt'
           OPEN(UNIT=499,FILE=filename, STATUS='REPLACE',ACTION='WRITE')
-          WRITE(499,*) 'Cell ID, x_centroid, y_centroid,',
-     >                        'z_centroid'
-          WRITE(499,*) 'Cell ID, Unity Solution, Unity Error %,',
-     >                 'SIN Solution, SIN Error %'
-     >                 ,'ABS Error, Percent Error'
+          WRITE(499,*) 'Cell ID, x_centroid, y_centroid, ',
+     >                 'z_centroid, Unity Percent Error, ',
+     >                 'SIN Percent Error, Unity Solution, ',
+     >                 'SIN Solution'
           DO ie = 1,proc_ncells
             error1 = ABS(ABS(feedback1(ie)) - ABS(TrueFeedback1(ie)))
      >              / ABS(TrueFeedback1(ie)) * 100.0D0
             error2 = ABS(ABS(feedback2(ie)) - ABS(TrueFeedback2(ie)))
      >              / ABS(TrueFeedback2(ie)) * 100.0D0
             WRITE(499,*) ie, p_grid(1,ie), p_grid(2,ie),
-     >                           p_grid(3,ie)
-            WRITE(499,*) ie, TrueFeedback1(ie), error1,
-     >                       TrueFeedback2(ie), error2
+     >                   p_grid(3,ie), error1, '%', error2, '%',
+     >                   TrueFeedback1(ie), TrueFeedback2(ie) 
           END DO
           CLOSE(UNIT=499)
         END IF
