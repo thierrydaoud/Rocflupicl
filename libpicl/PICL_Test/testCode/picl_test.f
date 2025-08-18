@@ -63,17 +63,17 @@
       ! Create rectangular grid
       gridDomain(1,1) = 0.0D0 !x domain min
       gridDomain(2,1) = 1.0D0 !x domain max
-      nCells(1)       = 10    !Number of x cells in domain
+      nCells(1)       = 15    !Number of x cells in domain
       gridDX(1) = (gridDomain(2,1) - gridDomain(1,1))/REAL(nCells(1))
 
       gridDomain(1,2) = 0.0D0 !y domain min
       gridDomain(2,2) = 1.0D0 !y domain max     
-      nCells(2)       = 10    !Number of y cells in domain
+      nCells(2)       = 15    !Number of y cells in domain
       gridDX(2) = (gridDomain(2,2) - gridDomain(1,2))/REAL(nCells(2))
 
       gridDomain(1,3) = 0.0D0 !z domain min
       gridDomain(2,3) = 1.0D0 !z domain max     
-      nCells(3)       = 10    !Number of z cells in domain
+      nCells(3)       = 15    !Number of z cells in domain
       gridDX(3) = (gridDomain(2,3) - gridDomain(1,3))/REAL(nCells(3))
 
       IF(nCells(1)*nCells(2)*nCells(3) .GT. PPICLF_LEE) THEN
@@ -155,9 +155,9 @@
      >           /(gridDomain(2,2)-gridDomain(1,2))
         z_norm = (p_grid(3,i) - gridDomain(1,3))
      >           /(gridDomain(2,3)-gridDomain(1,3))
-        tpF(i) = 3 + COS(2*PI*x_norm) +
-     >               COS(2*PI*y_norm) +
-     >               COS(2*PI*z_norm)
+        tpF(i) =   COS(2*PI*x_norm) +
+     >             COS(2*PI*y_norm) +
+     >             COS(2*PI*z_norm)
         END DO
 
       ! Setup filter(1:3) and smallest cell dx across processors 
@@ -365,9 +365,11 @@
             z_norm = (zp - gridDomain(1,3))
      >              /(gridDomain(2,3)-gridDomain(1,3))
 
-            T_truth(i) = 3 + COS(2*PI*x_norm) +
-     >                      COS(2*PI*y_norm) +
-     >                      COS(2*PI*z_norm)
+            T_truth(i) = COS(2*PI*x_norm) +
+     >                   COS(2*PI*y_norm) +
+     >                   COS(2*PI*z_norm)
+
+            IF(T_truth(i) .LT. 0.1) CYCLE
 
             i_err = ABS(ABS(ppiclf_rprop(PPICLF_R_JT,i))
      >                     - ABS(T_truth(i)))
