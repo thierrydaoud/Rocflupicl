@@ -374,7 +374,7 @@
             p_err = i_err/ABS(T_truth(i))*100
 
             totErr = totErr + p_err 
-            totCnt = numErr + 1
+            totCnt = totCnt + 1
             ! Interior cell particles
             IF(.NOT. xFace .AND. .NOT. yFace .AND. .NOT. zFace) THEN
               InteriorErr = InteriorErr + p_err
