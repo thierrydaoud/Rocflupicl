@@ -26,10 +26,16 @@
       REAL*8    part_y(PPICLF_LRS,PPICLF_LPART), pdia, 
      >          p_part_y(PPICLF_LRS,PPICLF_LPART), part_dx(3),
      >          p_part_r(PPICLF_LRP,PPICLF_LPART),T_truth(PPICLF_LPART),
-     >          totErr, numErr, xp, yp, zp, i_err, p_err
+     >          xp, yp, zp, i_err, p_err, totErr, InteriorErr, xFaceErr,
+     >          yFaceErr, zFaceErr, xyEdgeErr, xzEdgeErr, yzEdgeErr,
+     >          xyzCornerErr
 
       INTEGER*4 particlesPerCell(3), particlesPerProc, npart_local,
-     >          totalParticles, ip, np(3)
+     >          totalParticles, ip, np(3), totCnt, InteriorCnt,
+     >          xFaceCnt, yFaceCnt, zFaceCnt, xyEdgeCnt, xzEdgeCnt,
+     >          yzEdgeCnt, xyzCornerCnt
+
+      LOGICAL   xFace, yFace, zFace
 
       ! Projection variables
       REAL*8    wsum, dSQl, dSQi, dist, CellVol, GaussianConst,
@@ -340,6 +346,7 @@
             xFace = .FALSE.
             yFace = .FALSE.
             zFace = .FALSE.
+
             xp = ppiclf_y(PPICLF_JX,i)
             yp = ppiclf_y(PPICLF_JY,i)
             zp = ppiclf_y(PPICLF_JZ,i) 
@@ -361,6 +368,7 @@
             T_truth(i) = 3 + COS(2*PI*x_norm) +
      >                      COS(2*PI*y_norm) +
      >                      COS(2*PI*z_norm)
+
             i_err = ABS(ABS(ppiclf_rprop(PPICLF_R_JT,i))
      >                     - ABS(T_truth(i)))
             p_err = i_err/ABS(T_truth(i))*100
@@ -409,16 +417,73 @@
           CLOSE(UNIT=300)
         END IF
         CALL MPI_BARRIER(icomm,ierr)
+        ! Percent Error Sums
         CALL MPI_Allreduce(totErr,totErr,1,MPI_DOUBLE,
      >                                        MPI_SUM,iComm,ierr)
-        CALL MPI_Allreduce(numErr,numErr,1,MPI_DOUBLE,
+        CALL MPI_Allreduce(InteriorErr,InteriorErr,1,MPI_DOUBLE,
+     >                                        MPI_SUM,iComm,ierr)
+
+        CALL MPI_Allreduce(xFaceErr,xFaceErr,1,MPI_DOUBLE,
+     >                                        MPI_SUM,iComm,ierr)
+
+        CALL MPI_Allreduce(yFaceErr,yFaceErr,1,MPI_DOUBLE,
+     >                                        MPI_SUM,iComm,ierr)
+
+        CALL MPI_Allreduce(zFaceErr,zFaceErr,1,MPI_DOUBLE,
+     >                                        MPI_SUM,iComm,ierr)
+
+        CALL MPI_Allreduce(xyEdgeErr,xyEdgeErr,1,MPI_DOUBLE,
+     >                                        MPI_SUM,iComm,ierr)
+
+        CALL MPI_Allreduce(xzEdgeErr,xzEdgeErr,1,MPI_DOUBLE,
+     >                                        MPI_SUM,iComm,ierr)
+
+        CALL MPI_Allreduce(yzEdgeErr,yzEdgeErr,1,MPI_DOUBLE,
+     >                                        MPI_SUM,iComm,ierr)
+
+        CALL MPI_Allreduce(xyzCornerErr,xyzCornerErr,1,MPI_DOUBLE,
+     >                                        MPI_SUM,iComm,ierr)
+        ! Counter MPI Sums
+        CALL MPI_IAllreduce(totCnt,totCnt,1,MPI_INTEGER4,
+     >                                        MPI_SUM,iComm,ierr)
+        CALL MPI_IAllreduce(InteriorCnt,InteriorCnt,1,MPI_INTEGER4,
+     >                                        MPI_SUM,iComm,ierr)
+        CALL MPI_IAllreduce(xFaceCnt,xFaceCnt,1,MPI_INTEGER4,
+     >                                        MPI_SUM,iComm,ierr)
+        CALL MPI_IAllreduce(yFaceCnt,yFaceCnt,1,MPI_INTEGER4,
+     >                                        MPI_SUM,iComm,ierr)
+        CALL MPI_IAllreduce(zFaceCnt,zFaceCnt,1,MPI_INTEGER4,
+     >                                        MPI_SUM,iComm,ierr)
+        CALL MPI_IAllreduce(xyEdgeCnt,xyEdgeCnt,1,MPI_INTEGER4,
+     >                                        MPI_SUM,iComm,ierr)
+        CALL MPI_IAllreduce(xzEdgeCnt,xzEdgeCnt,1,MPI_INTEGER4,
+     >                                        MPI_SUM,iComm,ierr)
+        CALL MPI_IAllreduce(yzEdgeCnt,yzEdgeCnt,1,MPI_INTEGER4,
+     >                                        MPI_SUM,iComm,ierr)
+        CALL MPI_IAllreduce(xyzCornerCnt,xyzCornerCnt,1,MPI_INTEGER4,
      >                                        MPI_SUM,iComm,ierr)
         CALL MPI_BARRIER(icomm,ierr)
         ! Print Bin Data
         IF(nid .EQ. 0) THEN
           PRINT*,'Average Interpolation Error for all particles:'
-     >           ,totErr/numErr
-        END IF
+     >           ,totErr/totCnt
+          PRINT*,'Average Interpolation Error Interior particles:'
+     >           ,InteriorErr/InteriorCnt
+          PRINT*,'Average Interpolation Error xFace particles:'
+     >           ,xFaceErr/xFaceCnt
+          PRINT*,'Average Interpolation Error yFace particles:'
+     >           ,yFaceErr/yFaceCnt
+          PRINT*,'Average Interpolation Error zFace particles:'
+     >           ,zFaceErr/zFaceCnt
+          PRINT*,'Average Interpolation Error xyEdge particles:'
+     >           ,xyEdgeErr/xyEdgeCnt
+          PRINT*,'Average Interpolation Error xzEdge particles:'
+     >           ,xzEdgeErr/xzEdgeCnt
+          PRINT*,'Average Interpolation Error yzEdge particles:'
+     >           ,yzEdgeErr/yzEdgeCnt
+          PRINT*,'Average Interpolation Error xyzCorner particles:'
+     >           ,xyzCornerErr/xyzCornerCnt
+         END IF
         CALL MPI_BARRIER(icomm,ierr)
 
 ! Print Projection Results
