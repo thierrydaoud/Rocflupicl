@@ -364,8 +364,46 @@
             i_err = ABS(ABS(ppiclf_rprop(PPICLF_R_JT,i))
      >                     - ABS(T_truth(i)))
             p_err = i_err/ABS(T_truth(i))*100
+
             totErr = totErr + p_err 
-            numErr = numErr + 1.0D0
+            totCnt = numErr + 1
+            ! Interior cell particles
+            IF(.NOT. xFace .AND. .NOT. yFace .AND. .NOT. zFace) THEN
+              InteriorErr = InteriorErr + p_err
+              InteriorCnt = InteriorCnt + 1
+
+            ! Single Face cell particles
+            ELSE IF(xFace .AND. .NOT. yFace .AND. .NOT. zFace) THEN
+              xFaceErr = xFaceErr + p_err
+              xFaceCnt = xFaceCnt + 1
+            ELSE IF(.NOT. xFace .AND. yFace .AND. .NOT. zFace) THEN
+              yFaceErr = yFaceErr + p_err
+              yFaceCnt = yFaceCnt + 1
+            ELSE IF(.NOT. xFace .AND. .NOT. yFace .AND. zFace) THEN
+              zFaceErr = zFaceErr + p_err
+              zFaceCnt = zFaceCnt + 1
+
+            ! Two Face (Edge) cell particles
+            ELSE IF(xFace .AND. yFace .AND. .NOT. zFace) THEN
+              xyEdgeErr = xyEdgeErr + p_err
+              xyEdgeCnt = xyEdgeCnt + 1
+            ELSE IF(xFace .AND. .NOT. yFace .AND. zFace) THEN
+              xzEdgeErr = xzEdgeErr + p_err
+              xzEdgeCnt = xzEdgeCnt + 1
+            ELSE IF(.NOT. xFace .AND. yFace .AND. zFace) THEN
+              yzEdgeErr = yzEdgeErr + p_err
+              yzEdgeCnt = yzEdgeCnt + 1
+
+            ! Three Face (Corner) cell particles
+            ELSE IF(xFace .AND. yFace .AND. zFace) THEN
+              xyzCornerErr = xyzCornerErr + p_err
+              xyzCornerCnt = xyzCornerCnt + 1
+            ! Something went wrong if not caught yet
+            ELSE
+              PRINT*,'Interp boolean error. Particle not',
+     >               'counted right. Postion:', xp, yp, zp
+            END IF
+
             WRITE(300,*) i, xp, yp, zp, i_err, p_err,'%'
           END DO
           CLOSE(UNIT=300)
