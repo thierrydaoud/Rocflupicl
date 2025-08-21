@@ -30,10 +30,10 @@
      >          yFaceErr, zFaceErr, xyEdgeErr, xzEdgeErr, yzEdgeErr,
      >          xyzCornerErr, totCnt, InteriorCnt,
      >          xFaceCnt, yFaceCnt, zFaceCnt, xyEdgeCnt, xzEdgeCnt,
-     >          yzEdgeCnt, xyzCornerCnt
+     >          yzEdgeCnt, xyzCornerCnt, CalcErr, 
 
       INTEGER*4 particlesPerCell(3), particlesPerProc, npart_local,
-     >          totalParticles, ip, np(3)
+     >          totalParticles, ip, np(3), part_cell(3)
 
       LOGICAL   xFace, yFace, zFace
 
@@ -63,17 +63,17 @@
       ! Create rectangular grid
       gridDomain(1,1) = 0.0D0 !x domain min
       gridDomain(2,1) = 1.0D0 !x domain max
-      nCells(1)       = 15    !Number of x cells in domain
+      nCells(1)       = 5    !Number of x cells in domain
       gridDX(1) = (gridDomain(2,1) - gridDomain(1,1))/REAL(nCells(1))
 
       gridDomain(1,2) = 0.0D0 !y domain min
       gridDomain(2,2) = 1.0D0 !y domain max     
-      nCells(2)       = 15    !Number of y cells in domain
+      nCells(2)       = 5    !Number of y cells in domain
       gridDX(2) = (gridDomain(2,2) - gridDomain(1,2))/REAL(nCells(2))
 
       gridDomain(1,3) = 0.0D0 !z domain min
       gridDomain(2,3) = 1.0D0 !z domain max     
-      nCells(3)       = 15    !Number of z cells in domain
+      nCells(3)       = 5    !Number of z cells in domain
       gridDX(3) = (gridDomain(2,3) - gridDomain(1,3))/REAL(nCells(3))
 
       IF(nCells(1)*nCells(2)*nCells(3) .GT. PPICLF_LEE) THEN
@@ -126,8 +126,6 @@
         CLOSE(UNIT=1)
       END IF
 
-      IF(nid .EQ. 0) PRINT*, 'Total Grid Cells:',
-     >                       nCells(1)*nCells(2)*nCells(3)
       CALL MPI_BARRIER(icomm, ierr)
 
       ! Find cell filter search distance
@@ -180,9 +178,9 @@
 
 ! Particle Setup   
 !********************************************************************** 
-      particlesPerCell(1) = 3.0 ! in x dimension
-      particlesPerCell(2) = 3.0 ! in y dimension
-      particlesPerCell(3) = 3.0 ! in z dimension
+      particlesPerCell(1) = 2.0 ! in x dimension
+      particlesPerCell(2) = 2.0 ! in y dimension
+      particlesPerCell(3) = 2.0 ! in z dimension
 
       ! set particle diameter to prevent overlapping
       pdia  = MIN(dx_min(1)/ParticlesPerCell(1),
@@ -240,7 +238,6 @@
       CALL MPI_BARRIER(icomm, ierr)
 
       IF(nid .EQ. 0) PRINT*,'Total Particles:',totalParticles 
-      PRINT*,'Proc, local particles',nid,npart_local
 
       p_part_r = 0.0D0
       rhop   = 7730.0D0 ! steel particles
@@ -259,7 +256,7 @@
         p_part_r(PPICLF_R_JSPL,i) = 1.0D0 ! Super Particle Loading 
       END DO
 
-      nndistTemp  = 4.0D0*pdia
+      nndistTemp  = 1.3D0*pdia
       CALL MPI_Allreduce(nndistTemp,nndist,1,MPI_DOUBLE,
      >                                      MPI_MAX,iComm,ierr)
 
@@ -303,39 +300,70 @@
         CALL ppiclf_comm_InitOverlapGrid(proc_ncells,p_grid)
         CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JT,tpF)
         CALL ppiclf_solve_InitSolve
-        IF(nid .EQ. 1) THEN
-          PRINT*, ppiclf_n_bins(1), ppiclf_n_bins(2), ppiclf_n_bins(3)
-        END IF
         CALL MPI_BARRIER(icomm,ierr)
         DO ie = 1,proc_ncells
           CALL ppiclf_solve_GetProFld(ie,1,feedback1(ie))
           CALL ppiclf_solve_GetProFld(ie,2,feedback2(ie))
         END DO
         CALL MPI_BARRIER(icomm,ierr)
+        PRINT*, 'Number of ghost particles:',ppiclf_npart_gp
+! Particle to Particle Nearest Neighbor Test
+!**********************************************************************
+        ! This only prints out particle to particle
+        ! nearest neighbor results since PPICLF_TEST = .TRUE.
+        CALL ppiclf_user_SetYdot
+        ! This finds true solution
+        IF(nproc .EQ. 1) THEN
+          DO i = 1,ppiclf_npart
+            DO j = 1,ppiclf_npart
+              IF(i .EQ. j) CYCLE
+              dSQi = 0.0D0
+              dSQl = 0.0D0
+              DO l = 1,3
+                IF(ppiclf_linperiodic(l) .AND. 
+     >                               ppiclf_EqualDomain(l)) THEN
+                  dSQl = MIN( (ppiclf_y(l,i) - ppiclf_y(l,j))**2, 
+     >             ( (gridDomain(2,l) - gridDomain(1,l)) -
+     >                   ABS(ppiclf_y(l,i) - ppiclf_y(l,j)) )**2 )
+                ELSE
+                  dSQl = (ppiclf_y(l,i) - ppiclf_y(l,j))**2
+                END IF
+                dSQi = dSQi + dSQl
+              END DO !l
+              IF(dSQi .GT. ppiclf_nndist**2) CYCLE
+              PRINT*,'SOL Particles close',i,j
+              PRINT*, 'x:', ppiclf_y(1,i), ppiclf_y(1,j)
+              PRINT*, 'y:', ppiclf_y(2,i), ppiclf_y(2,j)
+              PRINT*, 'z:', ppiclf_y(3,i), ppiclf_y(3,j)
+            END DO
+          END DO
+        END IF
+        CALL MPI_BARRIER(icomm,ierr)
 
 ! Print Interpolation results 
 !**********************************************************************
-          ! Zero out errors and counters
-          totErr       = 0.0D0
-          InteriorErr  = 0.0D0
-          xFaceErr     = 0.0D0  
-          yFaceErr     = 0.0D0    
-          zFaceErr     = 0.0D0    
-          xyEdgeErr    = 0.0D0    
-          xzEdgeErr    = 0.0D0  
-          yzEdgeErr    = 0.0D0   
-          xyzCornerErr = 0.0D0    
-          totCnt       = 0.0D0          
-          InteriorCnt  = 0.0D0          
-          xFaceCnt     = 0.0D0          
-          yFaceCnt     = 0.0D0          
-          zFaceCnt     = 0.0D0          
-          xyEdgeCnt    = 0.0D0          
-          xzEdgeCnt    = 0.0D0          
-          yzEdgeCnt    = 0.0D0          
-          xyzCornerCnt = 0.0D0          
+        ! Zero out errors and counters
+        totErr       = 0.0D0
+        InteriorErr  = 0.0D0
+        xFaceErr     = 0.0D0  
+        yFaceErr     = 0.0D0    
+        zFaceErr     = 0.0D0    
+        xyEdgeErr    = 0.0D0    
+        xzEdgeErr    = 0.0D0  
+        yzEdgeErr    = 0.0D0   
+        xyzCornerErr = 0.0D0    
+        totCnt       = 0.0D0          
+        InteriorCnt  = 0.0D0          
+        xFaceCnt     = 0.0D0          
+        yFaceCnt     = 0.0D0          
+        zFaceCnt     = 0.0D0          
+        xyEdgeCnt    = 0.0D0          
+        xzEdgeCnt    = 0.0D0          
+        yzEdgeCnt    = 0.0D0          
+        xyzCornerCnt = 0.0D0          
   
         IF(ppiclf_npart .GT. 0) THEN
+
           filename = TRIM(testcase) // '_' // 'Interpolation_Proc_'
      >                  // TRIM(procString) // '.txt'
           OPEN(UNIT=300,FILE=TRIM(filename), STATUS='REPLACE',
@@ -357,7 +385,72 @@
      >          (gridDomain(2,2) - yp) .LT. gridDX(2) ) yFace = .TRUE.
             IF( (zp - gridDomain(1,3)) .LT. gridDX(3) .OR.
      >          (gridDomain(2,3) - zp) .LT. gridDX(3) ) zFace = .TRUE.
+            ! First find "calculation error", based on a inverse distance 
+            ! interpolation with surrounding cells (~27 cells)
+            ! This assumes a constant grid dx per direction!!
+            part_cell(1) = CEILING(xp/gridDX(1))
+            part_cell(2) = CEILING(yp/gridDX(2))
+            part_cell(3) = CEILING(zp/gridDX(3))
+            xstart = -1
+            xend   = 1
+            IF(.NOT.ppiclf_linperiodic(1) .AND. .NOT. 
+     >                               ppiclf_EqualDomain(1)) THEN
 
+              IF(part_cell(1) .LE. 1)         xstart = 0
+              IF(part_cell(1) .GE. nCells(1)) xend   = 0 
+            END IF
+            ystart = -1
+            yend   = 1
+            IF(.NOT.ppiclf_linperiodic(2) .AND. .NOT. 
+     >                               ppiclf_EqualDomain(2)) THEN
+
+              IF(part_cell(2) .LE. 1)         ystart = 0
+              IF(part_cell(2) .GE. nCells(2)) yend   = 0 
+            END IF
+            zstart = -1
+            zend   = 1
+            IF(.NOT.ppiclf_linperiodic(3) .AND. .NOT. 
+     >                               ppiclf_EqualDomain(3)) THEN
+
+              IF(part_cell(3) .LE. 1)         zstart = 0
+              IF(part_cell(3) .GE. nCells(3)) zend   = 0 
+            END IF
+            weightCell = 0.0D0
+            weightTot  = 0.0D0
+            DO loopcount = 1,2
+              icount = 0
+              DO j = xstart,xend
+                DO k = ystart,yend
+                  DO l = zstart,zend
+                    icount = icount + 1
+                    IF(loopcount .EQ. 1) THEN
+                      xcell  = (part_cell(1) - 0.5D0 + j)*gridDX(1) 
+                      ycell  = (part_cell(2) - 0.5D0 + k)*gridDX(2)
+                      zcell  = (part_cell(3) - 0.5D0 + l)*gridDX(3)
+                      IF(xcell .LT. 
+                      weightCell(icount) = 1.0D0/(SQRT((xp-xcell)**2 + 
+     >                                                 (yp-ycell)**2 +
+     >                                                 (zp-zcell)**2))
+                      weightTot  = weightCell(icount) + weightTot 
+                    END IF
+                    IF(loopcount .EQ. 2) THEN
+                      x_norm  = (xcell - gridDomain(1,1))
+     >                          /(gridDomain(2,1)-gridDomain(1,1))
+                      y_norm  = (ycell - gridDomain(1,2))
+     >                          /(gridDomain(2,2)-gridDomain(1,2))
+                      z_norm  = (zcell - gridDomain(1,3))
+     >                          /(gridDomain(2,3)-gridDomain(1,3))
+                      T_truth = COS(2*PI*x_norm) +
+     >                             COS(2*PI*y_norm) +
+     >                             COS(2*PI*z_norm)
+                      Tcalc = (weightCell(icount)/weightTot)*T_truth 
+                    END IF
+                  END DO
+                END DO
+              END DO
+            END DO
+            calcErr = ABS(ABS(ppiclf_rprop(PPICLF_R_JT,i))-ABS(Tcalc))
+            ! Find ppiclF interpolation error vs analytical funciton
             x_norm = (xp - gridDomain(1,1))
      >              /(gridDomain(2,1)-gridDomain(1,1))
             y_norm = (yp - gridDomain(1,2))
@@ -373,8 +466,7 @@
 
             i_err = ABS(ABS(ppiclf_rprop(PPICLF_R_JT,i))
      >                     - ABS(T_truth(i)))
-            p_err = i_err/ABS(T_truth(i))*100
-
+            p_err = i_err!/ABS(T_truth(i))*100
             totErr = totErr + p_err 
             totCnt = totCnt + 1.0D0
             ! Interior cell particles
@@ -480,7 +572,6 @@
      >           ,xyzCornerErr/xyzCornerCnt
          END IF
         CALL MPI_BARRIER(icomm,ierr)
-
 ! Print Projection Results
 !**********************************************************************
         ! Find true projection result
