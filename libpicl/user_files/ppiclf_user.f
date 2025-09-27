@@ -156,6 +156,37 @@
 ! Code:
 !
 
+!
+!-----------------------------------------------------------------------
+! Avery added 10/10/2024 - Map particles to subbins if collisional force, 
+! Briney Added Mass force, or QS fluctation force is flagged
+!
+#ifdef TEST
+      sbNearest_flag = 1
+      collisional_flag = 1
+#endif
+      !nearest neighbor search is used for col, am_flag 2, qs_fluct
+      if (sbNearest_flag == 1) then
+
+         if ((am_flag==2).or.(collisional_flag>=1)
+     >          .or.(qs_fluct_flag>=1)) then
+
+            call ppiclf_user_subbinMap(i_Bin, n_SBin, tot_SBin 
+     >                               ,SBin_counter ,SBin_map)
+
+         endif ! Collisions, QS Fluct, or Briney AM flags on
+      endif ! end sbNearest_flag = 1
+      ! PICL_TEST only tests the nearest neighbor search in this
+      ! subroutine. That is why subbin mapping is first code
+      ! executed in this subroutine.
+#ifdef TEST
+      DO i = 1,ppiclf_npart
+        CALL ppiclf_solve_NearestNeighborSB(
+     >         i,tot_SBin,SBin_counter,SBin_map,n_SBin,i_Bin)
+       END DO
+      RETURN
+#endif
+
       icallb = icallb + 1
       nstage = 3
       istage = mod(icallb,nstage)
@@ -230,58 +261,6 @@
 !
 !-----------------------------------------------------------------------
 !
-
-!
-!-----------------------------------------------------------------------
-! Avery added 10/10/2024 - Map particles to subbins if collisional force, 
-! Briney Added Mass force, or QS fluctation force is flagged
-!
-      !nearest neighbor search is used for col, am_flag 2, qs_fluct
-      if (sbNearest_flag == 1) then
-
-         if ((am_flag==2).or.(collisional_flag>=1)
-     >          .or.(qs_fluct_flag>=1)) then
-
-            call ppiclf_user_subbinMap(i_Bin, n_SBin, tot_SBin 
-     >                               ,SBin_counter ,SBin_map)
-
-         endif ! Collisions, QS Fluct, or Briney AM flags on
-      
-         ! Print out relevant information about subbin
-         if (ppiclf_nid==0) then
-         if (iStage==1) then
-
-         nbin_total = ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3)
-         nsubbin_size =
-     >     (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist)
-     >        + 1) *
-     >     (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)
-     >        + 1) *
-     >     (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist)
-     >       + 1) 
-
-!         if (ppiclf_time .EQ. 0.0) then
-!         write(*,*) 'Subbin Method used!'
-!         write(6,*) 'SUBBIN ', 
-!     >     ppiclf_time,
-!     >     ppiclf_bins_dx(1:3),
-!     >     nsubbin_size,
-!     >     tot_SBin,n_SBin(1:3),
-!     >     ppiclf_npart,ppiclf_npart_gp,
-!     >     nsubbin_size*(ppiclf_npart+ppiclf_npart_gp),
-!     >     ' GB: ',nsubbin_size*
-!     >             (ppiclf_npart+ppiclf_npart_gp)*4/1e9
-!         write(6,*) 'Viscous Unsteady',
-!     >     ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-!     >     ppiclf_dt
-!
-!         endif ! end ppiclf_time = 0
-
-         endif ! end iStage = 1
-         endif ! end ppiclf_nid = 0
-
-      endif ! end sbNearest_flag = 1
-
       ! Set initial max values - must be done npart loop
       if (ppiclf_debug >= 1) then
          phimax    = 0.d0

@@ -471,7 +471,7 @@ ELSE
    END IF
 END IF ! global%restartFromScratch
 
-! User sets up overlap mesh:
+! User sets up overlap grid:
 nCells = pRegion%grid%nCells
  
 ALLOCATE(xGrid(2,2,2,nCells),STAT=errorFlag)
@@ -636,8 +636,8 @@ IF(((ang_per_flag.eq.1) .and. (x_per_flag.eq.1 .or. y_per_flag.eq.1)) .or. &
     CALL ErrorStop(global,ERR_PICL_INVALID_PERIODICITY,__LINE__,&
       'Wrong periodicity choices for ppiclF')
 END IF 
-! Creates OverlapMesh and Calls Init Solve
-CALL ppiclf_comm_InitOverlapMesh(nCells,rocGrid)
+! Creates OverlapGrid and Calls Init Solve
+CALL ppiclf_comm_InitOverlapGrid(nCells,rocGrid)
 
 INQUIRE(FILE='filein.vtk', EXIST=wall_exists)
 IF(wall_exists) THEN

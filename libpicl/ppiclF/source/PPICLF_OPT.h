@@ -6,6 +6,7 @@ c Particle options
      >       ,PPICLF_LSUBSUBBIN,PPICLF_EQUALDOMAIN(3)
      >       ,PPICLF_LINPERIODIC(3), PPICLF_REMOVE_PARTICLE
      >       ,PPICLF_BINCHANGED, PPICLF_PRINTBINVTU
+     >       ,PPICLF_READYTOSOLVE
       COMMON /PPICLF_OPT_PARAM_L/ PPICLF_RESTART, PPICLF_OVERLAP
      >                           ,PPICLF_LCOMM, PPICLF_LINIT
      >                           ,PPICLF_LINTP
@@ -16,6 +17,7 @@ c Particle options
      >                           ,PPICLF_REMOVE_PARTICLE
      >                           ,PPICLF_BINCHANGED
      >                           ,PPICLF_PRINTBINVTU
+     >                           ,PPICLF_READYTOSOLVE
       DATA PPICLF_LCOMM /.false./
       DATA PPICLF_RESTART /.false./
 
@@ -28,10 +30,10 @@ c Particle options
      >                           ,PPICLF_IENDIAN, PPICLF_IWALLM
       REAL*8 PPICLF_FILTER(3), PPICLF_RK3COEF(3,3),
      >       PPICLF_DT, PPICLF_TIME, PPICLF_NNDIST,
-     >       PPICLF_INTERP_DCHK(3)
+     >       PPICLF_INTERP_DCHK(3), PPICLF_TOTNNDIST(PPICLF_LPART)
       REAL*8 PPICLF_RK3ARK(3)
       COMMON /PPICLF_OPT_PARAM_R/ PPICLF_FILTER
      >                           ,PPICLF_RK3COEF, PPICLF_DT
      >                           ,PPICLF_TIME, PPICLF_NNDIST
-     >                           ,PPICLF_RK3ARK
+     >                           ,PPICLF_RK3ARK, PPICLF_TOTNNDIST
      >                           ,PPICLF_INTERP_DCHK

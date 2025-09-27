@@ -21,8 +21,11 @@
       ppiclf_xdrange(2,1) = xpmax
       x_per_flag = xi1
       IF(x_per_flag.EQ.1) THEN
-        IF(xpmin .ge. xpmax) CALL ppiclf_exittr('PeriodicX 
-     >      must have xmin < xmax$',xpmin,0)
+        IF(xpmin .ge. xpmax) THEN
+          PRINT*,'Failed in Initialize.'
+          PRINT*,'xpMin > xpMax'
+          CALL ppiclf_exittr('PeriodicX must have xmin < xmax$',xpmin,0)
+        END IF
         ppiclf_linperiodic(1) = .TRUE.
       END IF
 
@@ -31,8 +34,11 @@
       ppiclf_xdrange(1,2) = ypmin
       ppiclf_xdrange(2,2) = ypmax
       IF(y_per_flag.EQ.1) THEN
-        IF(ypmin .ge. ypmax) CALL ppiclf_exittr('PeriodicY 
-     >     must have ymin < ymax$',ypmin,0)
+        IF(ypmin .ge. ypmax) THEN
+          PRINT*,'Failed in Initialize.'
+          PRINT*,'ypMin > ypMax'
+          CALL ppiclf_exittr('PeriodicX must have ymin < ymax$',ypmin,0)
+        END IF
         ppiclf_linperiodic(2) = .TRUE.
       END IF
 
@@ -41,8 +47,11 @@
       ppiclf_xdrange(1,3) = zpmin
       ppiclf_xdrange(2,3) = zpmax
       IF(z_per_flag.EQ.1) THEN
-        IF(zpmin .ge. zpmax) CALL ppiclf_exittr('PeriodicZ 
-     >     must have zmin < zmax$',zpmin,0)
+        IF(zpmin .ge. zpmax) THEN
+          PRINT*,'Failed in Initialize.'
+          PRINT*,'ypMin > ypMax'
+          CALL ppiclf_exittr('PeriodicZ must have zmin < zmax$',zpmin,0)
+        END IF
         ppiclf_linperiodic(3) = .TRUE.
       END IF
 
@@ -195,12 +204,13 @@
       ppiclf_dt     = 0.0d0
       ppiclf_time   = 0.0d0
 
-      ppiclf_overlap     = .FALSE.
-      ppiclf_linit       = .FALSE.
-      ppiclf_lintp       = .FALSE.
-      ppiclf_lproj       = .FALSE.
-      ppiclf_binchanged  = .TRUE.
-      ppiclf_printbinvtu = .TRUE.
+!      ppiclf_readytosolve = .FALSE.
+      ppiclf_overlap      = .FALSE.
+      ppiclf_linit        = .FALSE.
+      ppiclf_lintp        = .FALSE.
+      ppiclf_lproj        = .FALSE.
+      ppiclf_binchanged   = .TRUE.
+      ppiclf_printbinvtu  = .TRUE.
       IF(PPICLF_INTERP .EQ. 1)  ppiclf_lintp = .TRUE.
       IF(PPICLF_PROJECT .EQ. 1) ppiclf_lproj = .TRUE.
 
@@ -414,7 +424,10 @@
      >         - ppiclf_nndist))/ppiclf_nndist)
       END DO
       tempSB = iSBin(1) + iSBin(2)*SBn(1) + iSBin(3)*SBn(1)*SBn(2)
-      
+#ifdef TEST
+      PARTICLE_NN(i) = 0 
+      PPICLF_TOTNNDIST(i) = 0.0D0
+#endif
       ! Loop through real particles
       DO iSB = 1,3     !to look at -1,current,+1 x-dir subbins
         DO jSB = 1,3   !to look at -1,current,+1 x-dir subbins
@@ -436,6 +449,12 @@
                 IF (zdistSQ .GT. distSQ) CYCLE
                 dist_total = dist_total+zdistSQ
                 IF (dist_total .GT. distSQ) CYCLE
+#ifdef TEST
+                PARTICLE_NN(i) = PARTICLE_NN(i) + 1
+                PPICLF_TOTNNDIST(i) = PPICLF_TOTNNDIST(i) + dist_total
+                CYCLE !Don't want to call EvalNN. Just testing
+                      ! nneighbor search
+#endif
                 CALL ppiclf_user_EvalNearestNeighbor(i,j
      >                                   ,ppiclf_cp_map(1,i)
      >                                   ,ppiclf_cp_map(1+PPICLF_LRS,i)
@@ -456,6 +475,12 @@
                 dist_total = dist_total+zdistSQ
                 END IF
                 IF (dist_total .GT. distSQ) CYCLE
+#ifdef TEST
+                PARTICLE_NN(i) = PARTICLE_NN(i) + 1
+                PPICLF_TOTNNDIST(i) = PPICLF_TOTNNDIST(i) + dist_total
+                CYCLE !Don't want to call EvalNN. Just testing
+                      ! nneighbor search
+#endif
                 jp = -1*j
                 CALL ppiclf_user_EvalNearestNeighbor(i,jp
      >                                 ,ppiclf_cp_map(1,i)
@@ -468,8 +493,6 @@
         END DO !kSB
       END DO !jSB
       END DO !iSB
-
-
       istride = ppiclf_ndim
       do j=1,ppiclf_nwall
 
@@ -866,43 +889,6 @@ c----------------------------------------------------------------------
       ! evaluate ydot
       CALL ppiclf_solve_SetYdot
 
-! AVERY DEBUG      
-!      fxsum = 0.0D0
-!      fysum = 0.0D0
-!      fzsum = 0.0D0
-!      fxabssum = 0.0D0
-!      fyabssum = 0.0D0
-!      fzabssum = 0.0D0
-!      DO i = 1,ppiclf_npart
-!        fxsum = ppiclf_feedbk(2,i) + fxsum
-!        fzsum = ppiclf_feedbk(3,i) + fysum
-!        fysum = ppiclf_feedbk(4,i) + fzsum
-!        fxabssum = ABS(ppiclf_feedbk(2,i)) + fxabssum
-!        fyabssum = ABS(ppiclf_feedbk(3,i)) + fyabssum
-!        fzabssum = ABS(ppiclf_feedbk(4,i)) + fzabssum
-!      END DO
-!
-!      fxsum = ppiclf_glsum(fxsum,1)
-!      fzsum = ppiclf_glsum(fysum,1)
-!      fysum = ppiclf_glsum(fzsum,1)
-!      fxabssum = ppiclf_glsum(fxabssum,1)
-!      fyabssum = ppiclf_glsum(fyabssum,1)           
-!      fzabssum = ppiclf_glsum(fzabssum,1)     
-!
-!      IF(ppiclf_nid .EQ. 0 . AND. ppiclf_time .LT. 10*ppiclf_dt) THEN
-!        WRITE(900,*) 'Time, Sum of fx:', ppiclf_time, fxsum
-!        WRITE(900,*) 'Time, ABS sum of fx:', ppiclf_time,fxabssum 
-!
-!        WRITE(900,*) 'Time, Sum of fy:', ppiclf_time, fysum
-!        WRITE(900,*) 'Time, ABS sum of fy:', ppiclf_time,fyabssum 
-!
-!        WRITE(900,*) 'Time, Sum of fz:', ppiclf_time, fzsum
-!        WRITE(900,*) 'Time, ABS sum of fz:', ppiclf_time,fzabssum
-!        WRITE(900,*) '-------------------------------------------' 
-!      END IF
-!AVERY DEBUG
-
-
       !Zero out for first stage
       if (istage .EQ. 1) then
         ppiclf_y1 = 0.0D0
@@ -933,6 +919,9 @@ c----------------------------------------------------------------------
           ppiclf_y1(j,i) =  ppiclf_ydot(j,i)
         END DO
       END DO
+      
+!      PPICLF_READYTOSOLVE = .FALSE.
+!      CALL ppiclf_solve_PostSolve
 
       RETURN
       END
@@ -1018,28 +1007,8 @@ c----------------------------------------------------------------------
      >                    ABS(ppiclf_y(j,i) - ppiclf_xdrange(2,j))
           END IF
         END DO ! j
-      END IF ! Case 1 
-!
-!! Case 2 - Linear Periodicity in Z-direction only; WITH Anuglar Periodicity
-!      IF((z_per_flag.EQ.1).AND.(ang_per_flag.EQ.1)) THEN
-!
-!        ! particle leaving min. z-periodic face -> move it relative to 
-!        !                                         max z-periodic face
-!        IF(ppiclf_y(3,i).LT.ppiclf_xdrange(1,3)) THEN
-!          ppiclf_y(3,i) = ppiclf_xdrange(2,3) - 
-!     >                  abs(ppiclf_xdrange(1,3) - ppiclf_y(3,i))
-!          EXIT
-!        END IF
-!
-!        ! particle leaving max. z-periodic face -> move it relative to 
-!        !                                         min z-periodic face
-!        IF(ppiclf_y(3,i).GT.ppiclf_xdrange(2,3)) THEN
-!          ppiclf_y(3,i) = ppiclf_xdrange(1,3) + 
-!     >                  abs(ppiclf_y(3,i) - ppiclf_xdrange(2,3))
-!          EXIT
-!        END IF
-!      END IF ! Case 2
-!
+      END IF 
+ 
       RETURN
       END
 !-----------------------------------------------------------------------
@@ -1098,26 +1067,29 @@ c----------------------------------------------------------------------
 !
       INCLUDE "PPICLF"
 ! 
+!      IF(.NOT. PPICLF_READYTOSOLVE)
+!     >  CALL ppiclf_solve_InitSolve
       CALL ppiclf_solve_InitSolve
       CALL ppiclf_user_SetYdot
-
       RETURN
       END
-c----------------------------------------------------------------------
+!----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InitSolve
 !
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 ! 
 ! Internal: 
 ! 
       INTEGER*4 :: i, j, ierr
-
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
       ! bin coordinates changed
       CALL ppiclf_comm_CreateBin
+   
+      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! ppiclf_particleMoved set in FindParticle
       ! ppiclf_particleMoved .EQ. 0 means all particles
@@ -1130,7 +1102,7 @@ c----------------------------------------------------------------------
       END IF
 
       IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
-        CALL ppiclf_comm_MapOverlapMesh
+        CALL ppiclf_comm_MapOverlapGrid
       END IF
 
       IF(ppiclf_overlap) THEN
@@ -1151,6 +1123,58 @@ c----------------------------------------------------------------------
 
       RETURN
       END
+
+!----------------------------------------------------------------------
+
+!      SUBROUTINE ppiclf_solve_PostSolve
+!!
+!      IMPLICIT NONE
+!!
+!      INCLUDE "PPICLF"
+!! 
+!! Internal: 
+!! 
+!      INTEGER*4 :: i, j, ierr
+!
+!      ! ppiclf_binchanged set in CreateBin
+!      ! ppiclf_binchanged .TRUE. means
+!      ! bin coordinates changed
+!      CALL ppiclf_comm_CreateBin
+!   
+!      CALL MPI_BARRIER(ppiclf_comm,ierr)
+!
+!      ! ppiclf_particleMoved set in FindParticle
+!      ! ppiclf_particleMoved .EQ. 0 means all particles
+!      ! stayed in same bin as previous RK Stage.
+!      CALL ppiclf_comm_FindParticle
+!
+!      IF(ppiclf_particleMoved .NE. 0 .OR.
+!     >              ppiclf_binchanged) THEN
+!        CALL ppiclf_comm_MoveParticle
+!      END IF
+!
+!      IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
+!        CALL ppiclf_comm_MapOverlapGrid
+!      END IF
+!
+!      IF(ppiclf_overlap) THEN
+!        ! Interpolate fluid solver grid to particle
+!        CALL ppiclf_solve_InterpParticleGrid
+!        ! Project particle feedback to fluid solver grid
+!        CALL ppiclf_solve_ProjectParticleGrid
+!      END IF
+!
+!!      IF(ppiclf_gprequired) THEN
+!      ! Ghost particles are needed 
+!        CALL ppiclf_comm_CreateGhost
+!        CALL ppiclf_comm_MoveGhost
+!!      END IF
+!
+!      ! Zero collisions 
+!      ppiclf_ydotc = 0.0D0
+!
+!      RETURN
+!      END
 !-----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InterpParticleGrid
 !
@@ -1162,28 +1186,28 @@ c----------------------------------------------------------------------
 !
       INTEGER*4 ierr,j
 !
-      ! Copies Mesh element ID for all Rocflu elements that map
+      ! Copies Grid Cell ID for all Rocflu elements that map
       ! to ppiclf domain for GSLIB Transfer.  This copy is from
-      ! MapOverlapMesh.
+      ! MapOverlapGrid.
       CALL ppiclf_solve_InitInterp
 
       ! Makes array (ppiclf_int_fld_input) of all rprop data
-      ! for mesh elements that map to ppiclf domain.
+      ! for grid cellss that map to ppiclf domain.
       DO j=1,PPICLF_INT_ICNT
          CALL ppiclf_solve_InterpField(j)
       END DO
       
       CALL MPI_BARRIER(ppiclf_comm,ierr) 
 
-      ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Mesh
-      ! elements that map to ppiclf domain.
+      ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
+      ! cells that map to ppiclf domain.
       CALL ppiclf_solve_InterpTupleTransfer
 
       CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
-      CALL ppiclf_solve_ParticleToCellMap
+      CALL ppiclf_solve_SBParticleToCellMap
 
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
@@ -1279,7 +1303,7 @@ c----------------------------------------------------------------------
       ! use the map to take original grid and map to fld which will be
       ! sent to mapped processors
       DO ie=1,ppiclf_nCells_Interp
-         ! iee is the Rocflu element ID from previous MapOverlapMesh
+         ! iee is the Rocflu element ID from previous MapOverlapGrid
          ! subroutine
          ! j is the rprop index
          iee = ppiclf_cell_map_interp(1,ie) 
@@ -1373,7 +1397,7 @@ c----------------------------------------------------------------------
      >                       /ppiclf_interp_dchk(2)) + 1) *
      > (FLOOR((ppiclf_bins_dx(3) + 2*ppiclf_interp_dchk(3))
      >                       /ppiclf_interp_dchk(3)) + 1) - 1)
-     > ,ppiclf_nCells_Interp*2)
+     > ,ppiclf_nCells_Interp)
       INTEGER*4  SBin_counter( 0 : (
      > (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))
      >                       /ppiclf_interp_dchk(1)) + 1) *
@@ -1382,7 +1406,8 @@ c----------------------------------------------------------------------
      > (FLOOR((ppiclf_bins_dx(3) + 2*ppiclf_interp_dchk(3))
      >                       /ppiclf_interp_dchk(3)) + 1) - 1))
        INTEGER*4 n_SBin(3), tot_SBin, i_SBin(3), iTemp_SBin(3),
-     >          temp_SBin, iSB, jSB, kSB, loopSB, i_count, i_Bin(3) 
+     >           temp_SBin, iSB, jSB, kSB, loopSB, i_count,
+     >           firstSB(3), lastSB(3)  
       REAL*8    bin_Min(3), x_range(3), size_SBin(3)
       !***************************************************************
 
@@ -1398,17 +1423,22 @@ c----------------------------------------------------------------------
  
       DO l = 1,3
         binblength(l) = ppiclf_binb(2*l) - ppiclf_binb((2*l)-1)
-        i_Bin(l) = ppiclf_iprop((4+l),1)
         bin_Min(l) = ppiclf_bin_pos(1,l) - ppiclf_interp_dchk(l)
         n_SBin(l) = FLOOR((ppiclf_bins_dx(l) + 2*ppiclf_interp_dchk(l))
      >                                     / ppiclf_interp_dchk(l)) + 1 
+!        PRINT*,'dim, nSB',l,n_SBin(l)
         dSQchk(l) = ppiclf_interp_dchk(l)**2
+        ! SB at bin max boundary
+        firstSB(l) = FLOOR((ppiclf_bin_pos(1,l) - bin_Min(l))
+     >               / ppiclf_interp_dchk(l))
+        ! SB at bin min boundary
+        lastSB(l)  =  FLOOR((ppiclf_bin_pos(2,l) - bin_Min(l))
+     >               / ppiclf_interp_dchk(l))
       END DO
  
-      tot_SBin = n_SBin(1)*n_SBin(2)*n_SBin(3)
       SBin_Counter = 0
-
-      
+      tot_SBin = n_SBin(1)*n_SBin(2)*n_SBin(3)
+     
       ! Loop through all elements to map to subbins.
       ! Particles don't need to be mapped, since the particle
       ! subbin is determined in following loop.
@@ -1417,47 +1447,85 @@ c----------------------------------------------------------------------
           i_SBin(l) = FLOOR((ppiclf_picl_grid(l,ie) - 
      >                bin_Min(l)) / ppiclf_interp_dchk(l))
         END DO
-
+        DO l = 1,3
+          ! This takes care of linear periodicity for multiple bins in 
+          ! a given direction
+          IF(ppiclf_n_bins(l) .GT. 1) THEN
+!*** need to adjust for angular periodicity ***
+            IF(ppiclf_linperiodic(l) .AND. ppiclf_EqualDomain(l)) THEN
+              IF(i_SBin(l) .LT. 0)   
+     >                                       i_SBin(l) = n_SBin(l) - 2
+              IF(i_SBin(l) .GT. (n_SBin(l) - 1)) 
+     >                                                   i_SBin(l) = 1
+            ELSE 
+              IF(i_SBin(l) .LT. 0)               
+     >                                                   i_SBin(l) = 0
+              IF(i_SBin(l) .GT. (n_SBin(l) - 1)) 
+     >                                       i_SBin(l) = n_SBin(l) - 1
+            END IF
+          END IF
+        END DO !l
         ! In the i,j,k loops below, 0 takes care of non-periodic mapping
         ! and 1 takes care of periodic mapping.  If a cell is in corner,
         ! it'll be mapped to 2*2*2=8 subbins.
 !*** need to adjust for angular periodicity ***
         DO i = 0,1
-          IF(i .EQ. 1) THEN 
-            IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)) THEN
-              IF(i_SBin(1) .LE. 0) iTemp_SBin(1) = n_SBin(1) - 1
-              IF(i_SBin(1) .GE. n_SBin(1) - 1) iTemp_SBin(1) = 0
-            ELSE
+          IF(i .EQ. 0) THEN
+            iTemp_SBin(1) = i_SBin(1)
+          ELSE ! i .EQ. 1
+            ! This takes care of periodicity for single processor
+            IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1) 
+     >                               .AND. ppiclf_n_bins(1) .EQ. 1) THEN
+              IF(i_SBin(1) .LE. 1) THEN
+                iTemp_SBin(1) = n_SBin(1) - 3
+              ELSE IF(i_SBin(1) .GE. n_SBin(1) - 3) THEN
+                iTemp_SBin(1) = 1
+              ELSE
+                CYCLE
+              END IF
+            ELSE 
               CYCLE
             END IF
           END IF
           DO j = 0,1
-            IF(j .EQ. 1) THEN 
-              IF(ppiclf_linperiodic(2) .AND. 
-     >                                     ppiclf_EqualDomain(2)) THEN
-                IF(i_SBin(2) .LE. 0) iTemp_SBin(2) = n_SBin(2) - 1
-                IF(i_SBin(2) .GE. n_SBin(2) - 1) iTemp_SBin(2) = 0
-              ELSE
+            IF(j .EQ. 0) THEN
+              iTemp_SBin(2) = i_SBin(2)
+            ELSE ! j .EQ. 1
+              ! This takes care of periodicity for single processor
+              IF(ppiclf_linperiodic(2) .AND. ppiclf_EqualDomain(2) 
+     >                               .AND. ppiclf_n_bins(2) .EQ. 1) THEN
+                IF(i_SBin(2) .LE. 1) THEN
+                  iTemp_SBin(2) = n_SBin(2) - 3
+                ELSE IF(i_SBin(2) .GE. n_SBin(2) - 3) THEN
+                  iTemp_SBin(2) = 1
+                ELSE
+                  CYCLE
+                END IF
+              ELSE 
                 CYCLE
               END IF
             END IF
             DO k = 0,1
-              IF(k .EQ. 1) THEN
-                IF(ppiclf_linperiodic(3) .AND.
-     >                                     ppiclf_EqualDomain(3)) THEN
-                  IF(i_SBin(3) .LE. 0) iTemp_SBin(3) = n_SBin(3) - 1
-                  IF(i_SBin(3) .GE. n_SBin(3) - 1) iTemp_SBin(3) = 0
-                ELSE
+              IF(k .EQ. 0) THEN
+                iTemp_SBin(3) = i_SBin(3)
+              ELSE ! k .EQ. 1
+                ! This takes care of periodicity for single processor
+                IF(ppiclf_linperiodic(3) .AND. ppiclf_EqualDomain(3) 
+     >                               .AND. ppiclf_n_bins(3) .EQ. 1) THEN
+                  IF(i_SBin(3) .LE. 2) THEN
+                    iTemp_SBin(3) = n_SBin(3) - 3
+                  ELSE IF(i_SBin(3) .GE. n_SBin(3) - 3) THEN
+                    iTemp_SBin(3) = 2
+                  ELSE
+                    CYCLE
+                  END IF
+                ELSE 
                   CYCLE
                 END IF
               END IF
-              IF(i .EQ. 0 .AND. j .EQ. 0 .AND. k .EQ. 0) THEN
-                DO l = 1,3
-                  IF(i_SBin(l) .LT. 0) iTemp_SBin(l) = 0
-                  IF(i_SBin(l) .GT. (n_SBin(l) - 1))
-     >                            iTemp_SBin(l) = n_SBin(l) - 1
-                END DO !l
-              END IF
+!              PRINT*,'cell, SBin(1:3)',
+!     >               ie,iTemp_SBin(1),iTemp_SBin(2),iTemp_SBin(3)
+              ! Finally, add the cell to a subbin 
               temp_SBin = iTemp_SBin(1) + iTemp_SBin(2)*n_SBin(1) +
      >                    iTemp_SBin(3)*n_SBin(1)*n_SBin(2)
               SBin_Counter(temp_SBin) = SBin_Counter(temp_SBin) + 1
@@ -1466,7 +1534,6 @@ c----------------------------------------------------------------------
           END DO !j 
         END DO !i
       END DO !ie
-
       partCount = 0
       DO ip=1,ppiclf_npart !Loop all particles in this bin
         nnearest = 0 ! number of nearest elements
@@ -1559,7 +1626,6 @@ c----------------------------------------------------------------------
         END IF !nnearest
       END DO !ip
 
-
       IF(ppiclf_remove_particle) THEN
         ! Delete particles that are outside of fluid grid
         CALL ppiclf_solve_RemoveParticle
@@ -1642,7 +1708,7 @@ c----------------------------------------------------------------------
               CellID_nearest(j+1) = CellID_nearest(j)
               DO l=1,3
                 CellCenter(l, j+1) = CellCenter(l, j)
-              ENDDO
+              END DO
               dSQ(j) = dSQi
               CellID_nearest(j) = ie
               DO l=1,3
@@ -1667,17 +1733,18 @@ c----------------------------------------------------------------------
           ! from ppiclf_y & ppiclf_rprop, rprop2, & rprop3
           ppiclf_iprop(9,ip) = -1
           ppiclf_remove_particle = .TRUE.
-          PRINT*, 'part # on proc # removed.', ppiclf_iprop(1,ip),
-     >            ppiclf_nid
+          PRINT*, 'part # on proc # removed with postion of:',
+     >            ppiclf_iprop(1,ip),ppiclf_nid,xp(1),xp(2),xp(3) 
         ELSE
           partCount = partCount + 1
           ! use partCount since ip includes possible removed particles
           ppiclf_nPart2Cell(partCount) = nnearest
+          IF(nnearest .GT. 27) PRINT*,'nn > 27!',partCount
           DO i = 1,nnearest
             ppiclf_Part2Cell_map(partCount,i) = CellID_nearest(i) ! Cell ID
             ! Particle center to cell center distance
             ppiclf_Part2Cell_dist(partCount,i) = SQRT(dSQ(i)) 
-          END DO
+           END DO
         END IF 
       END DO !ip
 
@@ -1704,7 +1771,7 @@ c----------------------------------------------------------------------
 
       IF(ppiclf_npart .LT. 1) RETURN
 
-      eps = 1.0D-8 ! Machine epsilon to avoid dividing by zero
+      eps = 1.0D-60 ! Machine epsilon to avoid dividing by zero
       DO ip = 1,ppiclf_npart
         nnearest = ppiclf_nPart2Cell(ip)
         wsum = 0.0D0
@@ -1789,19 +1856,20 @@ c----------------------------------------------------------------------
       ! Internal:
       INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj,
      >          nrr, nkey(2), iee, ierr
-      REAL*8    CellVol, GaussianConst, dist, w(27), wsum
+      REAL*8    CellVol, GaussianConst, dist, w(27), wsum,
+     >          x_norm, y_norm, z_norm, PI
       LOGICAL   partl 
 !      REAL*8    fxsum,fysum,fzsum,fxabssum,fyabssum,fzabssum   
 !      EXTERNAL  ppiclf_glsum
 !      REAL*8    ppiclf_glsum
  
-
+      PI = 4*ATAN(1.0D0)
       GaussianConst = 2.305D0 ! Distribution over 2 cell widths
       ppiclf_pro_fld_picl = 0.0d0
       DO ip=1,ppiclf_npart
         nCellProj = ppiclf_nPart2Cell(ip)
 !*** THIERRY CHANGE HERE for single element projection
-       nCellProj = 1
+!       nCellProj = 1
 !***
         wsum = 0.0D0
         ! Loop to find individual cell weightings
@@ -1813,6 +1881,18 @@ c----------------------------------------------------------------------
      >              / (CellVol**(2.0D0/3.0D0))))
           wsum = wsum + w(i)
         END DO !i
+#ifdef TEST
+        x_norm = (ppiclf_y(PPICLF_JX,ip) - ppiclf_binb(1))
+     >           / (ppiclf_binb(2) - ppiclf_binb(1))
+        y_norm = (ppiclf_y(PPICLF_JY, ip) - ppiclf_binb(3))
+     >           / (ppiclf_binb(4) - ppiclf_binb(3))
+        z_norm = (ppiclf_y(PPICLF_JZ, ip) - ppiclf_binb(5))
+     >           / (ppiclf_binb(6) - ppiclf_binb(5))
+
+        ppiclf_feedbk(1,ip) = 1
+        ppiclf_feedbk(2,ip) = SIN(2*PI*x_norm) + 
+     >                        SIN(2*PI*y_norm) + SIN(2*PI*z_norm)
+#endif     
 
         DO j=1,PPICLF_LRP_PRO
           ! Loop through cells to apply feedback     

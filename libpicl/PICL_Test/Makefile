@@ -3,7 +3,8 @@ FC               = mpif77
 FFLAGS          += -cpp           \
  		   -z muldefs     \
  	           -Wall          \
-             	   -fbacktrace        
+             	   -fbacktrace    \
+                   -fallow-argument-mismatch  
 
 ####################
 # DO NOT TOUCH BELOW
