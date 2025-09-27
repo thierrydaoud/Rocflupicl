@@ -327,6 +327,7 @@ c-----------------------------------------------------------------------
 !
 ! Vars:
 !
+
       character*1 stringi(132)
       character*1 stringo(132)
       character*25 s25
@@ -334,8 +335,9 @@ c-----------------------------------------------------------------------
       integer*4 ppiclf_indx1
       real*8 rdata
       external ppiclf_indx1
-!
-
+#ifdef TEST
+      RETURN
+#endif!
       call ppiclf_blank(stringo,132)
       call ppiclf_chcopy(stringo,stringi,132)
       ilen = ppiclf_indx1(stringo,'$')
@@ -369,7 +371,9 @@ c-----------------------------------------------------------------------
       integer*4 ppiclf_indx1
       external ppiclf_indx1
 !
-      call ppiclf_blank(stringo,132)
+#ifdef TEST
+      RETURN
+#endif      call ppiclf_blank(stringo,132)
       call ppiclf_chcopy(stringo,stringi,132)
       ilen = ppiclf_indx1(stringo,'$')
       write(s10,10) idata
@@ -403,7 +407,9 @@ c-----------------------------------------------------------------------
       real*8 rdata
       external ppiclf_indx1
 !
-      call ppiclf_blank(stringo,132)
+#ifdef TEST
+      RETURN
+#endif      call ppiclf_blank(stringo,132)
       call ppiclf_chcopy(stringo,stringi,132)
       ilen = ppiclf_indx1(stringo,'$')
       write(s15,15) rdata
@@ -435,7 +441,9 @@ c-----------------------------------------------------------------------
       integer*4 ppiclf_indx1
       external ppiclf_indx1
 !
-      call ppiclf_blank(stringo,132)
+#ifdef TEST
+      RETURN
+#endif      call ppiclf_blank(stringo,132)
       call ppiclf_chcopy(stringo,stringi,132)
       ilen = ppiclf_indx1(stringo,'$')
 
