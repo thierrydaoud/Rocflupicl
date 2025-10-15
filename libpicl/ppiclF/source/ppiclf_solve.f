@@ -1209,6 +1209,8 @@ c----------------------------------------------------------------------
       ! Includes: CellID, total dist, x dist, y dist, z dist
       CALL ppiclf_solve_SBParticleToCellMap
 
+      CALL MPI_BARRIER(ppiclf_comm,ierr)
+
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
 
@@ -1363,9 +1365,9 @@ c----------------------------------------------------------------------
       END DO !ie
 
       DO l = 1,3
-        ! Multiply by 1.6 so particle near face will
+        ! Multiply by 1.5 so particle near face will
         ! find center one cell over in farthest direction
-        ppiclf_interp_dchk(l) = Max_CellLen(l)*1.6
+        ppiclf_interp_dchk(l) = Max_CellLen(l)*1.5D0
       END DO
 
       CALL MPI_BARRIER(ppiclf_comm,ierr)
@@ -1388,7 +1390,7 @@ c----------------------------------------------------------------------
       REAL*8    dSQl, dSQi, dSQ(28), xp(3),  
      >          CellCenter(3,28), w(27), binblength(3),  
      >          Max_CellLen(3), Max_CellLenSQ(3), dSQchk(3)
-      LOGICAL   added, farAway
+      LOGICAL   added, farAway, alreadyMapped
  
       INTEGER*4  SBin_map( 0 : (
      > (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))
@@ -1397,7 +1399,8 @@ c----------------------------------------------------------------------
      >                       /ppiclf_interp_dchk(2)) + 1) *
      > (FLOOR((ppiclf_bins_dx(3) + 2*ppiclf_interp_dchk(3))
      >                       /ppiclf_interp_dchk(3)) + 1) - 1)
-     > ,ppiclf_nCells_Interp)
+     > ,8*ppiclf_nCells_Interp)
+
       INTEGER*4  SBin_counter( 0 : (
      > (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))
      >                       /ppiclf_interp_dchk(1)) + 1) *
@@ -1426,12 +1429,11 @@ c----------------------------------------------------------------------
         bin_Min(l) = ppiclf_bin_pos(1,l) - ppiclf_interp_dchk(l)
         n_SBin(l) = FLOOR((ppiclf_bins_dx(l) + 2*ppiclf_interp_dchk(l))
      >                                     / ppiclf_interp_dchk(l)) + 1 
-!        PRINT*,'dim, nSB',l,n_SBin(l)
-        dSQchk(l) = ppiclf_interp_dchk(l)**2
-        ! SB at bin max boundary
+        dSQchk(l) = (ppiclf_interp_dchk(l))**2
+        ! SB at bin min boundary
         firstSB(l) = FLOOR((ppiclf_bin_pos(1,l) - bin_Min(l))
      >               / ppiclf_interp_dchk(l))
-        ! SB at bin min boundary
+        ! SB at bin miax boundary
         lastSB(l)  =  FLOOR((ppiclf_bin_pos(2,l) - bin_Min(l))
      >               / ppiclf_interp_dchk(l))
       END DO
@@ -1447,24 +1449,6 @@ c----------------------------------------------------------------------
           i_SBin(l) = FLOOR((ppiclf_picl_grid(l,ie) - 
      >                bin_Min(l)) / ppiclf_interp_dchk(l))
         END DO
-        DO l = 1,3
-          ! This takes care of linear periodicity for multiple bins in 
-          ! a given direction
-          IF(ppiclf_n_bins(l) .GT. 1) THEN
-!*** need to adjust for angular periodicity ***
-            IF(ppiclf_linperiodic(l) .AND. ppiclf_EqualDomain(l)) THEN
-              IF(i_SBin(l) .LT. 0)   
-     >                                       i_SBin(l) = n_SBin(l) - 2
-              IF(i_SBin(l) .GT. (n_SBin(l) - 1)) 
-     >                                                   i_SBin(l) = 1
-            ELSE 
-              IF(i_SBin(l) .LT. 0)               
-     >                                                   i_SBin(l) = 0
-              IF(i_SBin(l) .GT. (n_SBin(l) - 1)) 
-     >                                       i_SBin(l) = n_SBin(l) - 1
-            END IF
-          END IF
-        END DO !l
         ! In the i,j,k loops below, 0 takes care of non-periodic mapping
         ! and 1 takes care of periodic mapping.  If a cell is in corner,
         ! it'll be mapped to 2*2*2=8 subbins.
@@ -1472,14 +1456,18 @@ c----------------------------------------------------------------------
         DO i = 0,1
           IF(i .EQ. 0) THEN
             iTemp_SBin(1) = i_SBin(1)
+            IF(iTemp_SBin(1) .LT. 0) 
+     >        iTemp_SBin(1) = 0
+            IF(iTemp_SBin(1) .GT. n_SBin(1) - 1) 
+     >        iTemp_SBin(1) = n_SBin(1) - 1
           ELSE ! i .EQ. 1
-            ! This takes care of periodicity for single processor
-            IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1) 
-     >                               .AND. ppiclf_n_bins(1) .EQ. 1) THEN
-              IF(i_SBin(1) .LE. 1) THEN
-                iTemp_SBin(1) = n_SBin(1) - 3
-              ELSE IF(i_SBin(1) .GE. n_SBin(1) - 3) THEN
-                iTemp_SBin(1) = 1
+            IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)) THEN
+              IF(i_SBin(1) .LE. firstSB(1) + 1) THEN
+                iTemp_SBin(1) = lastSB(1) - 1
+                IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE 
+              ELSE IF(i_SBin(1) .GE. lastSB(1) - 1) THEN
+                iTemp_SBin(1) = firstSB(1) + 1
+                IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE
               ELSE
                 CYCLE
               END IF
@@ -1490,14 +1478,19 @@ c----------------------------------------------------------------------
           DO j = 0,1
             IF(j .EQ. 0) THEN
               iTemp_SBin(2) = i_SBin(2)
+              IF(iTemp_SBin(2) .LT. 0) 
+     >          iTemp_SBin(2) = 0
+               IF(iTemp_SBin(2) .GT. n_SBin(2) - 1) 
+     >          iTemp_SBin(2) = n_SBin(2) - 1
             ELSE ! j .EQ. 1
               ! This takes care of periodicity for single processor
-              IF(ppiclf_linperiodic(2) .AND. ppiclf_EqualDomain(2) 
-     >                               .AND. ppiclf_n_bins(2) .EQ. 1) THEN
-                IF(i_SBin(2) .LE. 1) THEN
-                  iTemp_SBin(2) = n_SBin(2) - 3
-                ELSE IF(i_SBin(2) .GE. n_SBin(2) - 3) THEN
-                  iTemp_SBin(2) = 1
+              IF(ppiclf_linperiodic(2) .AND. ppiclf_EqualDomain(2)) THEN
+                IF(i_SBin(2) .LE. firstSB(2) + 1) THEN
+                  iTemp_SBin(2) = lastSB(2) - 1
+                  IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
+                ELSE IF(i_SBin(2) .GE. lastSB(2) - 1) THEN
+                  iTemp_SBin(2) = firstSB(2) + 1
+                  IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
                 ELSE
                   CYCLE
                 END IF
@@ -1508,14 +1501,20 @@ c----------------------------------------------------------------------
             DO k = 0,1
               IF(k .EQ. 0) THEN
                 iTemp_SBin(3) = i_SBin(3)
+                IF(iTemp_SBin(3) .LT. 0) 
+     >            iTemp_SBin(3) = 0
+                IF(iTemp_SBin(3) .GT. n_SBin(3) - 1) 
+     >            iTemp_SBin(3) = n_SBin(3) - 1
               ELSE ! k .EQ. 1
                 ! This takes care of periodicity for single processor
-                IF(ppiclf_linperiodic(3) .AND. ppiclf_EqualDomain(3) 
-     >                               .AND. ppiclf_n_bins(3) .EQ. 1) THEN
-                  IF(i_SBin(3) .LE. 2) THEN
-                    iTemp_SBin(3) = n_SBin(3) - 3
-                  ELSE IF(i_SBin(3) .GE. n_SBin(3) - 3) THEN
-                    iTemp_SBin(3) = 2
+                IF(ppiclf_linperiodic(3) .AND. 
+     >                                      ppiclf_EqualDomain(3)) THEN 
+                  IF(i_SBin(3) .LE. firstSB(3) + 1) THEN
+                    iTemp_SBin(3) = lastSB(3) - 1
+                    IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
+                  ELSE IF(i_SBin(3) .GE. lastSB(3) - 1) THEN
+                    iTemp_SBin(3) = firstSB(3) + 1
+                    IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
                   ELSE
                     CYCLE
                   END IF
@@ -1523,12 +1522,13 @@ c----------------------------------------------------------------------
                   CYCLE
                 END IF
               END IF
-!              PRINT*,'cell, SBin(1:3)',
-!     >               ie,iTemp_SBin(1),iTemp_SBin(2),iTemp_SBin(3)
               ! Finally, add the cell to a subbin 
               temp_SBin = iTemp_SBin(1) + iTemp_SBin(2)*n_SBin(1) +
      >                    iTemp_SBin(3)*n_SBin(1)*n_SBin(2)
               SBin_Counter(temp_SBin) = SBin_Counter(temp_SBin) + 1
+              IF(SBin_Counter(temp_SBin) .GT. ppiclf_nCells_Interp)
+     >          PRINT*, 'counter more than interp cells. SB:',
+     >          temp_SBin, SBin_Counter(temp_SBin), ppiclf_nCells_Interp
               SBin_Map(temp_SBin,SBin_Counter(temp_SBin)) = ie
             END DO !k
           END DO !j 
@@ -1548,8 +1548,6 @@ c----------------------------------------------------------------------
         DO l = 1,3
           i_SBin(l) = FLOOR((xp(l) - bin_Min(l)) 
      >                /ppiclf_interp_dchk(l))
-          IF(i_SBin(l) .LT. 0) i_SBin(l) = 0
-          IF(i_SBin(l) .GT. n_SBin(l) - 1) i_SBin(l) = n_SBin(l) - 1
         END DO
         temp_SBin = i_SBin(1) + i_SBin(2)*n_SBin(1) +
      >              i_SBin(3)*n_SBin(1)*n_SBin(2)
@@ -1579,10 +1577,15 @@ c----------------------------------------------------------------------
                   END DO !l
                   ! skip to next fluid cell if greater than 1.5*max cell
                   ! distance in respective x,y,z direction.
-                  if (farAWAY) CYCLE !i_count
+                  IF (farAWAY) CYCLE !i_count
                   ! Sort closest fluid cell centers
                   added = .FALSE.
-                  DO i=1,27
+                  alreadyMapped = .FALSE.
+                  DO i = 1,27
+                    IF(ie .EQ. CellID_nearest(i)) alreadyMapped = .TRUE.
+                  END DO
+                  DO i = 1,27
+                    IF(alreadyMapped) EXIT ! go to next cell in SB
                     j = 27 - i + 1
                     IF (dSQi .LT. dSQ(j)) THEN
                       dSQ(j+1) = dSQ(j)
@@ -1602,10 +1605,11 @@ c----------------------------------------------------------------------
                   END DO !i
                   IF (added) nnearest = nnearest + 1  
                 END DO ! i_count
-              END IF !farAWAY = false
+              END IF !SB out of domain
             END DO !kSB
           END DO !jSB
         END DO !iSB
+        nnearest = MIN(nnearest,27)
         IF (nnearest .lt. 1) THEN
           ! Particle is outside of fluid domain.
           ! iprop(8,ip) set to -1 means it will be removed
@@ -1722,11 +1726,6 @@ c----------------------------------------------------------------------
           IF (added) nnearest = nnearest + 1
         END DO ! ie
         nnearest = MIN(nnearest, 27)
-!************************************************************
-! User uncomment below if you want single cell Interpolation & Projection
-!       IF(nnearest .GT. 1) nnearest = 1
-!
-!************************************************************
         IF (nnearest .LT. 1) THEN
           ! Particle is outside of fluid domain.
           ! iprop(8,ip) set to -1 means it will be removed
@@ -1774,6 +1773,7 @@ c----------------------------------------------------------------------
       eps = 1.0D-60 ! Machine epsilon to avoid dividing by zero
       DO ip = 1,ppiclf_npart
         nnearest = ppiclf_nPart2Cell(ip)
+        w = 0.0D0
         wsum = 0.0D0
         DO k = 1,nnearest
           dist = ppiclf_Part2Cell_dist(ip,k) + eps
@@ -1857,25 +1857,20 @@ c----------------------------------------------------------------------
       INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj,
      >          nrr, nkey(2), iee, ierr
       REAL*8    CellVol, GaussianConst, dist, w(27), wsum,
-     >          x_norm, y_norm, z_norm, PI
+     >          x_norm, y_norm, z_norm, PI, eps
       LOGICAL   partl 
-!      REAL*8    fxsum,fysum,fzsum,fxabssum,fyabssum,fzabssum   
-!      EXTERNAL  ppiclf_glsum
-!      REAL*8    ppiclf_glsum
  
       PI = 4*ATAN(1.0D0)
       GaussianConst = 2.305D0 ! Distribution over 2 cell widths
       ppiclf_pro_fld_picl = 0.0d0
+      eps = 1.0D-60
       DO ip=1,ppiclf_npart
         nCellProj = ppiclf_nPart2Cell(ip)
-!*** THIERRY CHANGE HERE for single element projection
-!       nCellProj = 1
-!***
         wsum = 0.0D0
         ! Loop to find individual cell weightings
         DO i = 1,nCellProj
           CellID = ppiclf_Part2Cell_map(ip,i) 
-          dist = ppiclf_Part2Cell_dist(ip,i)
+          dist = ppiclf_Part2Cell_dist(ip,i) + eps
           CellVol = ppiclf_picl_grid(7,CellID)
           w(i) = ABS(CellVol*EXP(-GaussianConst*(dist**2)
      >              / (CellVol**(2.0D0/3.0D0))))
@@ -1946,48 +1941,6 @@ c----------------------------------------------------------------------
      >                                    ppiclf_pro_fld_picl(j,ie)
          END DO
       END DO
-
-! AVERY DEBUG
-!      fxsum = 0.0D0
-!      fysum = 0.0D0
-!      fzsum = 0.0D0
-!      fxabssum = 0.0D0
-!      fyabssum = 0.0D0
-!      fzabssum = 0.0D0
-!      DO ie = 1,ppiclf_nFVCells
-!        IF(ppiclf_pro_fld(ie,1) .NE. 0.0D0) THEN
-!            WRITE(444,*) 'NP, Cell, vf, FX, FY, FZ, EN:'
-!     >      ,ppiclf_nid,ie, ppiclf_pro_fld(ie,1)
-!     >      ,ppiclf_pro_fld(ie,2),ppiclf_pro_fld(ie,3)
-!     >      ,ppiclf_pro_fld(ie,4), ppiclf_pro_fld(ie,5)
-!        END IF
-!        fxsum = fxsum + ppiclf_pro_fld(ie,2)
-!        fysum = fysum + ppiclf_pro_fld(ie,3)
-!        fzsum = fzsum + ppiclf_pro_fld(ie,4)
-!        fxabssum = fxabssum + ABS(ppiclf_pro_fld(ie,2))
-!        fyabssum = fyabssum + ABS(ppiclf_pro_fld(ie,3))
-!        fzabssum = fzabssum + ABS(ppiclf_pro_fld(ie,4))
-!      END DO
-!
-!      fxsum = ppiclf_glsum(fxsum,1) 
-!      fysum = ppiclf_glsum(fysum,1) 
-!      fzsum = ppiclf_glsum(fzsum,1)
-!      fxabssum = ppiclf_glsum(fxabssum,1) 
-!      fyabssum = ppiclf_glsum(fyabssum,1)
-!      fzabssum = ppiclf_glsum(fzabssum,1) 
-! 
-!      IF(ppiclf_nid .EQ. 0 . AND. ppiclf_time .LT. 10*ppiclf_dt) THEN
-!        WRITE(999,*) 'Time, sum of fx:', ppiclf_time, fxsum
-!        WRITE(999,*) 'Time, ABS sum of fx:', ppiclf_time, fxabssum
-!
-!        WRITE(999,*) 'Time, sum of fy:', ppiclf_time, fysum
-!        WRITE(999,*) 'Time, ABS sum of fy:', ppiclf_time, fyabssum
-!
-!        WRITE(999,*) 'Time, sum of fz:', ppiclf_time, fzsum
-!        WRITE(999,*) 'Time, ABS sum of fz:', ppiclf_time, fzabssum
-!        WRITE(999,*) '-------------------------------------------------'
-!      END IF
-!AVERY DEBUG
 
       RETURN
       END

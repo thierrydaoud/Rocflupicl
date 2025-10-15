@@ -123,17 +123,20 @@
 !
 ! Internal:
 !
-      INTEGER*4 ix, iy, iz, npt_total, i, idum, jdum, kdum, total_bin, 
-     >          targetTotBin, idealBin(3), Temp_iBin(3), iBin(3),
-     >          iBinTot, tempi,nBinMax,nBinMed,nBinMin, ppiclf_iglsum,
-     >          NBMax, ierr, MaxPotentialBins(3),
-     >          BinCheck, ppiclf_iglmax, ideal_bin_index(3),maxErrorint
+      INTEGER*4 ix, iy, iz, npt_total, i, j, k, idum, jdum, kdum, 
+     >          total_bin, targetTotBin, idealBin(3), Temp_iBin(3),
+     >          iBin(3), iBinTot, tempi,nBinMax,nBinMed,nBinMin, 
+     >          ppiclf_iglsum, NBMax, ierr, MaxPotentialBins(3), 
+     >          maxbincount1, maxbincount2, BinCheck, ppiclf_iglmax, 
+     >          ideal_bin_index(3), maxErrorint
       REAL*8    xmin, ymin, zmin, xmax, ymax, zmax, temp1, temp2,
-     >          binb_length(3), BinMinLen(3), ppiclf_glmin,
+     >          binb_length(3), BinMinLen(3), ppiclf_glmin, 
      >          ppiclf_glmax, ppiclf_glsum, periodicDistCheck,
-     >          BinBuffer(3), binsReal(3), binError, minBinError 
+     >          BinBuffer(3), binsReal(3), binError, minBinError,
+     >          increaseRatio
       EXTERNAL  ppiclf_iglsum, ppiclf_glmin, ppiclf_glmax, ppiclf_glsum,
      >          ppiclf_iglmax
+      LOGICAL   MaxBinsAchieved(3)
 !
 
       ix = 1
@@ -153,6 +156,7 @@
         ! of outer fluid cells
         ! Need ppiclf_nndist/2 to ensure BinMinLen is never violated
         BinBuffer(i) = MAX(ppiclf_filter(i)/2,ppiclf_nndist/2)
+        MaxBinsAchieved(i) = .FALSE.
       END DO
 
       xmin =  1D10
@@ -282,13 +286,10 @@
         IF(MaxPotentialBins(i) .LT. 1) THEN
           CALL ppiclf_exittr('BinMinLen() criteria violated.',0.0D0,0)
         END IF
-        IF(MaxPotentialBins(i) .GT. targetTotBin) 
-     >                              MaxPotentialBins(i) = targetTotBin
       END DO
 
       ! Number of bins calculated based on bin surface
       ! area minimization and bin aspect ratio close to 1
-
       binsReal(1) = (targetTotBin**(1.0D0/3.0D0))*
      >              (binb_length(1)**(2.0D0/3.0D0))/ 
      >              ((binb_length(2)**(1.0D0/3.0D0))*
@@ -303,21 +304,65 @@
      >              (binb_length(3)**(2.0D0/3.0D0))/ 
      >              ((binb_length(2)**(1.0D0/3.0D0))*
      >              (binb_length(1))**(1.0D0/3.0D0)) 
+     
+      ! The loop below ensures bins don't exceed number of
+      ! processors or minimum bin length criteria, while
+      ! maximizing the other dimensions.
+      maxbincount2 = 0
+      DO
+        ! Ensures most bins don't exceed number of 
+        ! processors in case where one direction is
+        ! much longer than the others.
+        DO i = 1,3
+          ! INT(x+0.5) is equivalent to ROUND(x). 
+          ! Round isn't a built in fortran function.
+          IF(binsReal(i) .LT. 0.99D0) binsReal(i) = 0.99D0
+          ppiclf_n_bins(i) = INT(binsReal(i)+0.5D0)
+          IF(ppiclf_n_bins(i) .EQ. 0) ppiclf_n_bins(i) = 1
+          ! Ensure ppiclf_bin_dx(i) > BinMinLen(i)
+          IF(ppiclf_n_bins(i) .GT. targetTotBin) THEN
+            ppiclf_n_bins(i) = targetTotBin 
+            binsReal(i) = REAL(ppiclf_n_bins(i))
+          END IF
+        END DO
+        ! Ensures bins don't violate minimum length criteria
+        maxbincount1  = 0
+        increaseRatio = 1.0D0
+        DO i = 1,3
+          IF(ppiclf_n_bins(i) .GE. MaxPotentialBins(i)) THEN
+            ppiclf_n_bins(i) = MaxPotentialBins(i)
+            ! This will be used to increase non-maximized bins
+            increaseRatio  = (binsReal(i)/REAL(MaxPotentialBins(i)))* 
+     >                        increaseRatio
+            binsReal(i) = REAL(MaxPotentialBins(i))
+            MaxBinsAchieved(i) = .TRUE.
+            maxbincount1 = maxbincount1 + 1
+          END IF
+        END DO
+        ! Either they both equal 0 and exit on the first pass,
+        ! or they iterate and are equal on second or third pass.
+        IF(maxbincount1 .EQ. maxbincount2) EXIT
 
-
-      DO i = 1,3
-        ! INT(x+0.5) is equivalent to ROUND(x). 
-        ! Round isn't a built in fortran function.
-        IF(binsReal(i) .LT. 0.99D0) binsReal(i) = 0.99D0
-        ppiclf_n_bins(i) = INT(binsReal(i)+0.5D0)
-        IF(ppiclf_n_bins(i) .EQ. 0) ppiclf_n_bins(i) = 1
-        ! Ensure ppiclf_bin_dx(i) > BinMinLen(i) 
-        IF(ppiclf_n_bins(i) .GT. MaxPotentialBins(i)) THEN
-          ppiclf_n_bins(i) = MaxPotentialBins(i)
-          binsReal(i) = REAL(MaxPotentialBins(i))
+        ! Increases other bins if one or two dimensions 
+        ! are at maximum size based on minimum length criteria
+        IF(MaxBinsAchieved(1) .OR. MaxBinsAchieved(2) .OR.
+     >                             MaxBinsAchieved(3)) THEN
+          maxbincount2 = 0
+          DO i = 1,3
+            IF(MaxBinsAchieved(i)) THEN
+              maxbincount2 = maxbincount2 + 1
+            END IF
+          END DO
+          DO i = 1,3
+            IF(MaxBinsAchieved(i)) CYCLE
+            IF(maxbincount2 .EQ. 1) THEN
+              binsReal(i) = SQRT(increaseRatio)*binsReal(i)
+            ELSE
+              binsReal(i) = binsReal(i)*increaseRatio
+            END IF
+          END DO
         END IF
       END DO
-
 
       ! Since bin must be an integer, check -1:+1 number of bins
       ! for each bin dimension. Ideal number of bins will be max value
@@ -589,7 +634,7 @@
       ! outside of the ppiclf bin are mapped for interpolation.
       ! This could be changed based on the desired frequency of
       ! ppiclf bin creation and mapping.
-      exchCellMultiplier  = 2.4999D0
+      exchCellMultiplier  = 2.499D0
 
       ! Loops through number of fluid FV cells on this processor
       DO ie=1,ppiclf_nFVCells  
@@ -791,9 +836,9 @@
 ! Internal:
 !
       REAL*8     GhostPos(3), PeriodicShift(3), 
-     >           distSQ, distCheckSQ
+     >           distSQ(3), distCheckSQ, buffer
       INTEGER*4  ip, idum, iip, jjp, kkp, iig, jjg, kkg, nrank, 
-     >           j, k, l, GhostInc(3), ix, iy, iz!, ghostsMade
+     >           j, k, l, GhostInc(3), ix, iy, iz
 
       ! Calculate the linear periodicity shift in each dimension
       DO l = 1,3
@@ -808,27 +853,33 @@
       
       DO ip=1,ppiclf_npart
         idum = 0
+        ! Copy particle solution variables
         DO j=1,PPICLF_LRS
            idum = idum + 1
            ppiclf_cp_map(idum,ip) = ppiclf_y(j,ip)
         END DO
+        ! Copy particle property variables
         DO j=1,PPICLF_LRP
            idum = idum + 1
            ppiclf_cp_map(idum,ip) = ppiclf_rprop(j,ip)
         END DO
+
         ! GP Bin Index
         iip    = ppiclf_iprop(5,ip)
         jjp    = ppiclf_iprop(6,ip)
         kkp    = ppiclf_iprop(7,ip)
-        
-        distCheckSQ = (ppiclf_nndist*1.02)**2
-        !ghostsMade = 0
+   
+        ! Found that buffer was needed in unit testing 
+        ! due to round-off errors with periodicity
+        buffer = 1.02 
+        distCheckSQ = (ppiclf_nndist*(buffer**3))**2
+
         DO ix = 1,3
           distSQ = 0.0D0
           GhostPos(1) = ppiclf_cp_map(1,ip)
           IF(ix .LT. 3) THEN
             CALL ppiclf_comm_GhostDistCheck(ix,GhostPos(1),
-     >                     ppiclf_nndist*1.02,GhostInc(1),1,distSQ)
+     >                     ppiclf_nndist*buffer,GhostInc(1),1,distSQ(1))
             IF(GhostInc(1) .EQ. 0) CYCLE
           ELSE
             GhostInc(1) = 0 !For ghosts in other 2 dimensions only
@@ -852,9 +903,11 @@
             GhostPos(2) = ppiclf_cp_map(2,ip)
             IF(iy .LT. 3) THEN
               CALL ppiclf_comm_GhostDistCheck(iy,GhostPos(2),
-     >                    ppiclf_nndist*1.02,GhostInc(2),2,distSQ)
+     >                    ppiclf_nndist*buffer,GhostInc(2),2,distSQ(2))
               IF(GhostInc(2) .EQ. 0.) CYCLE
-              IF(distSQ .GT. distCheckSQ) CYCLE !corner/edge check
+              ! This corner/edge check caused issues when unit testing
+              ! Removing this makes extra ghost particles
+              !IF(distSQ(1)+distSQ(2) .GT. distCheckSQ) CYCLE !corner/edge check
             ELSE
               GhostInc(2) = 0 !For ghosts in other 2 dimensions only
             END IF
@@ -878,9 +931,12 @@
               GhostPos(3) = ppiclf_cp_map(3,ip)
               IF(iz .LT. 3) THEN
                 CALL ppiclf_comm_GhostDistCheck(iz,GhostPos(3),
-     >                         ppiclf_nndist*1.02,GhostInc(3),3,distSQ)
+     >                    ppiclf_nndist*buffer,GhostInc(3),3,distSQ(3))
                 IF(GhostInc(3) .EQ. 0) CYCLE
-                IF(distSQ .GT. distCheckSQ) CYCLE !corner/edge check
+                ! This corner/edge check caused issues when unit testing
+                ! Removing this makes extra ghost particles
+                !corner/edge check
+                !IF(distSQ(1)+distSQ(2)+distSQ(3) .GT. distCheckSQ) CYCLE
               ELSE
                 GhostInc(3) = 0
               END IF
@@ -929,7 +985,6 @@
             END DO !iz = 1:3
           END DO !iy = 1:3
         END DO !ix = 1:3
-        !PRINT*, ghostsMade
       END DO !ip = 1:ppiclf_npart
 
       RETURN
@@ -954,7 +1009,7 @@
       ! ppiclf_bin_pos(2,1) is bin max position in x
       IF(ABS(Pos - ppiclf_bin_pos(ix,l)) 
      >                          .LT. distchk) THEN
-        dSQ = dSQ + (Pos-ppiclf_bin_pos(ix,l))**2
+        dSQ = (Pos-ppiclf_bin_pos(ix,l))**2
         IF(ix .EQ. 1) GhostInc = -1 ! close to bin min
         IF(ix .EQ. 2) GhostInc =  1 ! clost to bin max
       ELSE
