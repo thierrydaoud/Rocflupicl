@@ -1,43 +1,76 @@
-ENAME            = PICL_Test
 FC               = mpif77
 FFLAGS          += -cpp           \
  		   -z muldefs     \
  	           -Wall          \
              	   -fbacktrace    \
                    -fallow-argument-mismatch  
-
-####################
-# DO NOT TOUCH BELOW
-####################
+CC               = mpicc  
+CPFLAGS         += -E
 
 # PPICLF LIBRARY
 SOURCE_ROOT_PPICLF= ../ppiclF/source
-PPICLF_IFLAGS+=-I $(SOURCE_ROOT_PPICLF)
 USR_LFLAGS+=-L $(SOURCE_ROOT_PPICLF) -lppiclF
+PRE = unitTestSrc/UNIT_TEST_COMMON.h             \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_SOLN.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GRID.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h         \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_PARALLEL.h    \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_USER_COMMON.h \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h
+POS = unitTestSrc/PPICLF_UNIT_TEST
+      
 
-SRC = testCode/picl_test.f    
-OBJ = testCode/picl_test.o   
+SRC1 = unitTestSrc/UT_setup.f 
+SRC2 = unitTestSrc/UT_CreateBin.f
+SRC3 = unitTestSrc/UT_InterpProj.f
+SRC4 = unitTestSrc/UT_P2PNN.f
+
+OBJ1 = unitTestSrc/UT_setup.o 
+OBJ2 = unitTestSrc/UT_CreateBin.o
+OBJ3 = unitTestSrc/UT_InterpProj.o
+OBJ4 = unitTestSrc/UT_P2PNN.o
+
+ENAME1 = CreateBin_UnitTest
+ENAME2 = InterpProj_UnitTest
+ENAME3 = Particle2Particle_UnitTest
 
 # Make commands
-default: getObjs linkObjs
+default: preProcess getObjs linkObjs
 
-linkObjs:  $(OBJ)
-	$(FC) $(FFLAGS) -o $(ENAME) $(OBJ) $(USR_LFLAGS)
+linkObjs:  $(OBJ1)
+	$(FC) $(FFLAGS) -o $(ENAME1) $(OBJ1) $(OBJ2) $(USR_LFLAGS)
+	$(FC) $(FFLAGS) -o $(ENAME2) $(OBJ1) $(OBJ3) $(USR_LFLAGS)
+	$(FC) $(FFLAGS) -o $(ENAME3) $(OBJ1) $(OBJ4) $(USR_LFLAGS)
 	@echo "                         "
 	@echo "*************************"
 	@echo "*** USER LINK SUCCESS ***"
 	@echo "*************************"
 	@echo "                         "
 
-getObjs: $(SRC)
-	$(FC) $(FFLAGS) -c $(SRC) $(PPICLF_IFLAGS)
+getObjs: $(SRC1) $(SRC2) $(SRC3) $(SRC4)
+	$(FC) $(FFLAGS) -c $(SRC1) 
+	$(FC) $(FFLAGS) -c $(SRC2) 
+	$(FC) $(FFLAGS) -c $(SRC3) 
+	$(FC) $(FFLAGS) -c $(SRC4) 
 	@echo "                           "
 	@echo "***************************"
 	@echo "*** USER OBJECT SUCCESS ***"
 	@echo "***************************"
 	@echo "                           "
-	@mv *.o testCode
+	@mv *.o unitTestSrc/
+
+preProcess: $(PRE)
+	$(CC) $(CPFLAGS) $(PRE) > $(POS)_tmp
+	grep "^[^#]" $(POS)_tmp > $(POS)
+	rm $(POS)_tmp
+	@echo "                       "
+	@echo "********************"
+	@echo "*** PREPROCESSED ***"
+	@echo "********************"
+	@echo "                       "
+
 # Cleaning stuff
 clean:
-	@rm $(ENAME)
-	@rm $(OBJ)
+	@rm $(OBJ1) $(OBJ2) $(OBJ3) $(OBJ4)
+	@rm $(ENAME1) $(ENAME2) $(ENAME3)
+	@rm $(POS)
