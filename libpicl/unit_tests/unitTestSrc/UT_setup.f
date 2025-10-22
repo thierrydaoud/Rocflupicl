@@ -22,17 +22,17 @@
 !**********************************************************************
       ! DEFAULT VALUES
       ! Rectangular Grid Input
-      NumXCells = 20
-      NumYCells = 3
-      NumZCells = 3
+      NumXCells = 35
+      NumYCells = 40
+      NumZCells = 25
 
-      xmin = 0.0D0
-      ymin = 0.0D0
-      zmin = 0.0D0
+      xmin = -1.0D0
+      ymin = -1.0D0
+      zmin = -1.0D0
 
-      xmax = 1.0D0
-      ymax = 1.0D-1
-      zmax = 1.0D-1
+      xmax =  1.0D0
+      ymax =  1.0D0
+      zmax =  1.0D0
 
       ! Particle Input
       totalParticles = 10000
@@ -159,14 +159,13 @@
       ! Build full random particle dispersion on root processor
       IF(nid .EQ. rootProc) THEN 
         DO i = 1,totalParticles
-          DO j = 1,3 ! x,y,&z
+          DO j = 1,3 ! loop through x, y, & z coordinates
             CALL RANDOM_NUMBER(randNum)
             part_y(j,i) = gridDomain(1,j) 
      >                    + (gridDomain(2,j) - gridDomain(1,j))*randNum
 
-            ! IF's below put first 900 particles within 1/2 a particle
-            ! diameter of a face for linear periodicity testing.
-
+            ! IF's below put first faceParticles within 1/3 a particle
+            ! diameter from a face for linear periodicity testing.
             IF(i .LE. faceParticles) THEN
               ! Choose face (k)
               k = 3 !zface
@@ -178,11 +177,11 @@
               IF(j .EQ. k) THEN
                 IF(i - (k-1)*INT(REAL(faceParticles/3.0)+0.49D0) .LT.
      >                       INT(REAL(faceParticles/6.0)+1.49D0)) THEN
-                  ! 1/6 faceParticles on max face
-                  part_y(j,i) = gridDomain(1,j) + (pdia/3.0)*randNum
+                  ! 1/6 faceParticles on min face
+                  part_y(j,i) = gridDomain(1,j) + (pdia/2.0)*randNum
                 ELSE
                   ! 1/6 faceParticles on max face
-                  part_y(j,i) = gridDomain(2,j) - (pdia/3.0)*randNum
+                  part_y(j,i) = gridDomain(2,j) - (pdia/2.0)*randNum
                 END IF
               END IF ! j == k
             END IF ! i < faceParticles

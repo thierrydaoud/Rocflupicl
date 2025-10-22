@@ -40,11 +40,11 @@
 
       DO loop = 1,4
         IF(loop .EQ. 2) THEN
-          ymax = 20.0D0
+          ymax = 40.0D0
         ELSEIF(loop .EQ. 3) THEN
-          zmax = 5.0D0
+          zmax = 20.0D0
         ELSEIF(loop .EQ. 4) THEN
-          xmax = 20.0D0
+          xmax = 40.0D0
         END IF
         ! UT_setup has default grid bounds
         ! unless this logical is T
@@ -106,10 +106,6 @@
         DO i = 1,100000
           ppiclf_np = i
           CALL ppiclf_comm_CreateBin
-          ! Move particles to make sure all particles
-          ! are associated with a bin.
-          CALL ppiclf_comm_FindParticle
-          CALL ppiclf_Comm_MoveParticle
           numBins = ppiclf_n_bins(1)*
      >               ppiclf_n_bins(2)*ppiclf_n_bins(3)
           WRITE(wf,*) ppiclf_np, 

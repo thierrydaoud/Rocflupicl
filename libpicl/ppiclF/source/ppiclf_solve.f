@@ -1399,7 +1399,7 @@ c----------------------------------------------------------------------
      >                       /ppiclf_interp_dchk(2)) + 1) *
      > (FLOOR((ppiclf_bins_dx(3) + 2*ppiclf_interp_dchk(3))
      >                       /ppiclf_interp_dchk(3)) + 1) - 1)
-     > ,8*ppiclf_nCells_Interp)
+     > ,ppiclf_nCells_Interp)
 
       INTEGER*4  SBin_counter( 0 : (
      > (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))
