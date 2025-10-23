@@ -322,6 +322,7 @@
          rep    = vmag*dp*rhof/rmu
          rphip  = ppiclf_rprop(PPICLF_R_JPHIP,i)
          rphif  = 1.0d0-ppiclf_rprop(PPICLF_R_JPHIP,i)
+         rem    = (1.0d0-rphip)*rep   ! mean slip Reynolds Number
          asndf  = ppiclf_rprop(PPICLF_R_JCS,i)
          rmachp = vmag/asndf
          rhop   = ppiclf_rprop(PPICLF_R_JRHOP,i)

@@ -324,6 +324,7 @@
          rep    = vmag*dp*rhof/rmu
          rphip  = ppiclf_rprop(PPICLF_R_JPHIP,i)
          rphif  = 1.0d0-ppiclf_rprop(PPICLF_R_JPHIP,i)
+         rem    = (1.0d0-rphip)*rep   ! mean slip Reynolds Number
          asndf  = ppiclf_rprop(PPICLF_R_JCS,i)
          rmachp = vmag/asndf
          rhop   = ppiclf_rprop(PPICLF_R_JRHOP,i)
@@ -3485,6 +3486,8 @@ c--  then add mean PTKE
          call HTModel_Gunn(i,Nuss)
       elseif (heattransfer_flag == 4) then
          call HTModel_Fox(i,Nuss)
+      elseif (heattransfer_flag == 5) then
+         call HTModel_Sun(i,Nuss)
       else
          call ppiclf_exittr('Unknown heat transfer model$', 0.0d0, 0)
       endif
@@ -3665,6 +3668,58 @@ c--  then add mean PTKE
 
       return
       end
+!-----------------------------------------------------------------------
+!
+! Created October 16, 2025
+!
+! Subroutine for quasi-steady heat transfer
+! Quasi-steady heat transfer: define Nusselt number Nu = Nu(Pr,Re,M)
+!
+!    B. Sun, S. Tenneti, S. Subramaniam (2015)
+!        "Modeling average gas-solid heat transfer using
+!        particle-resolved direct numerical simulation"
+!     International Journal of Heat and Mass Transfer
+!        
+!
+!-----------------------------------------------------------------------
+!
+      subroutine HTModel_Sun(i,Nuss)
+!
+      implicit none
+!
+      include "PPICLF"
+!
+! Internal:
+!
+      integer*4 i
+      real*8 Nuss, theta, q
+!
+! Code:
+!     
+      ! Model is provided for 
+      ! mean slip Reynolds number (1-100)
+      ! particle volume fraction (0.1-0.5)
+
+      ! Need to validate that the model works and doesn't blow up 
+      ! in our kind of simulations
+
+      ! define Nusselt number Nu = Nu(Pr,Re,M)
+      Nuss = (-0.46d0 + 1.77d0*rphif + 0.69d0*rphif**2)*(rphif**(-3))
+     > +(1.37d0 - 2.4d0*rphif + 1.2*rphif**2)*(rep**0.7)*(rpr**OneThird)
+
+      theta = 1.0d0 - 1.6d0*rphip*(1.0d0 - rphip) 
+     >        - (3.0d0*rphip*(1.0d0 - rphip)**4)*exp(-(rep**0.4)*rphip)
+
+      ! Sun's formulation Eq. (29) of the paprt is per volume of grid cell
+      ! This is transformed to per particle by multiplying by 
+      ! (pi dp^3)/(6 phip) 
+      ! This is done below in the Nusslet number with simplifications
+      Nuss = rpi/4.0d0 * Nuss/theta
+
+
+      return
+      end
+!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created June 17, 2024
