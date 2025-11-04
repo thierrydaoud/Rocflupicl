@@ -7,6 +7,8 @@
      >      ,PPICLF_RPROP (PPICLF_LRP ,PPICLF_LPART)  ! Real particle properties
      >      ,PPICLF_RPROP2(PPICLF_LRP2,PPICLF_LPART)  ! Secondary real particle properties
      >      ,PPICLF_RPROP3(PPICLF_LRP3,PPICLF_LPART)  ! Third real particle properties
+     >      ,PPICLF_RPROP4(PPICLF_LRP4,PPICLF_LPART)  ! Fourth real particle properties
+     >      ,PPICLF_RPROP5(PPICLF_LRP5,PPICLF_LPART)  ! Fifth real particle properties
      >      ,PPICLF_FEEDBK(PPICLF_LRP_PRO,PPICLF_LPART) !Feedback particle terms
       COMMON /PPICLF_SLN_CURRENT_R/ PPICLF_Y
      >                             ,PPICLF_YDOT
@@ -14,6 +16,8 @@
      >                             ,PPICLF_RPROP
      >                             ,PPICLF_RPROP2
      >                             ,PPICLF_RPROP3
+     >                             ,PPICLF_RPROP4
+     >                             ,PPICLF_RPROP5
      >                             ,PPICLF_FEEDBK
 
       INTEGER*4 PPICLF_IPROP(PPICLF_LIP,PPICLF_LPART) ! Integer particle properties

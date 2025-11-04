@@ -114,24 +114,24 @@ INTEGER :: errorFlag,icg
    CHARACTER(CHRLEN) :: endString,iFileName,matName,comment
    CHARACTER(12) :: vtuFile,vtuFile1
    LOGICAL :: notfoundFlag, pf_restart,pf_rpInit,pf_settle,&
-              wall_exists, fexists, foundMat, CreateGhosts
+              wall_exists, fexists, foundMat
    INTEGER :: i,npart,nCells,vi,vii,ii,jj,kk,loopCounter,ipart,icl
    INTEGER :: PPC,numPclCells,npart_local,i_global,i_global_min,i_global_max,&
-              iFile,iMat, k, j, l, m, MinFluidCells
+              iFile,iMat, k, j, l, m
    REAL(RFREAL) :: dp_min,dp_max,rhop,tester,ratio,total_vol,xMinCurt,&
                    xMaxCurt,yMinCurt,yMaxCurt,xMinCell,xMaxCell,yMinCell,&
                    yMaxCell,zMinCell,zMaxCell,x,vFrac,volpclsum,xLoc,yLoc,zLoc,yL, &
                    zpf_factor,xpf_factor,dp,neighborWidth,dp_max_l,xp_min,xp_max, &
-                   xp_min_l,xp_max_l 
+                   xp_min_l,xp_max_l, MinFluidCells
    REAL(RFREAL) :: y(PPICLF_LRS, PPICLF_LPART), &
                    rprop(PPICLF_LRP, PPICLF_LPART)
    REAL(RFREAL), DIMENSION(:,:), ALLOCATABLE :: rocGrid 
+   REAL(RFREAL), DIMENSION(:,:,:,:), ALLOCATABLE :: xGrid, yGrid, zGrid
    REAL(RFREAL),ALLOCATABLE,DIMENSION(:) :: xData,yData,zData,rData,dumData    
    REAL(RFREAL), DIMENSION(:), ALLOCATABLE :: volp,SPL 
    REAL(RFREAL), DIMENSION(3) :: tpw1,tpw2,tpw3         
    REAL(RFREAL) :: xin, wout, pi
    REAL(RFREAL) :: rmass
-   REAL(RFREAL), DIMENSION(:,:,:,:), ALLOCATABLE :: xGrid, yGrid, zGrid
 
    INTEGER :: seed(33), isize
 
@@ -141,7 +141,7 @@ INTEGER :: errorFlag,icg
         rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
         qs_fluct_filter_adapt_flag, &
         ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
-        sbNearest_flag, burnrate_flag, flow_model
+        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
    REAL(RFREAL) :: rmu_ref, tref, suth, ksp, erest
    COMMON /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag, &
         collisional_flag, heattransfer_flag, feedback_flag, &
@@ -149,7 +149,7 @@ INTEGER :: errorFlag,icg
         rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
         qs_fluct_filter_adapt_flag, ksp, erest, &
         ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
-        sbNearest_flag, burnrate_flag, flow_model
+        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
    REAL(RFREAL) :: ppiclf_rcp_part
    CHARACTER(12) :: ppiclf_matname
    COMMON /RFLU_ppiclf_misc01/ ppiclf_rcp_part
@@ -274,9 +274,9 @@ END IF
 ! ************************************************************
 
 ! *** I think we can delete this? Random not used -Avery
-seed = 1
-CALL RANDOM_SEED(put=seed)
-CALL RANDOM_SEED(size=isize)
+!seed = 1
+!CALL RANDOM_SEED(put=seed)
+!CALL RANDOM_SEED(size=isize)
 !***
 
 ! Josh Gillis - Fixed restart probelm
@@ -328,7 +328,7 @@ IF(global%restartFromScratch) THEN
         many particles to initialize')
    END IF
   
-   npart_local = CEILING(npart*1.0D0/(global%nProcs*1.0D0))
+   npart_local = CEILING(REAL(npart)/(REAL(global%nProcs)))
    i = 1
    i_global = 1
    i_global_min = npart_local*global%myProcid
@@ -397,7 +397,7 @@ IF(global%restartFromScratch) THEN
          rprop(PPICLF_R_JDP,i)   = dp ! particle diameter
          rprop(PPICLF_R_JVOLP,i) = (4.0_RFREAL/3.0_RFREAL)*global%pi*&
                                    (0.5_RFREAL*dp)**3 ! particle volume
-         ! Super Particle Loading (Real Number of particles = JSPL * number of compuational particles)
+         ! Super Particle Loading (Real Number of particles = SPL * number of compuational particles)
          rprop(PPICLF_R_JSPL,i) = 1.0_RFREAL
 
          ! Davin - added for burn rate model 02/22/2025
@@ -497,7 +497,7 @@ IF ( global%error /= ERR_NONE ) THEN
   CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:rocGrid')
 END IF ! global%error
 
-! *** ppiclF requires hexahedral elements ***
+! *** This assumes hexahedral elements. Change here for future unstructured grid ***
 DO i = 1, nCells 
 
    vi = pRegion%grid%hex2v(1,i) 
@@ -578,14 +578,14 @@ DO i = 1,nCells
   rocGrid(1,i) = pRegion%grid%cofg(1,i) !Cell Centroid x position
   rocGrid(2,i) = pRegion%grid%cofg(2,i) !Cell Centroid y position
   rocGrid(3,i) = pRegion%grid%cofg(3,i) !Cell Centroid z position
-  rocGrid(4,i) = CellLen(1) ! Cell largest dx
-  rocGrid(5,i) = CellLen(2) ! Cell largest dy
-  rocGrid(6,i) = CellLen(3) ! Cell largest dz
-  rocGrid(7,i) = pRegion%grid%vol(i) ! Cell volume
+  rocGrid(4,i) = CellLen(1)             !Cell largest dx
+  rocGrid(5,i) = CellLen(2)             !Cell largest dy
+  rocGrid(6,i) = CellLen(3)             !Cell largest dz
+  rocGrid(7,i) = pRegion%grid%vol(i)    !Cell volume
 
 END DO !i
 
-MinFluidCells = 2 !Number of fluid cells for Minimum Bin Size or ppiclf_filter(1:3)
+MinFluidCells = 2.0D0 !Number of fluid cells for Minimum Bin Size and ppiclf_filter(1:3)
 DO l = 1,3
   filter_local(l) = MinFluidCells*Max_CellLen(l) 
   ! Find max x,y,z cell lengths across all MPI ranks (entire rocflu domain)
@@ -622,8 +622,6 @@ IF(global%myProcid == MASTERPROC) THEN
   PRINT*, 'z fluid min/max', z_per_min, z_per_max
 END IF
 
-!IF(
-!  CreateGhosts,                    &
 CALL ppiclf_solve_Initialize( & 
            x_per_flag, x_per_min, x_per_max, &
            y_per_flag, y_per_min, y_per_max, &
@@ -636,16 +634,47 @@ IF(((ang_per_flag.eq.1) .and. (x_per_flag.eq.1 .or. y_per_flag.eq.1)) .or. &
     CALL ErrorStop(global,ERR_PICL_INVALID_PERIODICITY,__LINE__,&
       'Wrong periodicity choices for ppiclF')
 END IF 
+
+! Angular-Periodic
+IF(ang_per_flag .eq. 1) then
+   IF(global%myProcid == MASTERPROC) print*, "PPICLF Angular Periodic Invoked"
+     call ppiclf_solve_InitAngularPeriodic(ang_per_flag , &
+                                           ang_per_rin  , ang_per_rout, &
+                                           ang_per_angle, ang_per_xangle)
+   IF(global%myProcid == MASTERPROC) print*, "PPICLF Angular Periodic Done"
+END IF
+
+! Linear X-Periodic
+IF(x_per_flag .eq. 1) then  
+   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicX Invoked"
+   call ppiclf_solve_InitPeriodicX(x_per_min, x_per_max) 
+   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicX Done" 
+END IF 
+
+! Linear Y-Periodic
+IF(y_per_flag .eq. 1) then
+   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicY Invoked"
+  call ppiclf_solve_InitPeriodicY(y_per_min, y_per_max)
+   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicY Done" 
+END IF
+
+! Linear Z-Periodic
+IF(z_per_flag .eq. 1) then 
+   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicZ Invoked"
+ call ppiclf_solve_InitPeriodicZ(z_per_min, z_per_max)
+   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicZ Done" 
+END IF 
+
 ! Creates OverlapGrid and Calls Init Solve
 CALL ppiclf_comm_InitOverlapGrid(nCells,rocGrid)
 
 INQUIRE(FILE='filein.vtk', EXIST=wall_exists)
 IF(wall_exists) THEN
   CALL ppiclf_io_ReadWallVTK('filein.vtk')
+  WRITE(*,*) 'Particle boundary wall read-in.'
 ELSE IF (global%myProcid == MASTERPROC) THEN
-  WRITE(*,*) 'Could not find filein.vtk'
+  WRITE(*,*) '***WARNING: Could not find filein.vtk***'
 END IF
-
 
 ! 03/24/2025 - Thierry - store the RocfluMP Flow Model chosen (Euler or NS)
 !                        this is used in ppiclF for calculating the pressure gradient
@@ -688,6 +717,9 @@ DO i=1,pGrid%nCellsTot
         pRegion%mixt%piclVF(i) = 0.0_RFREAL
 END DO
 
+! Calling inisolve to gather particle volume fraction
+CALL ppiclf_solve_initsolve
+
 IF ( global%myProcid == MASTERPROC) WRITE(*,*) "PFINIT: Calc Init VolP"
 DO i = 1, nCells
        CALL ppiclf_solve_GetProFld(i, PPICLF_P_JPHIP, volp(i))
@@ -695,9 +727,9 @@ DO i = 1, nCells
            WRITE(*,*) "Need to properly implement axi-sym for phip init."
            CALL ErrorStop(global,ERR_OPTION_TYPE,__LINE__,'PPICLF:axi')
        END IF
-       volp(i) = 0.0D0
        volp(i) = volp(i)/pRegion%grid%vol(i)
 !*** VOL FRAC CAP
+!*** I THINK WE SHOULD DELETE THIS CAP - AVERY ***
        IF(volp(i) .GT. 0.62) THEN
            volp(i) = 0.62 
        END IF

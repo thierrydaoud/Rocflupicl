@@ -286,6 +286,12 @@
         DO j=1,PPICLF_LRP3
            ppiclf_rprop3(j,i) = 0.0D0
         END DO
+        DO j=1,PPICLF_LRP4
+           ppiclf_rprop4(j,i) = 0.0D0
+        END DO
+        DO j=1,PPICLF_LRP5
+           ppiclf_rprop5(j,i) = 0.0D0
+        END DO
         DO j=1,PPICLF_LIP
            ppiclf_iprop(j,i) = 0
         END DO
@@ -1613,7 +1619,7 @@ c----------------------------------------------------------------------
         IF (nnearest .lt. 1) THEN
           ! Particle is outside of fluid domain.
           ! iprop(8,ip) set to -1 means it will be removed
-          ! from ppiclf_y & ppiclf_rprop, rprop2, & rprop3
+          ! from ppiclf_y & ppiclf_rprop, rprop2, rprop3, rprop4, rprop5
           ppiclf_iprop(9,ip) = -1
           ppiclf_remove_particle = .TRUE.
           PRINT*, 'part # on proc # removed.', ppiclf_iprop(1,ip),
@@ -1729,7 +1735,7 @@ c----------------------------------------------------------------------
         IF (nnearest .LT. 1) THEN
           ! Particle is outside of fluid domain.
           ! iprop(8,ip) set to -1 means it will be removed
-          ! from ppiclf_y & ppiclf_rprop, rprop2, & rprop3
+          ! from ppiclf_y & ppiclf_rprop, rprop2, rprop3, rprop4, rprop5
           ppiclf_iprop(9,ip) = -1
           ppiclf_remove_particle = .TRUE.
           PRINT*, 'part # on proc # removed with postion of:',
@@ -1831,6 +1837,10 @@ c----------------------------------------------------------------------
      >          (ppiclf_rprop2(1,icount),ppiclf_rprop2(1,i),PPICLF_LRP2)
                CALL ppiclf_copy
      >          (ppiclf_rprop3(1,icount),ppiclf_rprop3(1,i),PPICLF_LRP3)
+               CALL ppiclf_copy
+     >          (ppiclf_rprop4(1,icount),ppiclf_rprop4(1,i),PPICLF_LRP4)
+               CALL ppiclf_copy
+     >          (ppiclf_rprop5(1,icount),ppiclf_rprop5(1,i),PPICLF_LRP5)
                CALL ppiclf_icopy
      >          (ppiclf_iprop(1,icount) , ppiclf_iprop(1,i), PPICLF_LIP)
             END IF
@@ -1865,6 +1875,21 @@ c----------------------------------------------------------------------
       ppiclf_pro_fld_picl = 0.0d0
       eps = 1.0D-60
       DO ip=1,ppiclf_npart
+        ! Update feedback indicies for volume fraction
+        ppiclf_feedbk(PPICLF_P_JPHIP,i) = ppiclf_rprop(PPICLF_R_JVOLP,i)
+     >                                    *ppiclf_rprop(PPICLF_R_JSPL,i)
+        ppiclf_feedbk(PPICLF_P_JPHIPD,i) = piclf_rprop(PPICLF_R_JSPL,i)*
+     >    ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_rprop(PPICLF_R_JRHOP,i)
+        ppiclf_feedbk(PPICLF_P_JPHIPU,i) = piclf_rprop(PPICLF_R_JSPL,i)*
+     >            ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVX,i)
+        ppiclf_feedbk(PPICLF_P_JPHIPV,i) = piclf_rprop(PPICLF_R_JSPL,i)*
+     >            ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVY,i)
+        ppiclf_feedbk(PPICLF_P_JPHIPW,i) = piclf_rprop(PPICLF_R_JSPL,i)*
+     >            ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVZ,i)
+        ! Temp isn't multiplied by SPL since it is intensive property
+        ppiclf_feedbk(PPICLF_P_JPHIPT,i) = 
+     >             ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JT,i)
+
         nCellProj = ppiclf_nPart2Cell(ip)
         wsum = 0.0D0
         ! Loop to find individual cell weightings
@@ -1877,6 +1902,7 @@ c----------------------------------------------------------------------
           wsum = wsum + w(i)
         END DO !i
 #ifdef TEST
+        ! These are same feedback equations used in unit testing
         x_norm = (ppiclf_y(PPICLF_JX,ip) - ppiclf_binb(1))
      >           / (ppiclf_binb(2) - ppiclf_binb(1))
         y_norm = (ppiclf_y(PPICLF_JY, ip) - ppiclf_binb(3))
@@ -1888,7 +1914,6 @@ c----------------------------------------------------------------------
         ppiclf_feedbk(2,ip) = SIN(2*PI*x_norm) + 
      >                        SIN(2*PI*y_norm) + SIN(2*PI*z_norm)
 #endif     
-
         DO j=1,PPICLF_LRP_PRO
           ! Loop through cells to apply feedback     
           DO i = 1,nCellProj

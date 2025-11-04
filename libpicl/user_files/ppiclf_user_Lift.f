@@ -20,22 +20,6 @@
 !
 ! Internal:
 !
-      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-      real*8 :: rmu_ref, tref, suth, ksp, erest
-      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag, ksp, erest,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-
       integer*4 i,iStage
       real*8 liftx, lifty, liftz
 
@@ -68,6 +52,9 @@
 ! Valid for Rep < 50 and omg* < 0.8 (see Loft, "Lift of a spherical
 !    particle subject to vorticity and/or spin", AIAA J., 
 !    Vol. 46,  pp. 801-809, 2008)
+!      
+! References:
+! 1) Fundamentals of Dispersed Multiphase Flows (S.Balachandar), Chap.5
 !
 !-----------------------------------------------------------------------
 !
@@ -134,7 +121,12 @@
 ! Subroutine for Magnus lift - lift induced by particle rotation
 !
 ! Requires particle angular velocity to be calculated
-!
+!      
+! References:
+! 1) Fundamentals of Dispersed Multiphase Flows (S.Balachandar), Chap.5
+! 2) Loth and Drogan, "An equation of motion for particles of finite
+! Reynolds number and size", (2009). 
+!      
 !-----------------------------------------------------------------------
 !
       subroutine Lift_Magnus(i,liftx,lifty,liftz)

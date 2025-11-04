@@ -22,26 +22,13 @@
 !
 ! Internal:
 !
-      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-      real*8 :: rmu_ref, tref, suth, ksp, erest
-      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag, ksp, erest,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
       integer*4 i, iStage
       real*8 famx, famy, famz, rmass_add
       real*8 rcd_am
       real*8 SDrho
       real*8 ug,vg,wg,vgradrho
+      real*8 famx_Ling
+      real*8 famx_Brad
 
 !
 ! Code:
@@ -54,10 +41,15 @@
       endif
       rcd_am = rcd_am * 0.5
 
-      ! Sangani's volume fraciton correction for dilute random arrays
-      ! Capping volume fraction at 0.5
-      rcd_am = rcd_am*(1.0+3.32*MIN(rphip,0.5))
+      ! Sangani's volume fraction correction for dilute random arrays
+      ! Capping volume fraction at 0.5 
+      ! 09/20/2025 - Thierry - Sangani's volume fraction correction
+      ! overshoots Unary added-mass term A LOT. 
+      !rcd_am = rcd_am*(1.0+3.32*min(rphip,0.5))
 
+      ! Adopting the volume fraction correction from Beguin & Etienne
+      ! (2016).
+      rcd_am = rcd_am*(1.0+0.68*rphip**2)
       rmass_add = rhof*ppiclf_rprop(PPICLF_R_JVOLP,i)*rcd_am
 
       !NEW Added mass, using how rocflu does it
@@ -94,6 +86,40 @@
      >   (vz*SDrho + rhof*ppiclf_rprop(PPICLF_R_JSDRZ,i) + wg*vgradrho)
 
 
+      if (1==2) then
+      ! This is Ling's 2012 formulation where he replaced
+      !   D(rhog*ug) with -grad(pg)
+      famx_Ling = rcd_am*ppiclf_rprop(PPICLF_R_JVOLP,i)*
+     > (-ppiclf_rprop(PPICLF_R_JDPDX,i) - ppiclf_y(PPICLF_JVX,i)*SDrho)
+
+      ! Original version
+      ! /home/tlj/Codes_Rocflu/Rocflu_picl_tlj/ppiclf/source/ppiclf_user.f
+      ! In the original version JSDRX was assumed to be D(rhog*ug)/Dt,
+      !    but this was before we realized that the conserved Rocflu
+      !    variable was phig*rhog*ug
+      famx_Brad = rcd_am*ppiclf_rprop(PPICLF_R_JVOLP,i) *
+     >   (ppiclf_rprop(PPICLF_R_JSDRX,i) - ppiclf_y(PPICLF_JVX,i)*SDrho)
+
+      ! writing data only for the median particle
+      if((ppiclf_iprop(5,i).eq.29.0) .and. (ppiclf_iprop(6,i).eq.0.0)
+     >   .and. (ppiclf_iprop(7,i).eq.151.0)) then
+      
+      open(unit=20,file='fort.20',position='append') 
+      write(20,*) ppiclf_time,famx-rmass_add*ppiclf_ydot(PPICLF_JVX,i),
+     >            rcd_am, ppiclf_rprop(PPICLF_R_JVOLP,i),
+     >            rcd_am*ppiclf_rprop(PPICLF_R_JVOLP,i),
+     >            vx, SDrho, vx*SDrho,
+     >            rhof, ppiclf_rprop(PPICLF_R_JSDRX,i),
+     >            rhof*ppiclf_rprop(PPICLF_R_JSDRX,i),
+     >            ug, vgradrho,
+     >            ug*vgradrho,
+     >            famx_Ling-rmass_add*ppiclf_ydot(PPICLF_JVX,i),
+     >            famx_Brad-rmass_add*ppiclf_ydot(PPICLF_JVX,i)
+      flush(20)
+      endif
+      endif
+
+
       return
       end
 !
@@ -106,7 +132,7 @@
 !   also called the quasi-unsteady force,
 !   or the inviscid unsteady force in case of the Euler equations
 !      
-! Implementing Added Mass Algorithm from S.Briney (2024)
+! Implementing Added Mass Algorithm from S.Briney (2025)
 !  
 ! n       = number of points
 ! alpha   = volume fraction
@@ -142,21 +168,6 @@
 !
       include "PPICLF"
 !
-      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-      real*8 :: rmu_ref, tref, suth, ksp, erest
-      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag, ksp, erest,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
       integer i, j, k, l, n, jj
       integer*4 iStage
       real*8 rad
@@ -283,21 +294,6 @@
 !
       include "PPICLF"
 !
-      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-      real*8 :: rmu_ref, tref, suth, ksp, erest
-      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag, ksp, erest,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
       integer i, j, k, l, n, jj
       integer*4 iStage
       real*8 rad
@@ -314,8 +310,8 @@
       ! particle radius
       rad = ppiclf_rprop(PPICLF_R_JDP,i) * 0.5d0
       
-      ! ppiclf_nndist is neighbor width - user defined
-      dr_max = ppiclf_nndist
+      ! ppiclf_nndist is neighbor width - MIN(user defined,4*P_dia)
+      dr_max = ppiclf_nndist 
 
       ! In the example program binary_model.f90, the nearest
       ! neighbor calculations are done here at this point to

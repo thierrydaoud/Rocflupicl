@@ -5,28 +5,32 @@
 !
 ! General useage
 !
-!      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
-!     >   collisional_flag, heattransfer_flag, feedback_flag,
-!     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
-!     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-!     >   qs_fluct_filter_adapt_flag,
-!     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH
-!      real*8 :: rmu_ref, tref, suth, ksp, erest
-!      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
-!     >   collisional_flag, heattransfer_flag, feedback_flag,
-!     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
-!     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-!     >   qs_fluct_filter_adapt_flag, ksp, erest,
-!     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH
+      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
+     >   collisional_flag, heattransfer_flag, feedback_flag,
+     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
+     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
+     >   qs_fluct_filter_adapt_flag,
+     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
+     >   sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
+      real*8 :: rmu_ref, tref, suth, ksp, erest
+      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
+     >   collisional_flag, heattransfer_flag, feedback_flag,
+     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
+     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
+     >   qs_fluct_filter_adapt_flag, ksp, erest,
+     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
+     >   sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
 
       real*8 rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,
      >   rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac,
      >   vx,vy,vz,
-     >   rcp_part,rpr
+     >   rcp_part,rpr,
+     >   phi, mp, re, rem
       common /RFLU_user/ rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,
      >   rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac,
      >   vx,vy,vz,
-     >   rcp_part,rpr
+     >   rcp_part,rpr,
+     >   phi,mp,re, rem
 
 !
 ! For misc values
@@ -45,8 +49,9 @@
       common /user_fluct02/ upmean, vpmean, wpmean, phipmean
       common /user_fluct03/ u2pmean, v2pmean, w2pmean
 
-      real*8 UnifRnd(6)
-      common /user_fluct02/ UnifRnd
+      real*8 UnifRnd(6), Rsg(3,3), T_par(3)
+      common /user_fluct02/ UnifRnd, Rsg, T_par
+
 
 !
 ! For ppiclf_user_debug.f
@@ -106,3 +111,4 @@
      >                                xrot, vrot
       common /solve_InitAngularPeriodic03/ x_per_min, x_per_max,
      >  y_per_min, y_per_max, z_per_min, z_per_max
+     

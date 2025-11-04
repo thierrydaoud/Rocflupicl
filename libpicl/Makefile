@@ -35,7 +35,6 @@ SRC = $(SOURCE_ROOT_USER)/ppiclf_user.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_Lift.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_ViscousUnsteady.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_MapProjPart.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_InitZero.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_debug.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_BurnRateModel.f   \
@@ -57,7 +56,6 @@ OBJ = $(SOURCE_ROOT_USER)/ppiclf_user.o     \
       $(SOURCE_ROOT_USER)/ppiclf_user_Lift.o     \
       $(SOURCE_ROOT_USER)/ppiclf_user_ViscousUnsteady.o     \
       $(SOURCE_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_MapProjPart.o     \
       $(SOURCE_ROOT_USER)/ppiclf_user_InitZero.o     \
       $(SOURCE_ROOT_USER)/ppiclf_user_debug.o     \
       $(SOURCE_ROOT_USER)/ppiclf_user_BurnRateModel.o   \

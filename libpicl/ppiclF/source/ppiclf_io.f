@@ -188,7 +188,7 @@
          ic_lrp = ic_lrp + 1
          ppiclf_rprop(j,i) = rout_lrp(ic_lrp)
       enddo
-!*** need to add ppiclf_rprop2 & ppiclf_rprop3
+!*** need to add ppiclf_rprop2 ppiclf_rprop3, rprop4, & prop5
       enddo
       ! This reads the particle tag infomation.
       do j=1,3

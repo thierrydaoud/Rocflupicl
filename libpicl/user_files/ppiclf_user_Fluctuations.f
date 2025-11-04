@@ -37,21 +37,6 @@
 !
 ! Internal:
 !
-      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-      real*8 :: rmu_ref, tref, suth, ksp, erest
-      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag, ksp, erest,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
       integer*4 i, iStage
       real*8 fqs_fluct(3)
 
@@ -64,11 +49,14 @@
 !
       TwoPi = 2.0d0*acos(-1.0d0)
 
+
       if (qs_fluct_filter_flag==0) then
          denum = max(dfloat(icpmean),1.d0)  ! for arithmetic mean
       else if (qs_fluct_filter_flag==1) then
          denum = max(phipmean,1.0e-6)  ! for volume mean
       endif
+      
+
       upmean = upmean / denum
       vpmean = vpmean / denum
       wpmean = wpmean / denum
@@ -207,37 +195,28 @@
 !
 !-----------------------------------------------------------------------
 !
-      subroutine ppiclf_user_QS_fluct_Osnes(i,iStage,fqs_fluct)
-!
+      subroutine ppiclf_user_QS_fluct_Osnes(i,iStage,fqs_fluct,
+     >                                      xi_par,xi_perp,xi_T,
+     >                                      fqsx,fqsy,fqsz)
+!                                                    
       implicit none
 !
       include "PPICLF"
 !
+! Input:
+      integer*4 i, iStage
+      real*8 fqsx, fqsy, fqsz
+!
+! Output:
+      real*8 xi_par, xi_perp, xi_T
+      real*8 fqs_fluct(3)
+!
 ! Internal:
 !
-      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-      real*8 :: rmu_ref, tref, suth, ksp, erest
-      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag, ksp, erest,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-
-      integer*4 i, iStage
-      real*8 fqs_fluct(3)
-
-      real*8 aSDE,bq,chi,denum,dW1,dW2,fq,Fs,gkern,
-     >   sigD,tF_inv,theta,upflct,vpflct,wpflct,Z1,Z2
+      real*8 aSDE,bq,chi,denum,dW1,dW2,dW3,fq,Fs,gkern,
+     >   sigD,tF_inv,theta,upflct,vpflct,wpflct,Z1,Z2,Z3
       real*8 TwoPi
-      real*8 bSDE_CD, bSDE_CL,CD_frac,CD_prime
+      real*8 bSDE_CD, bSDE_CL, bSDE_CT, CD_frac, CD_prime
       real*8 sigT,sigCT
       real*8 sigmoid_cf, f_CF
       real*8 avec(3)
@@ -247,6 +226,21 @@
       real*8 cosrand,sinrand
       real*8 eunit(3)
 
+      integer*4 m
+      real*8 s_par, s_perp, s_T, Rmean_par, Rmean_perp, R_par, R_perp
+      real*8 R(3,3), Q(3,3), Qt(3,3), Tmean_par(3)
+      real*8 CD_average
+      real*8 k_tilde, k_Mach, b_tilde, b_Mach, b_par, b_perp,
+     >       k_Osnes, b_Osnes
+      real*8 C1, C2, C3, C4, C5,
+     >       D1, D2, D3, D4, D5, D6, D7, D8,
+     >       E1, E2, E3, E4
+      real*8 F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11,
+     >       G1, G2, G3, G4, G5, G6, G7, G8,
+     >       H1, H2, H3, H4, H5, H6, H7, H8,
+     >       A1, A2, A3, A4
+      real*8 D9, D10, D11
+      real*8 fit_func
 !
 ! Code:
 !
@@ -257,6 +251,7 @@
       else if (qs_fluct_filter_flag==1) then
          denum = max(phipmean,1.0e-6)  ! for volume mean
       endif
+      
       upmean = upmean / denum
       vpmean = vpmean / denum
       wpmean = wpmean / denum
@@ -360,6 +355,8 @@
 ! The third (cvec) is cross product of the first two
 ! written 3/6/24
 !
+! avec : unit vector in main direction
+! bvec, cvec: two orthogonal vectors to avec
       eunit = [1,0,0]
       if (abs(avec(2))+abs(avec(3)) <= 1.d-8) then
          eunit = [0,1,0]
@@ -379,17 +376,22 @@
       denum   = max(1.d-8,sqrt(cvec(1)**2 + cvec(2)**2 + cvec(3)**2))
       cvec    = cvec / denum
 
+      ! Generate  Gaussian Random Values
       call RANDOM_NUMBER(UnifRnd)
 
+! Box-Muller transform for generating two independent standard normal
+! (Gaussian) random variables
+! Z1 & Z2 are standard normal random variables
       Z1 = sqrt(-2.0d0*log(UnifRnd(1)))*cos(TwoPi*UnifRnd(2))
       Z2 = sqrt(-2.0d0*log(UnifRnd(3)))*cos(TwoPi*UnifRnd(4))
 
+! dW1 & dW2 are scaled stochastic amplitudes       
       dW1 = sqrt(fac)*Z1
       dW2 = sqrt(fac)*Z2
 
 ! Random mixture of bvec and cvec - make sure the new one is a unit vector
 ! Added 3/6/24
-!
+! dvec : Random unit direction in perpendicular plane 
       cosrand = cos(TwoPi*UnifRnd(5))
       sinrand = sin(TwoPi*UnifRnd(5)) 
       dvec(1) = bvec(1)*cosrand + cvec(1)*sinrand
@@ -398,6 +400,11 @@
       denum   = max(1.d-8,sqrt(dvec(1)**2 + dvec(2)**2 + dvec(3)**2))
       dvec    = dvec/denum
 
+      ! Store and project back fqs_fluct values only if QSFLUCT = 2
+      ! Otherwise, need to call subroutine for PseudoTurbulence
+      if(qs_fluct_flag .eq. 0) then
+        fqs_fluct = 0.0d0
+      else
       fqs_fluct(1) = 
      >           (1.0-aSDE*fac)*ppiclf_rprop(PPICLF_R_FLUCTFX,i)
      >           + bSDE_CD*dW1*avec(1) + bSDE_CL*dW2*dvec(1)
@@ -407,7 +414,7 @@
       fqs_fluct(3) = 
      >           (1.0-aSDE*fac)*ppiclf_rprop(PPICLF_R_FLUCTFZ,i)
      >           + bSDE_CD*dW1*avec(3) + bSDE_CL*dW2*dvec(3)
-
+      endif
 
       if (ppiclf_debug==2 .and. (iStage==1 .and. ppiclf_nid==0)) then
          if (ppiclf_time.gt.2.d-8) then
@@ -436,6 +443,224 @@
          endif
       endif
 
+!---------------------------------------------------------------------------
+! Pseudo-Turbulence Calculations starts here 
+      if(pseudoTurb_flag==1) then
+        !phi = max(0.05d0, min(0.3d0, rphip))
+        !mp = max(0.0d0, min(0.87d0, rmachp))
+        !re = max(0.0d0, min(266.0d0, rep))
+        phi = rphip
+        mp = rmachp
+        re = rep
+        rem = (1.0-phi)*re
+
+      ! Constants taken from Osnes PseudoTurbulent paper, Table 1
+        C1 = -1.2152; D1 = -0.0462; E1 = -0.2906;
+        C2 = -7.6314; D2 = -0.1068; E2 =  1.1899; 
+        C3 =  0.2889; D3 =  0.6793; E3 =  0.5218; 
+        C4 =  0.6143; D4 =  1.1461; E4 =  0.0699;
+        C5 =  0.3082; D5 = -2.6886; 
+                      D6 = -2.1376;
+                      D7 =  0.4873;
+                      D8 =  0.2395;
+                    ! Dr. Bala's terms
+                      D9  =  0.716
+                      D10 = -2.14
+                      D11 =  1.6
+
+      ! Constants taken from Osnes PseudoTurbulent paper, Table 2
+        F1  = -0.0022; G1 = -0.2867; H1 =  0.4992
+        F2  = -0.0219; G2 =  0.2176; H2 = -1.3528
+        F3  =  0.0932; G3 =  0.2826; H3 = -0.1358
+        F4  = -0.0135; G4 = -0.0644; H4 = -0.1463
+        F5  =  0.0361; G5 =  0.0466; H5 =  0.2583
+        F6  =  0.0403; G6 =  0.0973; H6 = -0.3339
+        F7  = -0.0761; G7 = -0.0081; H7 = -0.0407
+        F8  =  0.0599; G8 = -0.0235; H8 = -0.0806
+        F9  =  0.0164;
+        F10 =  0.0453;
+        F11 = -0.0265;
+     
+        ! zero out variables  at first
+        Rmean_par = 0.0d0 ; Rmean_perp = 0.0d0
+        R = 0.0d0; Rsg = 0.0d0
+        Tmean_par = 0.0d0; T_par = 0.0d0
+        
+        ! CD_average is zero at early time steps
+
+        avec = [vx,vy,vz]/vmag
+
+        CD_average = fqsx*avec(1) +
+     >               fqsy*avec(2) +
+     >               fqsz*avec(3)
+
+        ! avoiding singularity
+        if(CD_average .lt. 1.d-8) return
+
+        ! Reynolds Subgrid Stress Tensor - Eulerian Mean Model 
+                                                                       
+        ! Reynolds number and vol fraction dependent k^tilde and b_par 
+        ! Mehrabadi's terms
+        k_tilde = 2.0*phi + 2.5*phi*((1.0-phi)**3) * 
+     >         exp(-phi*(rem**0.5))                                 
+                                                                    
+!        b_par = 0.523/(1.0+0.305*exp(-0.114*rem)) *
+!     >          exp(-3.511*phi/(1.0+1.801*exp(-0.005*rem)))
+
+        ! 08/25/2025 - Thierry - Fitted phip function to better match
+        ! formulation with Osnes's low Mach number data
+        fit_func = -10.18530152*phi**3 + 10.94163073*phi**2
+     >              -7.07374862*phi +  0.38424203
+        b_par = 0.523/(1.0+0.305*exp(-0.114*rem)) *
+     >          exp(fit_func/(1.0+1.801*exp(-0.005*rem)))
+                                                                       
+        ! Mach number correction provided by Osnes                            
+!        k_Mach = phi*(C1 + C2*phi + re**C3) * 
+!     >        (tanh(C4/C5) + tanh((mp - C4)/C5))
+
+        ! Mach number correction at Re=100, coeff taken from Osnes
+        ! cap vol fraction here at 0.3
+        k_Mach = min(phi,0.3)*(-6.918*min(phi,0.3) + 2.238) *
+     >        (tanh(C4/C5) + tanh((mp - C4)/C5))
+
+!        b_Mach = (D1 + (re/300.0)*(D2 + D3*re/300.0) +
+!     >         phi*(D4 + D5*(re**2/300.0**2) + D6*phi)) *
+!     >         (tanh(-D7/D8) - tanh((mp-D7)/D8))
+
+        ! First term was corrected by Dr. Bala (D9, D10, D11)
+        b_Mach = phi*(D9 + D10*phi + D11*phi**2) *
+     >         (tanh(-D7/D8) - tanh((mp-D7)/D8))
+
+        ! Corrected k^tilde and b_par components                       
+        k_Osnes =  k_tilde*(1.0d0 + k_Mach)
+        b_Osnes =  b_par  *(1.0d0 + b_Mach)
+        b_perp  = -b_Osnes/2.0d0
+                                                                       
+        ! Mean Eulerian Reynolds Subgrid Stress - Parallel Component   
+        Rmean_par  = 2.0d0*k_Osnes*(b_Osnes  + 1.0d0/3.0d0)
+                                                                       
+        ! Mean Eulerian Reynolds Subgrid Stress - Perpendicular Component
+        Rmean_perp = 2.0d0*k_Osnes*(b_perp + 1.0d0/3.0d0)
+
+        ! Mean Pseudo Turbulent Kinetic Energy Model
+        Tmean_par = E1 + E2*phi/(E3 + re/300.0) + E4*mp
+        
+c--  Multiply by the mean relative flow kinetic energy to dimentionalize      
+        Rmean_par  = Rmean_par  * 0.5d0 * vmag**2
+        Rmean_perp = Rmean_perp * 0.5d0 * vmag**2
+
+c--  Multiply by the mean relative velocity & flow kinetic energy to dimentionalize      
+        Tmean_par(1)  = Tmean_par(1) * vx * k_Osnes * 0.5d0 * vmag**2
+        Tmean_par(2)  = Tmean_par(2) * vy * k_Osnes * 0.5d0 * vmag**2
+        Tmean_par(3)  = Tmean_par(3) * vz * k_Osnes * 0.5d0 * vmag**2
+
+c------ Lagrangian Model
+  
+        ! 08/15/2025 - Ditch A1 per Dr. Bala, and set A2 to this constant per Osnes
+        A1 = 0.0d0
+        A2 = 0.064
+
+        A3 = G1 + G2/(min(phi,0.3) + G3) + G4 * mp
+        
+        ! 09/02/2025 - Cap according to Osnes model range
+        A4 = H1 + H2*max(0.0d0, min(0.3d0, phi))
+     >          + H3*max(0.0d0, min(0.87d0, mp)) 
+     >          + H4*max(30.0d0, min(266.0d0, re))/300.0d0
+  
+        s_par = F8 + F9/(phi + F10) + F11 * mp
+        !s_perp = G5/(phi + G6) + (G7*re)/(300.0*phi) + G8
+c---     We ditch Osnes's expression for s_perp and assume it as big as s_par
+        s_perp = s_par
+        
+        ! 09/02/2025 - Cap according to Osnes model range
+        s_T = H5 + H6*max(0.0d0, min(0.3d0, phi))
+     >           + H7*max(0.0d0, min(0.87d0, mp)) 
+     >           + H8*max(30.0d0, min(266.0d0, re))/300.0d0
+
+        tF_inv = (24.0*phi*chi/dp) * sqrt(theta/rpi)
+        aSDE = tF_inv
+        bSDE_CD = s_par *sqrt(2.0*tF_inv)
+        bSDE_CL = s_perp*sqrt(2.0*tF_inv)
+        bSDE_CT = s_T *sqrt(2.0*tF_inv)
+  
+        call RANDOM_NUMBER(UnifRnd)
+        
+        ! Box-Muller transform for generating two independent standard normal
+        ! (Gaussian) random variables
+        ! Z1 & Z2 are standard normal random variables
+        Z1 = sqrt(-2.0d0*log(UnifRnd(1))) * cos(TwoPi*UnifRnd(2))
+        Z2 = sqrt(-2.0d0*log(UnifRnd(3))) * sin(TwoPi*UnifRnd(4))
+        Z3 = sqrt(-2.0d0*log(UnifRnd(5))) * cos(TwoPi*UnifRnd(6))
+
+        ! dW1 & dW2 are scaled stochastic amplitudes       
+        dW1 = sqrt(fac)*Z1
+        dW2 = sqrt(fac)*Z2
+        dW3 = sqrt(fac)*Z3
+  
+        ! Langevin Model implemented for xi_par, xi_perp, xi_T
+        xi_par = (1.0-aSDE*fac)*ppiclf_rprop(PPICLF_R_XIPAR,i)
+     >            + bSDE_CD*dW1
+        xi_perp = (1.0-aSDE*fac)*ppiclf_rprop(PPICLF_R_XIPERP,i)
+     >            + bSDE_CL*dW2
+        xi_T = (1.0-aSDE*fac)*ppiclf_rprop(PPICLF_R_XIT,i)
+     >            + bSDE_CT*dW3
+
+        ! CD_prime has unit of Force
+        ! CD_average has unit of Force
+
+        ! Lagrangian Reynolds Subgrid Stress - Parallel Component
+        R_par = 1.0 + A1 + A2 * CD_prime / CD_average + xi_par
+  
+        ! Lagrangian Reynolds Subgrid Stress - Perpendicular Component
+        R_perp = 1.0 + A3 * CD_prime / CD_average + xi_perp
+
+c--  Multiply Lagrangian Model by the Eulerian Mean Model
+        R_par  = R_par  * Rmean_par 
+        R_perp = R_perp * Rmean_perp
+
+c---  Q = [avec | bvec | cvec], 3x3 matrix
+c---  avec : unit vector in main direction
+c---  bvec, cvec: two orthogonal vectors to avec
+
+        ! 08/15/2025 - Thierry - still need to finalize how to do the
+        ! rotation of the R tensor 
+        do m=1,3
+          Q(m,1) = avec(m)
+          Q(m,2) = bvec(m)
+          Q(m,3) = cvec(m)
+        enddo
+  
+        Qt = transpose(Q)
+  
+c--- R = |R_par,   0   ,   0   |
+c---     | 0   , R_perp,   0   |
+c---     | 0       0   , R_perp|
+  
+c---  R matrix only has diagonal components
+        R(1,1) = R_par
+        R(2,2) = R_perp
+        R(3,3) = R_perp
+  
+c--- Now Rotate the matrix, Rsg = Q . R . Q^T
+  
+       Rsg = matmul(Q, matmul(R,Qt))
+
+c--- Osnes Formulation for PTKE
+
+      T_par = A4 * CD_prime/CD_average + xi_T
+
+c--  Multiply by the mean relative velocity & flow kinetic energy to dimentionalize      
+c--  then add mean PTKE
+       T_par(1) = T_par(1) * vx * k_Osnes * 0.5d0 * vmag**2 
+     >            + Tmean_par(1)
+
+       T_par(2) = T_par(2) * vy * k_Osnes * 0.5d0 * vmag**2 
+     >            + Tmean_par(2)
+
+       T_par(3) = T_par(3) * vz * k_Osnes * 0.5d0 * vmag**2 
+     >            + Tmean_par(3)
+
+      endif ! pseudoTurb_flag
 
       return
       end

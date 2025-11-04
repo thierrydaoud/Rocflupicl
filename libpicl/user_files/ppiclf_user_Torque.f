@@ -20,7 +20,8 @@
 !
 !-----------------------------------------------------------------------
 !
-      subroutine ppiclf_user_Torque_driver(i,iStage,taux,tauy,tauz)
+      subroutine ppiclf_user_Torque_driver(i,iStage,taux,tauy,tauz,
+     >                                 taux_hydro,tauy_hydro,tauz_hydro)
 !
       implicit none
 !
@@ -28,22 +29,6 @@
 !
 ! Internal:
 !
-      integer*4 :: stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-      real*8 :: rmu_ref, tref, suth, ksp, erest
-      common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
-     >   collisional_flag, heattransfer_flag, feedback_flag,
-     >   qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth,
-     >   rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
-     >   qs_fluct_filter_adapt_flag, ksp, erest,
-     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     >   sbNearest_flag, burnrate_flag, flow_model
-
       integer*4 i,iStage
       real*8 taux, tauy, tauz
       real*8 taux_hydro, tauy_hydro, tauz_hydro
@@ -62,8 +47,6 @@
 
       if (collisional_flag >= 3) then
          call Torque_Hydro(i,taux_hydro,tauy_hydro,tauz_hydro)
-      endif
-      if (collisional_flag == 4) then
          call Torque_Undisturbed(i,taux_undist,tauy_undist,tauz_undist)
       endif
 

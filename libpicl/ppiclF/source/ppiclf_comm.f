@@ -554,7 +554,7 @@
       LOGICAL   partl ! dummy variable    
       INTEGER*4 rtempLim
       PARAMETER(rtempLim = PPICLF_LRS*4 + PPICLF_LRP + PPICLF_LRP2
-     >       + PPICLF_LRP3+PPICLF_LRP_PRO)
+     >       + PPICLF_LRP3 + PPICLF_LRP4 + PPICLF_LRP5 + PPICLF_LRP_PRO)
       REAL*8    rtemp(rtempLim,PPICLF_LPART)
       INTEGER*4 i, icount, j0
 !
@@ -579,6 +579,12 @@
      >           ppiclf_rprop3(1,i),PPICLF_LRP3)
         icount = icount + PPICLF_LRP3
         CALL ppiclf_copy(rtemp(icount,i),
+     >           ppiclf_rprop4(1,i),PPICLF_LRP4)
+        icount = icount + PPICLF_LRP4
+         CALL ppiclf_copy(rtemp(icount,i),
+     >           ppiclf_rprop5(1,i),PPICLF_LRP5)
+        icount = icount + PPICLF_LRP5
+         CALL ppiclf_copy(rtemp(icount,i),
      >            ppiclf_feedbk(1,i),PPICLF_LRP_PRO)
       END DO
       
@@ -616,9 +622,14 @@
         CALL ppiclf_copy(ppiclf_rprop3(1,i),rtemp(icount,i),
      >                   PPICLF_LRP3)
         icount = icount + PPICLF_LRP3
+        CALL ppiclf_copy(ppiclf_rprop4(1,i),rtemp(icount,i),
+     >                   PPICLF_LRP4)
+        icount = icount + PPICLF_LRP4
+        CALL ppiclf_copy(ppiclf_rprop5(1,i),rtemp(icount,i),
+     >                   PPICLF_LRP5)
+        icount = icount + PPICLF_LRP5
         CALL ppiclf_copy(ppiclf_feedbk(1,i),rtemp(icount,i),
      >           PPICLF_LRP_PRO)
-        
       END DO
         
       RETURN
