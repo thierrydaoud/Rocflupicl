@@ -328,7 +328,8 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     d = pMixtInput%prepRealVal3
                     u = 0.0_RFREAL
                     v = 0.0_RFREAL
-                    w = 0.0_RFREAL !pMixtInput%prepRealVal7
+                    ! externalFlow!
+                    w = pMixtInput%prepRealVal5
                     p = pMixtInput%prepRealVal4
                  END IF
                  mw = pGv(GV_MIXT_MOL,indMol*icg)
@@ -341,7 +342,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
                  pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
-    
+
               END DO ! icg
            ENDIF ! non-JWL case
            !***************
