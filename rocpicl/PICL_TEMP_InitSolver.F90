@@ -635,36 +635,6 @@ IF(((ang_per_flag.eq.1) .and. (x_per_flag.eq.1 .or. y_per_flag.eq.1)) .or. &
       'Wrong periodicity choices for ppiclF')
 END IF 
 
-! Angular-Periodic
-IF(ang_per_flag .eq. 1) then
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF Angular Periodic Invoked"
-     call ppiclf_solve_InitAngularPeriodic(ang_per_flag , &
-                                           ang_per_rin  , ang_per_rout, &
-                                           ang_per_angle, ang_per_xangle)
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF Angular Periodic Done"
-END IF
-
-! Linear X-Periodic
-IF(x_per_flag .eq. 1) then  
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicX Invoked"
-   call ppiclf_solve_InitPeriodicX(x_per_min, x_per_max) 
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicX Done" 
-END IF 
-
-! Linear Y-Periodic
-IF(y_per_flag .eq. 1) then
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicY Invoked"
-  call ppiclf_solve_InitPeriodicY(y_per_min, y_per_max)
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicY Done" 
-END IF
-
-! Linear Z-Periodic
-IF(z_per_flag .eq. 1) then 
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicZ Invoked"
- call ppiclf_solve_InitPeriodicZ(z_per_min, z_per_max)
-   IF(global%myProcid == MASTERPROC) print*, "PPICLF PeriodicZ Done" 
-END IF 
-
 ! Creates OverlapGrid and Calls Init Solve
 CALL ppiclf_comm_InitOverlapGrid(nCells,rocGrid)
 

@@ -50,7 +50,6 @@
       common /RFLU_ppiclf_misc01/ ppiclf_rcp_part
       common /RFLU_ppiclf_misc02/ ppiclf_matname
       common /RFLU_ppiclf_misc03/ ppiclf_p0, ppiclf_moveparticle
-
       real*8 fqsx, fqsy, fqsz
       real*8 fqsforce
       real*8 fqs_fluct(3)
@@ -72,7 +71,7 @@
 
 ! Needed for Added mass calculation
       integer*4 j, l
-      real*8 SDrho
+      real*8 SDrho, maxFilter
 
       real*8 vgradrhog
       integer*4 i, n, ic, k
@@ -721,19 +720,32 @@
             T_par = 0.0D0
           END IF ! pseudoTurb_flag
           ! 07/21/2025 - Thierry - Added Reynolds Subgrid Stress Feedback
-          ppiclf_feedbk(PPICLF_P_JRSG11,i) = Rsg(1,1)
-          ppiclf_feedbk(PPICLF_P_JRSG12,i) = Rsg(1,2)
-          ppiclf_feedbk(PPICLF_P_JRSG13,i) = Rsg(1,3)
-          ppiclf_feedbk(PPICLF_P_JRSG21,i) = Rsg(2,1)
-          ppiclf_feedbk(PPICLF_P_JRSG22,i) = Rsg(2,2)
-          ppiclf_feedbk(PPICLF_P_JRSG23,i) = Rsg(2,3)
-          ppiclf_feedbk(PPICLF_P_JRSG31,i) = Rsg(3,1)
-          ppiclf_feedbk(PPICLF_P_JRSG32,i) = Rsg(3,2)
-          ppiclf_feedbk(PPICLF_P_JRSG33,i) = Rsg(3,3) 
-            
-          ppiclf_feedbk(PPICLF_P_JTSG1,i) = T_par(1)
-          ppiclf_feedbk(PPICLF_P_JTSG2,i) = T_par(2)
-          ppiclf_feedbk(PPICLF_P_JTSG3,i) = T_par(3)
+          ppiclf_feedbk(PPICLF_P_JRSG11,i) = Rsg(1,1) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JRSG12,i) = Rsg(1,2) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JRSG13,i) = Rsg(1,3) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JRSG21,i) = Rsg(2,1) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JRSG22,i) = Rsg(2,2) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JRSG23,i) = Rsg(2,3) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JRSG31,i) = Rsg(3,1) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JRSG32,i) = Rsg(3,2) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JRSG33,i) = Rsg(3,3)  
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+
+          ppiclf_feedbk(PPICLF_P_JTSG1,i) = T_par(1) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JTSG2,i) = T_par(2) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+          ppiclf_feedbk(PPICLF_P_JTSG3,i) = T_par(3) 
+     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+
         END IF ! Feedback flag
 
         ! Update volume fraction feedback quantities with feedback on or off
@@ -815,16 +827,6 @@
 !          The user should not have this ON for production runs.
 !
          if (ppiclf_debug .ge. 1) then
-         ! 1 .eq. 1 since SB is always used now
-         ! was sbNearest_flag .eq. 1
-            if (1 .eq.1 .and. ppiclf_debug.eq.2) then
-               write(7001,*) ppiclf_time, ppiclf_bins_dx(1:3),
-     >            nsubbin_size, tot_SBin,n_SBin(1:3),
-     >            ppiclf_npart, ppiclf_npart_gp,
-     >            nsubbin_size*(ppiclf_npart+ppiclf_npart_gp),
-     >            nsubbin_size*(ppiclf_npart+ppiclf_npart_gp)*4/1e9 
-                  ! last entry in GB; assuming 4 bytes for integer*4
-            endif
             phimax = max(phimax,abs(rphip))
 
             fqsx_max = max(fqsx_max,abs(fqsx))

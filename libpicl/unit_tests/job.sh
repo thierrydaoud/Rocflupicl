@@ -32,6 +32,7 @@ make clean
 make
 
 > ppiclfTestResults.txt
+> run.err
 date
 echo "Current Directory =" `pwd`
 echo ""

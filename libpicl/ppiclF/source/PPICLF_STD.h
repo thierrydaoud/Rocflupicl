@@ -6,7 +6,7 @@
 #define PPICLF_LRP 1
 #endif
 
-#ifndef
+#ifndef PPICLF_LRP2
 #define PPICLF_LRP2 0
 #endif
 

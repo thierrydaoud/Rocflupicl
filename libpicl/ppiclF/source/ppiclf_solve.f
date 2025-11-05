@@ -1875,21 +1875,10 @@ c----------------------------------------------------------------------
       ppiclf_pro_fld_picl = 0.0d0
       eps = 1.0D-60
       DO ip=1,ppiclf_npart
-        ! Update feedback indicies for volume fraction
-        ppiclf_feedbk(PPICLF_P_JPHIP,i) = ppiclf_rprop(PPICLF_R_JVOLP,i)
-     >                                    *ppiclf_rprop(PPICLF_R_JSPL,i)
-        ppiclf_feedbk(PPICLF_P_JPHIPD,i) = piclf_rprop(PPICLF_R_JSPL,i)*
-     >    ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_rprop(PPICLF_R_JRHOP,i)
-        ppiclf_feedbk(PPICLF_P_JPHIPU,i) = piclf_rprop(PPICLF_R_JSPL,i)*
-     >            ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVX,i)
-        ppiclf_feedbk(PPICLF_P_JPHIPV,i) = piclf_rprop(PPICLF_R_JSPL,i)*
-     >            ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVY,i)
-        ppiclf_feedbk(PPICLF_P_JPHIPW,i) = piclf_rprop(PPICLF_R_JSPL,i)*
-     >            ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVZ,i)
-        ! Temp isn't multiplied by SPL since it is intensive property
-        ppiclf_feedbk(PPICLF_P_JPHIPT,i) = 
-     >             ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JT,i)
-
+        ! Update volume fraction for feedback - important for 1st RK
+        ! step at time = 0.0
+        ppiclf_feedbk(PPICLF_P_JPHIP,ip) =
+     >  ppiclf_rprop(PPICLF_R_JVOLP,ip) * ppiclf_rprop(PPICLF_R_JSPL,ip)
         nCellProj = ppiclf_nPart2Cell(ip)
         wsum = 0.0D0
         ! Loop to find individual cell weightings
