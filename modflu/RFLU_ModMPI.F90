@@ -3754,8 +3754,281 @@ MODULE RFLU_ModMPI
 
 
 
+! ******************************************************************************
+! 09/24/2025 - Thierry Daoud
+! Adding Sequenceo of MPI calls to update Total Energy in ghost cells after
+! adding Pseudo-Turbulent Kinetic Energy (Ksg array)
+! *************************************************************************
 
 
+! ******************************************************************************
+!
+! Purpose: Wrapper for sending data for Pseudo Turbulent Kinetic Energy (Ksg).
+!
+! Description: None.
+!
+! Input:
+!   pRegion     Pointer to region
+!
+! Output: None.
+!
+! Notes: None.
+!
+! ******************************************************************************
+
+  SUBROUTINE RFLU_MPI_Ksg_ISendWrapper(pRegion)
+
+    IMPLICIT NONE
+
+! ******************************************************************************
+!   Declarations and definitions
+! ******************************************************************************
+
+! ==============================================================================
+!   Arguments
+! ==============================================================================
+
+    TYPE(t_region), POINTER :: pRegion
+
+! ==============================================================================
+!   Local variables
+! ==============================================================================
+
+    INTEGER :: errorFlag,iBorder
+    TYPE(t_border), POINTER :: pBorder
+    TYPE(t_global), POINTER :: global
+    TYPE(t_grid), POINTER :: pGrid
+
+! ******************************************************************************
+!   Start
+! ******************************************************************************
+
+    global => pRegion%global
+
+    CALL RegisterFunction(global,'RFLU_MPI_Energy_ISendWrapper',__FILE__)
+
+! ******************************************************************************
+!   Set pointers
+! ******************************************************************************
+
+    pGrid => pRegion%grid
+
+! ******************************************************************************
+!   Loop over borders
+! ******************************************************************************
+
+    DO iBorder = 1,pGrid%nBorders
+      pBorder => pGrid%borders(iBorder)
+
+! ==============================================================================
+!     Send data if not on same process
+! ==============================================================================
+
+      IF ( pBorder%iProc /= global%myProcid ) THEN
+
+! ------------------------------------------------------------------------------
+!       Mixture
+! ------------------------------------------------------------------------------
+
+        CALL RFLU_MPI_PLAG_ISendCellData(global,pBorder, &
+                                         pBorder%mixt%sendBuff1d, &
+                                         pRegion%mixt%piclKsg, &!
+                                         pBorder%mixt%tag, &
+                                         pBorder%mixt%sendRequest)
+
+      END IF ! pBorder
+    END DO ! iBorder
+
+! ******************************************************************************
+!   End
+! ******************************************************************************
+
+    CALL DeregisterFunction(global)
+
+  END SUBROUTINE RFLU_MPI_Ksg_ISendWrapper
+
+! ******************************************************************************
+!
+! Purpose: Wrapper for copying particle Pseudo Turbulent Kinetic Energy (ksg)
+!
+! Description: None.
+!           
+! Input:    
+!   pRegion     Pointer to region
+!           
+! Output: None.
+!           
+! Notes: None.
+!           
+! ******************************************************************************
+  
+  SUBROUTINE RFLU_MPI_Ksg_CopyWrapper(regions)
+  
+    IMPLICIT NONE
+  
+! ******************************************************************************
+!   Declarations and definitions
+! ******************************************************************************
+  
+! ==============================================================================
+!   Arguments
+! ==============================================================================
+  
+    TYPE(t_region), DIMENSION(:), POINTER :: regions
+
+! ==============================================================================
+!   Local variables
+! ==============================================================================
+  
+    INTEGER :: errorFlag,iBorder,iBorder2,iReg,iReg2
+    TYPE(t_border), POINTER :: pBorder,pBorder2
+    TYPE(t_global), POINTER :: global
+    TYPE(t_grid), POINTER :: pGrid
+    TYPE(t_region), POINTER :: pRegion,pRegion2
+
+! ******************************************************************************
+!   Start
+! ******************************************************************************
+
+    global => regions(0)%global
+
+    CALL RegisterFunction(global,'RFLU_MPI_PLAG_CopyWrapper',__FILE__)
+
+! ******************************************************************************
+!   Set pointers
+! ******************************************************************************
+
+! ******************************************************************************
+!   Loop over borders
+! ******************************************************************************
+
+    DO iReg = 1,global%nRegionsLocal
+      pRegion => regions(iReg)
+      pGrid   => pRegion%grid
+
+      DO iBorder = 1,pGrid%nBorders
+        pBorder => pGrid%borders(iBorder)
+
+! ==============================================================================
+!       Copy data if on same process
+! ==============================================================================
+
+        IF ( pBorder%iProc == global%myProcid ) THEN
+          iReg2    = pBorder%iRegionLocal
+          iBorder2 = pBorder%iBorder
+
+          pRegion2 => regions(iReg2)
+          pBorder2 => pRegion2%grid%borders(iBorder2)
+
+! ------------------------------------------------------------------------------
+!         Check dimensions
+! ------------------------------------------------------------------------------
+
+          IF ( pBorder%nCellsSend /= pBorder2%nCellsRecv ) THEN
+            CALL ErrorStop(global,ERR_BUFFERDIM_MISMATCH,__LINE__)
+          END IF ! pBorder
+
+! ------------------------------------------------------------------------------
+!         Particle Pseudo Tubrulent Kinetic Energy (PTKE) - Ksg
+! ------------------------------------------------------------------------------
+
+          CALL RFLU_MPI_PLAG_CopyCellData(global,pBorder,pBorder2, &
+                                          pRegion%mixt%piclKsg, &
+                                          pRegion%mixt%piclKsg)
+       END IF ! pBorder
+      END DO ! iBorder
+    END DO ! iReg
+
+! ******************************************************************************
+!   End
+! ******************************************************************************
+
+    CALL DeregisterFunction(global)
+
+  END SUBROUTINE RFLU_MPI_Ksg_CopyWrapper
+
+! ******************************************************************************
+!
+! Purpose: Wrapper for receiving data for Ksg.
+!
+! Description: None.
+!
+! Input:
+!   pRegion     Pointer to region
+!
+! Output: None.
+!
+! Notes: None.
+!
+! ******************************************************************************
+
+  SUBROUTINE RFLU_MPI_Ksg_RecvWrapper(pRegion)
+
+    IMPLICIT NONE
+
+! ******************************************************************************
+!   Declarations and definitions
+! ******************************************************************************
+
+! ==============================================================================
+!   Arguments
+! ==============================================================================
+
+    TYPE(t_region), POINTER :: pRegion
+
+! ==============================================================================
+!   Local variables
+! ==============================================================================
+
+    INTEGER :: errorFlag,iBorder
+    TYPE(t_border), POINTER :: pBorder
+    TYPE(t_global), POINTER :: global
+    TYPE(t_grid), POINTER :: pGrid
+
+! ******************************************************************************
+!   Start
+! ******************************************************************************
+
+    global => pRegion%global
+
+    CALL RegisterFunction(global,'RFLU_MPI_PLAG_RecvWrapper',__FILE__)
+
+! ******************************************************************************
+!   Set pointers
+! ******************************************************************************
+
+    pGrid => pRegion%grid
+
+! ******************************************************************************
+!   Loop over borders
+! ******************************************************************************
+
+    DO iBorder = 1,pGrid%nBorders
+      pBorder => pGrid%borders(iBorder)
+
+! ==============================================================================
+!     Receive data if not on same process
+! ==============================================================================
+
+      IF ( pBorder%iProc /= global%myProcid ) THEN
+
+! ------------------------------------------------------------------------------
+!       Mixture
+! ------------------------------------------------------------------------------
+        CALL RFLU_MPI_PLAG_RecvCellData(global,pBorder, &
+                                        pBorder%mixt%recvBuff1d, &
+                                        pRegion%mixt%piclKsg, &
+                                        pBorder%mixt%tag)
+      END IF ! pBorder
+    END DO ! iBorder
+
+! ******************************************************************************
+!   End
+! ******************************************************************************
+
+    CALL DeregisterFunction(global)
+
+  END SUBROUTINE RFLU_MPI_Ksg_RecvWrapper
 
 
 

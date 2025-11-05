@@ -120,6 +120,7 @@ SUBROUTINE RFLU_EnforceBounds(pRegion)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: cv,dv,gv,pCv
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
+  REAL(RFREAL) :: ksg
 
 #ifdef SPEC
   LOGICAL :: scalarConvFlag
@@ -176,9 +177,10 @@ SUBROUTINE RFLU_EnforceBounds(pRegion)
     v  = ir*cv(CV_MIXT_YMOM,icg)
     w  = ir*cv(CV_MIXT_ZMOM,icg)        
     Eo = ir*cv(CV_MIXT_ENER,icg)
+    ksg= pRegion%mixt%piclKsg(icg)
 
     Vm2 = u*u + v*v + w*w
-    e   = Eo - 0.5_RFREAL*Vm2
+    e   = Eo - 0.5_RFREAL*Vm2 - ksg
 
     IF (pRegion%mixtInput%gasModel == GAS_MODEL_MIXT_JWL) THEN
 #ifdef SPEC
@@ -208,7 +210,7 @@ CALL RFLU_ScalarConvertCvCons2Prim(pRegion,pRegion%spec%cv,pRegion%spec%cvState)
    END IF
 #endif
     ELSE
-    p = MixtPerf_P_DEoGVm2(r,Eo,gamma,Vm2)
+    p = MixtPerf_P_DEoGVm2(r,Eo,gamma,Vm2,ksg)
     t = MixtPerf_T_DPR(r,p,rgas)
     END IF !FRED - added potential JWL Calc here to enforce bound then -9/10/15
 
@@ -218,7 +220,7 @@ CALL RFLU_ScalarConvertCvCons2Prim(pRegion,pRegion%spec%cv,pRegion%spec%cvState)
 
       p = pTol
 ! Fix 1 ------------------------------                   
-      cv(CV_MIXT_ENER,icg) = r*MixtPerf_Eo_DGPUVW(r,gamma,p,u,v,w)
+      cv(CV_MIXT_ENER,icg) = r*MixtPerf_Eo_DGPUVW(r,gamma,p,u,v,w,ksg)
 ! Fix 2 ------------------------------                   
 !      r = e*(gamma-1.0_RFREAL)/p
 !      cv(CV_MIXT_XMOM,icg) = r*ir*cv(CV_MIXT_XMOM,icg)

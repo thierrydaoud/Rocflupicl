@@ -318,7 +318,6 @@ pRegion => regions(iReg)
        testery = 0 
        testerz = 0 
        testert = 0 
-
 ! TLJ: This needs to be checked
 !particle volume
        call ppiclf_solve_GetProFld(iCell, PPICLF_P_JPHIP,&
@@ -338,14 +337,14 @@ pRegion => regions(iReg)
 !T-temperature
        call ppiclf_solve_GetProFld(iCell, PPICLF_P_JPHIPT,&
                         vpt(iCell))
+
        ! TLJ - modified 12/21/2024
-       ! AVERY - modified 5/16/2025
-       tester1 = (vfP(iCell))/pRegion%grid%vol(iCell)
-       tester2 = (vfD(iCell))/pRegion%grid%vol(iCell)
-       testerx = (vpx(iCell))/pRegion%grid%vol(iCell)
-       testery = (vpy(iCell))/pRegion%grid%vol(iCell)
-       testerz = (vpz(iCell))/pRegion%grid%vol(iCell)
-       testert = (vpt(iCell))/pRegion%grid%vol(iCell)
+       tester1 = vfP(iCell)*pRegion%grid%vol(iCell)
+       tester2 = vfD(iCell)*pRegion%grid%vol(iCell)
+       testerx = vpx(iCell)*pRegion%grid%vol(iCell)
+       testery = vpy(iCell)*pRegion%grid%vol(iCell)
+       testerz = vpz(iCell)*pRegion%grid%vol(iCell)
+       testert = vpt(iCell)*pRegion%grid%vol(iCell)
 
     !number of picl particles
       ! TLJ - Commented out 12/21/2024

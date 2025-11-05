@@ -150,8 +150,8 @@ ifeq ($(findstring ufhpc,$(MACHINE)),ufhpc)
   FORTFLAGS= -DFORTRAN_UNDERSCORE -DFORTRAN_LOWERCASE
 
   ifdef DEBUG
-    CMFLAGS=-g -C #-fcheck=all
-    LDFLAGS=-g -C #-fcheck=all
+    CMFLAGS=-g -C -fbacktrace #-fcheck=all 
+    LDFLAGS=-g -C -fbacktrace #-fcheck=all 
   else
     CMFLAGS=-O
     LDFLAGS=-O

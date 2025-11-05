@@ -125,6 +125,7 @@ SUBROUTINE RFLU_ComputeVertexVariables(pRegion)
 #endif
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -203,6 +204,7 @@ SUBROUTINE RFLU_ComputeVertexVariables(pRegion)
             w   = ir*rw    
             Eo  = ir*rEo
             vm2 = u*u + v*v + w*w
+            ksg = pRegion%mixt%piclKsg(ivg)
 
             cp = pGv(GV_MIXT_CP ,indCp *ivg)
             mw = pGv(GV_MIXT_MOL,indMol*ivg)
@@ -210,7 +212,7 @@ SUBROUTINE RFLU_ComputeVertexVariables(pRegion)
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
 
-            p = MixtPerf_P_DEoGVm2(r,Eo,g,vm2)
+            p = MixtPerf_P_DEoGVm2(r,Eo,g,vm2,ksg)
 
             pDv(DV_MIXT_PRES,ivg) = p
             pDv(DV_MIXT_TEMP,ivg) = MixtPerf_T_DPR(r,p,gc)
@@ -261,8 +263,10 @@ SUBROUTINE RFLU_ComputeVertexVariables(pRegion)
             rYl  = r - rYg - rYv
 
             Cvm  = (rYl*cvl + rYv*cvv + rYg*cvg)/r
+            
+            ksg = pRegion%mixt%piclKsg(ivg)
 
-            pDv(DV_MIXT_TEMP,ivg) = MixtPerf_T_CvEoVm2(Cvm,Eo,vm2)
+            pDv(DV_MIXT_TEMP,ivg) = MixtPerf_T_CvEoVm2(Cvm,Eo,vm2,ksg)
 
             Cl2  = MixtLiq_C2_Bp(Bp)
             Cv2  = MixtPerf_C2_GRT(1.0_RFREAL,rvap,pDv(DV_MIXT_TEMP,ivg))

@@ -66,16 +66,16 @@
 !
 !******************************************************************************
 
-FUNCTION MixtPerf_P_DEoGVm2(D,Eo,G,Vm2)
+FUNCTION MixtPerf_P_DEoGVm2(D,Eo,G,Vm2,KSG)
 
   USE ModDataTypes
 
   IMPLICIT NONE
   
-  REAL(RFREAL), INTENT(IN) :: D,Eo,G,Vm2
+  REAL(RFREAL), INTENT(IN) :: D,Eo,G,Vm2,KSG
   REAL(RFREAL) :: MixtPerf_P_DEoGVm2
    
-  MixtPerf_P_DEoGVm2 = (G - 1.0_RFREAL)*D*(Eo - 0.5_RFREAL*Vm2)
+  MixtPerf_P_DEoGVm2 = (G - 1.0_RFREAL)*D*(Eo - 0.5_RFREAL*Vm2 - KSG)
 
 END FUNCTION MixtPerf_P_DEoGVm2
 
@@ -157,17 +157,17 @@ END FUNCTION MixtPerf_Po_GPTTo
 
 ! -----------------------------------------------------------------------------
 
-FUNCTION MixtPerf_Po_CGPUVW(C,G,P,U,V,W)
+FUNCTION MixtPerf_Po_CGPUVW(C,G,P,U,V,W,KSG)
 
   USE ModDataTypes
 
   IMPLICIT NONE
   
-  REAL(RFREAL), INTENT(IN) :: C,G,P,U,V,W
+  REAL(RFREAL), INTENT(IN) :: C,G,P,U,V,W,KSG
   REAL(RFREAL) :: MixtPerf_Po_CGPUVW
    
   MixtPerf_Po_CGPUVW = & 
-    P*(1.0_RFREAL + 0.5_RFREAL*(G - 1.0_RFREAL)*(U*U+V*V+W*W)/(C*C))**(G/(G - 1.0_RFREAL))
+    P*(1.0_RFREAL + 0.5_RFREAL*(G - 1.0_RFREAL)*((U*U+V*V+W*W)/(C*C) + KSG/(C*C)))**(G/(G - 1.0_RFREAL))
 
 END FUNCTION MixtPerf_Po_CGPUVW
 

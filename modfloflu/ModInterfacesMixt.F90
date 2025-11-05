@@ -80,9 +80,9 @@ MODULE ModInterfacesMixt
     REAL(RFREAL) ::  denom,numer,term1,term2,term3
   END FUNCTION MixtGasLiq_C
 
-  FUNCTION MixtGasLiq_Eo_CvmTVm2(Cvm,T,Vm2)
+  FUNCTION MixtGasLiq_Eo_CvmTVm2(Cvm,T,Vm2,KSG)
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: Cvm,T,Vm2
+    REAL(RFREAL), INTENT(IN) :: Cvm,T,Vm2,KSG
     REAL(RFREAL) :: MixtGasLiq_Eo_CvmTVm2
   END FUNCTION MixtGasLiq_Eo_CvmTVm2
 
@@ -123,7 +123,7 @@ MODULE ModInterfacesMixt
     REAL(RFREAL) :: MixtPerf_C_DGP
   END FUNCTION MixtPerf_C_DGP
 
-  FUNCTION MixtPerf_C_GHoVm2( G,Ho,Vm2 )
+  FUNCTION MixtPerf_C_GHoVm2( G,Ho,Vm2)
     USE ModDataTypes
     REAL(RFREAL), INTENT(IN) :: G, Ho, Vm2
     REAL(RFREAL) :: MixtPerf_C_GHoVm2
@@ -171,27 +171,27 @@ MODULE ModInterfacesMixt
     REAL(RFREAL) :: MixtPerf_D_PRT
   END FUNCTION MixtPerf_D_PRT
 
-  FUNCTION Mixt_Eo_eUVW( e,U,V,W )
+  FUNCTION Mixt_Eo_eUVW( e,U,V,W,KSG )
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: e, U, V, W
+    REAL(RFREAL), INTENT(IN) :: e, U, V, W, KSG
     REAL(RFREAL) :: Mixt_Eo_eUVW
   END FUNCTION Mixt_Eo_eUVW
 
-  FUNCTION MixtPerf_Eo_DGPUVW( D,G,P,U,V,W )
+  FUNCTION MixtPerf_Eo_DGPUVW( D,G,P,U,V,W,KSG )
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: D, G, P, U, V, W
+    REAL(RFREAL), INTENT(IN) :: D, G, P, U, V, W, KSG
     REAL(RFREAL) :: MixtPerf_Eo_DGPUVW
   END FUNCTION MixtPerf_Eo_DGPUVW
 
-  FUNCTION MixtPerf_Eo_DGPVm( D,G,P,Vm )
+  FUNCTION MixtPerf_Eo_DGPVm( D,G,P,Vm,KSG )
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: D, G, P ,Vm
+    REAL(RFREAL), INTENT(IN) :: D, G, P ,Vm, KSG
     REAL(RFREAL) :: MixtPerf_Eo_DGPVm
   END FUNCTION MixtPerf_Eo_DGPVm
 
-  FUNCTION MixtPerf_Eo_GRTUVW( G,R,T,U,V,W )
+  FUNCTION MixtPerf_Eo_GRTUVW( G,R,T,U,V,W,KSG )
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: G, R, T, U, V, W
+    REAL(RFREAL), INTENT(IN) :: G, R, T, U, V, W, KSG
     REAL(RFREAL) :: MixtPerf_Eo_GRTUVW
   END FUNCTION MixtPerf_Eo_GRTUVW
 
@@ -207,9 +207,9 @@ MODULE ModInterfacesMixt
     REAL(RFREAL) :: MixtPerf_HM_T_DGMP
   END FUNCTION MixtPerf_HM_T_DGMP
   
-  FUNCTION MixtPerf_Ho_CpTUVW( Cp,T,U,V,W )
+  FUNCTION MixtPerf_Ho_CpTUVW( Cp,T,U,V,W,KSG )
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: Cp, T, U, V, W
+    REAL(RFREAL), INTENT(IN) :: Cp, T, U, V, W, KSG
     REAL(RFREAL) :: MixtPerf_Ho_CpTUVW
   END FUNCTION MixtPerf_Ho_CpTUVW
 
@@ -219,9 +219,9 @@ MODULE ModInterfacesMixt
     REAL(RFREAL) :: MixtPerf_M_R
   END FUNCTION MixtPerf_M_R
 
-  FUNCTION MixtPerf_P_DEoGVm2( D,Eo,G,Vm2 )
+  FUNCTION MixtPerf_P_DEoGVm2( D,Eo,G,Vm2,KSG )
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: D, Eo, G, Vm2
+    REAL(RFREAL), INTENT(IN) :: D, Eo, G, Vm2, KSG
     REAL(RFREAL) :: MixtPerf_P_DEoGVm2
   END FUNCTION MixtPerf_P_DEoGVm2
 
@@ -255,9 +255,9 @@ MODULE ModInterfacesMixt
     REAL(RFREAL) :: MixtPerf_Po_GPTTo
   END FUNCTION MixtPerf_Po_GPTTo
 
-  FUNCTION MixtPerf_Po_CGPUVW( C,G,P,U,V,W )
+  FUNCTION MixtPerf_Po_CGPUVW( C,G,P,U,V,W,KSG )
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: C, G, P, U, V, W
+    REAL(RFREAL), INTENT(IN) :: C, G, P, U, V, W, KSG
     REAL(RFREAL) :: MixtPerf_Po_CGPUVW
   END FUNCTION MixtPerf_Po_CGPUVW
 
@@ -285,9 +285,9 @@ MODULE ModInterfacesMixt
     REAL(RFREAL) :: MixtPerf_T_CpHoVm2
   END FUNCTION MixtPerf_T_CpHoVm2
     
-  FUNCTION MixtPerf_T_CvEoVm2(Cv,Eo,Vm2)
+  FUNCTION MixtPerf_T_CvEoVm2(Cv,Eo,Vm2,KSG)
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: Cv,Eo,Vm2
+    REAL(RFREAL), INTENT(IN) :: Cv,Eo,Vm2,KSG
     REAL(RFREAL) :: MixtPerf_T_CvEoVm2
   END FUNCTION MixtPerf_T_CvEoVm2
   
@@ -303,9 +303,9 @@ MODULE ModInterfacesMixt
     REAL(RFREAL) :: MixtPerf_T_GMaTo
   END FUNCTION MixtPerf_T_GMaTo
   
-  FUNCTION MixtPerf_To_CpTUVW(Cp,T,U,V,W)
+  FUNCTION MixtPerf_To_CpTUVW(Cp,T,U,V,W,KSG)
     USE ModDataTypes
-    REAL(RFREAL), INTENT(IN) :: Cp,T,U,V,W
+    REAL(RFREAL), INTENT(IN) :: Cp,T,U,V,W,KSG
     REAL(RFREAL) :: MixtPerf_To_CpTUVW
   END FUNCTION MixtPerf_To_CpTUVW  
   

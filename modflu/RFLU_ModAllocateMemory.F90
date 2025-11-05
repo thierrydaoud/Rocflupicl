@@ -511,11 +511,17 @@ SUBROUTINE RFLU_AllocateMemorySolCv(pRegion)
   END IF ! global%error
 
 #ifdef PICL
-  IF ( global%piclUsed .EQV. .TRUE. ) THEN
+!  IF ( global%piclUsed .EQV. .TRUE. ) THEN
      ALLOCATE(pRegion%mixt%piclVF(pGrid%nCellsTot),STAT=errorFlag)
      ! 03/19/2025 - Thierry - begins here
      ALLOCATE(pRegion%mixt%piclVFg(1,pGrid%nCellsTot),STAT=errorFlag)
      ALLOCATE(pRegion%mixt%piclgradRhog(3,1,pGrid%nCellsTot),STAT=errorFlag)
+     ! Particle PseudoTurbulence - Reynolds Stress Tensor 
+     ALLOCATE(pRegion%mixt%piclPhiRsg(9,pGrid%nCellsTot),STAT=errorFlag)
+     ALLOCATE(pRegion%mixt%piclGradPhiRsg(3,9,pGrid%nCellsTot),STAT=errorFlag)
+     ALLOCATE(pRegion%mixt%piclKsg(pGrid%nCellsTot),STAT=errorFlag)
+     ALLOCATE(pRegion%mixt%piclPhiQsg(3,pGrid%nCellsTot),STAT=errorFlag)
+     ALLOCATE(pRegion%mixt%piclGradPhiQsg(3,3,pGrid%nCellsTot),STAT=errorFlag)
      global%error = errorFlag
      IF (global%error /= ERR_NONE) THEN
         CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'pRegion%mixt%piclfVF')
@@ -527,7 +533,7 @@ SUBROUTINE RFLU_AllocateMemorySolCv(pRegion)
      IF (global%error /= ERR_NONE) THEN
         CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'pRegion%mixt%piclFeedback')
      END IF ! global%error
-   END IF
+!   END IF
 #endif
 
 ! TEMPORARY: Manoj: 2012-05-16: Allocating mixt%vFracE

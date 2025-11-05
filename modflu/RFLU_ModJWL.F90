@@ -171,7 +171,7 @@ MODULE RFLU_ModJWL
 !   Locals
 ! ==============================================================================
     
-    REAL(RFREAL) :: a,CTNT,w,mp,ma,mb,ra,eJ,An,Bn,p,eamb,cv,T
+    REAL(RFREAL) :: a,CTNT,w,mp,ma,mb,ra,eJ,An,Bn,p,eamb
     
     ATNT   = pRegion%mixtInput%prepRealVal14
     BTNT   = pRegion%mixtInput%prepRealVal15
@@ -247,13 +247,9 @@ MODULE RFLU_ModJWL
                                -r*mp/R2TNT/rhoTNT)+(mb*p/r/r)*(1.0_RFREAL &
                                 - (w*r/R2TNT/rhoTNT)))  + & 
            w*(e + p/r) + mp*r*e
-
+  
     a    =  SQRT(CTNT)
-
-    IF(Y .LE. 0.01D0) THEN
-      a = SQRT(1.4_RFREAL*p/r)
-    END IF            
-               
+                                
     RFLU_JWL_C_ER = a
 
 ! ******************************************************************************
@@ -499,7 +495,7 @@ MODULE RFLU_ModJWL
        IF ((IsNan(pi) .EQV. .TRUE.) .OR. (IsNan(ri) .EQV. .TRUE.) .OR. &
              (IsNan(Yi) .EQV. .TRUE.)) THEN
           rf = pCvOld(CV_MIXT_DENS,c)
-          pf = rf*0.4_RFREAL*2.5E+05_RFREAL 
+          pf = rf*0.4_RFREAL*2.5E5_RFREAL
           Yf = 0.0_RFREAL
        END IF
 
@@ -673,11 +669,14 @@ MODULE RFLU_ModJWL
        ENDIF
     ENDIF
 
-    ! For air EOS
-    IF(Ynot .LE. 0.01) THEN
-      e = p/(r*0.4_RFREAL)  
-    END IF
- 
+    ! TLJ added for safety 12/27/2024
+    IF (e .LE. ea) THEN
+       e = ea
+    ENDIF
+    !IF (e .LE. 1.0E+04_RFREAL) THEN
+    !   e = 1.0E+04_RFREAL
+    !ENDIF
+
     RFLU_JWL_E_PR = e
 
 ! ******************************************************************************
@@ -853,7 +852,7 @@ MODULE RFLU_ModJWL
 !   Start
 ! ******************************************************************************
 
-    ra = pRegion%mixtInput%prepRealVal3 
+    ra = pRegion%mixtInput%prepRealVal3  
     pa = pRegion%mixtInput%prepRealVal2  
     ea = pa/ra/0.4_RFREAL
 
@@ -901,14 +900,17 @@ MODULE RFLU_ModJWL
        ma = 0.0_RFREAL
        mb = 0.0_RFREAL
        w = wTNT
-    ENDIF ! Y .le. 0.99
+    ENDIF ! Y .le. 0.99 
+    
     p = An*(1.0_RFREAL - (w*r)/(R1TNT*rhoTNT))*exp(-R1TNT*rhoTNT/r) + &
         Bn*(1.0_RFREAL - (w*r)/(R2TNT*rhoTNT))*exp(-R2TNT*rhoTNT/r) + &
         w*e*r
-  
-    IF ( Y .LE. 0.01d0 ) THEN
+
+    ! TLJ - 12/12/2024
+    ! Added for safety to possibly prevent NaN
+    IF ( Y .le. 0.01d0 ) THEN
        p = e*r*(0.4d0)
-   END IF
+    end if
    
     RFLU_JWL_P_ER = p
 
@@ -981,8 +983,8 @@ MODULE RFLU_ModJWL
 !   Start
 ! ******************************************************************************
 
+    ra = pRegion%mixtInput%prepRealVal3  
     pa = pRegion%mixtInput%prepRealVal2
-    ra = pRegion%mixtInput%prepRealVal3  ! ambient density
     ea = pa/ra/0.4_RFREAL
     shcvair = 717.60_RFREAL              ! Cv for air; Cv = Cp/ga; J/kg-K
     Ta = ea/shcvair
@@ -1045,19 +1047,15 @@ MODULE RFLU_ModJWL
     T = (p - An*EXP(-R1TNT*rhoTNT/r)  &
            - Bn*EXP(-R2TNT*rhoTNT/r))*1.0_RFREAL/w/cv/r    
 
-    IF(Y .LE. 0.01_RFREAL) THEN
-      T = p/(r*287.04_RFREAL)
-    END IF
-
     ! TLJ - 12/12/2024
     ! Added for safety to possibly prevent negative temperatures
-    IF ( T .LE. 270.0_RFREAL .AND. Y .GT. 0.03 ) T = 270.0_RFREAL
+    !IF ( T .LE. Ta ) T = Ta
+    IF ( T .LE. 270.0_RFREAL .AND. Y .GT. 0.01 ) T = 270.0_RFREAL
     IF ( T .LE. 0.0_RFREAL ) THEN
        WRITE(*,*) 'Temperature in RFLU_JWL_T_PR function is negative'
        WRITE(*,*) 'p,r,e,Y,T', p,r,e,Y,T
        CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity in ModJWL')
     ENDIF
-
 
     RFLU_JWL_T_PR = T
 

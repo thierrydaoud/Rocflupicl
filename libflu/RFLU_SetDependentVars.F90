@@ -163,6 +163,7 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
   TYPE(t_spec_input), POINTER :: pSpecInput  
   TYPE(t_spec_type), POINTER :: pSpecType
 #endif
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -264,6 +265,8 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
                            pCv(CV_MIXT_YMOM,icg)*pCv(CV_MIXT_YMOM,icg) + &
                            pCv(CV_MIXT_ZMOM,icg)*pCv(CV_MIXT_ZMOM,icg))
 
+              ksg = 0.0_RFREAL
+
               ! Subbu - Debug
               IF (global%plagUsed .EQV. .TRUE.) THEN
                  r = r/(1.0_RFREAL - pRegion%plag%vFracE(1,indVFracE*icg))
@@ -278,7 +281,7 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
               END IF
 #endif
 
-              pDv(DV_MIXT_PRES,icg) = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2)
+              pDv(DV_MIXT_PRES,icg) = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2,ksg)
               pDv(DV_MIXT_TEMP,icg) = MixtPerf_T_DPR(r,pDv(DV_MIXT_PRES,icg),gc)
               pDv(DV_MIXT_SOUN,icg) = MixtPerf_C_GRT(g,gc,pDv(DV_MIXT_TEMP,icg))    
             END DO ! icg
@@ -323,6 +326,8 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
                 Vm2 = ir*ir*(pCv(CV_MIXT_XMOM,icg)*pCv(CV_MIXT_XMOM,icg) + &
                              pCv(CV_MIXT_YMOM,icg)*pCv(CV_MIXT_YMOM,icg) + &
                              pCv(CV_MIXT_ZMOM,icg)*pCv(CV_MIXT_ZMOM,icg))
+                
+                ksg = 0.0_RFREAL
 
                 IF (global%plagUsed .EQV. .TRUE.) THEN
                 r = r/(1.0_RFREAL - pRegion%plag%vFracE(1,indVFracE*icg))          
@@ -334,7 +339,7 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
 
                 END IF
 #endif
-                pDv(DV_MIXT_PRES,icg) = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2)
+                pDv(DV_MIXT_PRES,icg) = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2,ksg)
                 pDv(DV_MIXT_TEMP,icg) = MixtPerf_T_DPR(r,pDv(DV_MIXT_PRES,icg),gc)
                 pDv(DV_MIXT_SOUN,icg) = MixtPerf_C_GRT(g,gc,pDv(DV_MIXT_TEMP,icg))    
               END DO ! icg
@@ -378,6 +383,8 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
                 Vm2 = ir*ir*(pCv(CV_MIXT_XMOM,icg)*pCv(CV_MIXT_XMOM,icg) + &
                              pCv(CV_MIXT_YMOM,icg)*pCv(CV_MIXT_YMOM,icg) + &
                              pCv(CV_MIXT_ZMOM,icg)*pCv(CV_MIXT_ZMOM,icg))
+                
+                ksg = 0.0_RFREAL
 
                 IF (global%plagUsed .EQV. .TRUE.) THEN
                 r = r/(1.0_RFREAL - pRegion%plag%vFracE(1,indVFracE*icg))
@@ -402,7 +409,7 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
 !    Changing definition of sound speed to that given in paper
 ! END DEBUG                
                 IF ( ABS(YExplosive) < nTol ) THEN
-                  pDv(DV_MIXT_PRES,icg) = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2)
+                  pDv(DV_MIXT_PRES,icg) = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2,ksg)
                   pDv(DV_MIXT_TEMP,icg) = MixtPerf_T_DPR(r,pDv(DV_MIXT_PRES,icg),gc)
                   pDv(DV_MIXT_SOUN,icg) = MixtPerf_C_GRT(g,gc,pDv(DV_MIXT_TEMP,icg))    
                 ELSEIF ( ABS(1.0_RFREAL-YExplosive) < nTol ) THEN
@@ -420,7 +427,7 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
                   pDv(DV_MIXT_SOUN,icg) = SQRT(pDv(DV_MIXT_PRES,icg)/pCv(CV_MIXT_DENS,icg))
 !                  pDv(DV_MIXT_SOUN,icg) = MixtPerf_C_GRT(g,gc,pDv(DV_MIXT_TEMP,icg))    
                 ELSE
-                  pDv(DV_MIXT_PRES,icg) = YProducts*MixtPerf_P_DEoGVm2(r,Eo,gProducts,Vm2)
+                  pDv(DV_MIXT_PRES,icg) = YProducts*MixtPerf_P_DEoGVm2(r,Eo,gProducts,Vm2,ksg)
                   pDv(DV_MIXT_TEMP,icg) = MixtPerf_T_DPR(r,pDv(DV_MIXT_PRES,icg),gcProducts)
                   pDv(DV_MIXT_SOUN,icg) = SQRT((pDv(DV_MIXT_PRES,icg)/pCv(CV_MIXT_DENS,icg))* &
                                           (1.0_RFREAL+(gProducts-1.0_RFREAL)*YProducts))
@@ -479,8 +486,10 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
             Vm2 = ir*ir*(pCv(CV_MIXT_XMOM,icg)*pCv(CV_MIXT_XMOM,icg) + &
                          pCv(CV_MIXT_YMOM,icg)*pCv(CV_MIXT_YMOM,icg) + &
                          pCv(CV_MIXT_ZMOM,icg)*pCv(CV_MIXT_ZMOM,icg))
+            
+            ksg = 0.0_RFREAL
 
-            term = MixtPerf_P_DEoGVm2(r,Eo,gm,Vm2)
+            term = MixtPerf_P_DEoGVm2(r,Eo,gm,Vm2,ksg)
             pDv(DV_MIXT_PRES,icg) = cpm/cpg*term/(1.0_RFREAL-phip)
             
             term = MixtPerf_T_DPR(r,pDv(DV_MIXT_PRES,icg),gcm)            
@@ -531,8 +540,10 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
                          pCv(CV_MIXT_YMOM,icg)*pCv(CV_MIXT_YMOM,icg) + &
                          pCv(CV_MIXT_ZMOM,icg)*pCv(CV_MIXT_ZMOM,icg))
             Cvm = (rYl*cvl + rYv*cvv + rYg*cvg)/r
+          
+            ksg = 0.0_RFREAL
 
-            pDv(DV_MIXT_TEMP,icg) = MixtPerf_T_CvEoVm2(Cvm,Eo,Vm2) 
+            pDv(DV_MIXT_TEMP,icg) = MixtPerf_T_CvEoVm2(Cvm,Eo,Vm2,ksg) 
 
             Cl2 = MixtLiq_C2_Bp(Bp) 
             Cv2 = MixtPerf_C2_GRT(1.0_RFREAL,gcv,pDv(DV_MIXT_TEMP,icg))
@@ -597,6 +608,8 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
             DO icg = icgBeg,icgEnd
               gc = MixtPerf_R_M(pGv(GV_MIXT_MOL,icg))
               g  = MixtPerf_G_CpR(pGv(GV_MIXT_CP,icg),gc)
+              
+              ksg = 0.0_RFREAL
 
               r  = pCv(CV_MIXT_DENS,icg)
               ir = 1.0_RFREAL/r
@@ -606,7 +619,7 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
                            pCv(CV_MIXT_YMOM,icg)*pCv(CV_MIXT_YMOM,icg) + &
                            pCv(CV_MIXT_ZMOM,icg)*pCv(CV_MIXT_ZMOM,icg))
 
-              e  = Eo - 0.5_RFREAL*Vm2
+              e  = Eo - 0.5_RFREAL*Vm2 - ksg
 
               ! BRAD Pressure fix
               IF (global%plagUsed .EQV. .TRUE.) THEN
@@ -635,7 +648,7 @@ Vm2 = ir*ir*(pCv(CV_MIXT_XMOM,icg)*pCv(CV_MIXT_XMOM,icg) + &
                            pCv(CV_MIXT_YMOM,icg)*pCv(CV_MIXT_YMOM,icg) + &
                            pCv(CV_MIXT_ZMOM,icg)*pCv(CV_MIXT_ZMOM,icg))
 
-  pCv(CV_MIXT_ENER,icg) = r*(e+0.5_RFREAL*(Vm2))
+  pCv(CV_MIXT_ENER,icg) = r*(e+0.5_RFREAL*(Vm2)+ksg)
 
           !CALL ErrorStop(global,ERR_REACHED_DEFAULT,__LINE__)
 END IF
@@ -703,7 +716,7 @@ IF (e .LE. 0.0_RFREAL) THEN
 !write(*,*) icg,r,pCv(CV_MIXT_ENER,icg),pCv(CV_MIXT_XMOM,icg),pCv(CV_MIXT_YMOM,icg),e,&
 !        pRegion%grid%cofg(XCOORD,icg),pRegion%grid%cofg(YCOORD,icg)
   e = 1.0E+04_RFREAL 
-  pCv(CV_MIXT_ENER,icg) = r*(e+0.5_RFREAL*(Vm2)) !Vm2 was uu+vv+ww 
+  pCv(CV_MIXT_ENER,icg) = r*(e+0.5_RFREAL*(Vm2)+ksg) !Vm2 was uu+vv+ww 
 !          CALL ErrorStop(global,ERR_REACHED_DEFAULT,__LINE__) 
 END IF !e le 0
 !!!!!!!!!!!!!!!
@@ -743,7 +756,7 @@ END IF !e le 0
               end if
 
 #ifdef PICL
-              pCv(CV_MIXT_ENER,icg)  = r*(e+0.5_RFREAL*Vm2)*(1.0_RFREAL -&
+              pCv(CV_MIXT_ENER,icg)  = r*(e+0.5_RFREAL*Vm2+ksg)*(1.0_RFREAL -&
                                 pRegion%mixt%piclVF(icg))
 #endif
 

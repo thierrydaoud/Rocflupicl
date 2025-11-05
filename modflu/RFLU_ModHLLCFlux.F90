@@ -633,6 +633,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux1_MTCP(pRegion)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCvSpec 
   TYPE(t_spec_type), POINTER :: pSpecType
 #endif  
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -723,9 +724,11 @@ SUBROUTINE RFLU_HLLC_ComputeFlux1_MTCP(pRegion)
     vl = pCv(CV_MIXT_YMOM,c1)*irl
     wl = pCv(CV_MIXT_ZMOM,c1)*irl
     pl = pDv(DV_MIXT_PRES,c1)
-    al = pDv(DV_MIXT_SOUN,c1)    
+    al = pDv(DV_MIXT_SOUN,c1)
+    
+    ksg = pRegion%mixt%piclKsg(c1) 
 
-    el  = MixtPerf_Eo_DGPUVW(rl,gl,pl,ul,vl,wl)
+    el  = MixtPerf_Eo_DGPUVW(rl,gl,pl,ul,vl,wl,ksg)
 
     Vml = ul*ul + vl*vl + wl*wl
     ql  = ul*nx + vl*ny + wl*nz - fs
@@ -749,8 +752,10 @@ SUBROUTINE RFLU_HLLC_ComputeFlux1_MTCP(pRegion)
     wr = pCv(CV_MIXT_ZMOM,c2)*irr
     pr = pDv(DV_MIXT_PRES,c2)
     ar = pDv(DV_MIXT_SOUN,c2)
+    
+    ksg = pRegion%mixt%piclKsg(c2) 
 
-    er  = MixtPerf_Eo_DGPUVW(rr,gr,pr,ur,vr,wr)
+    er  = MixtPerf_Eo_DGPUVW(rr,gr,pr,ur,vr,wr,ksg)
 
     Vmr = ur*ur + vr*vr + wr*wr
     qr  = ur*nx + vr*ny + wr*nz - fs
@@ -1765,6 +1770,8 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
   TYPE(t_spec_type), POINTER :: pSpecType
 #endif  
 
+  REAL(RFREAL) :: ksg
+
 ! ******************************************************************************
 ! Start
 ! ******************************************************************************
@@ -1878,6 +1885,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
     vl = pCv(CV_MIXT_YMOM,c1)*irl
     wl = pCv(CV_MIXT_ZMOM,c1)*irl
     pl = pDv(DV_MIXT_PRES,c1)
+    ksg = pRegion%mixt%piclKsg(c1) 
 
     rl = rl + pGc(XCOORD,GRC_MIXT_DENS,c1)*dx1 &
             + pGc(YCOORD,GRC_MIXT_DENS,c1)*dy1 &
@@ -1895,7 +1903,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c1)*dy1 &
             + pGc(ZCOORD,GRC_MIXT_PRES,c1)*dz1
 
-    el  = MixtPerf_Eo_DGPUVW(rl,gl,pl,ul,vl,wl)
+    el  = MixtPerf_Eo_DGPUVW(rl,gl,pl,ul,vl,wl,ksg)
     al  = MixtPerf_C_DGP(rl,gl,pl)
 
     Vml = ul*ul + vl*vl + wl*wl
@@ -1937,6 +1945,8 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
     vr = pCv(CV_MIXT_YMOM,c2)*irr
     wr = pCv(CV_MIXT_ZMOM,c2)*irr
     pr = pDv(DV_MIXT_PRES,c2)
+    
+    ksg = pRegion%mixt%piclKsg(c2) 
 
     rr = rr + pGc(XCOORD,GRC_MIXT_DENS,c2)*dx2 &
             + pGc(YCOORD,GRC_MIXT_DENS,c2)*dy2 &
@@ -1954,7 +1964,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c2)*dy2 &
             + pGc(ZCOORD,GRC_MIXT_PRES,c2)*dz2
 
-    er  = MixtPerf_Eo_DGPUVW(rr,gr,pr,ur,vr,wr)
+    er  = MixtPerf_Eo_DGPUVW(rr,gr,pr,ur,vr,wr,ksg)
     ar  = MixtPerf_C_DGP(rr,gr,pr)
 
     Vmr = ur*ur + vr*vr + wr*wr
@@ -2182,6 +2192,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_patch), POINTER :: pPatch
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -2260,6 +2271,8 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
     wl  = pCv(CV_MIXT_ZMOM,c1)*irl
     pl  = pDv(DV_MIXT_PRES,c1)
 
+    ksg = pRegion%mixt%piclKsg(c1) 
+
     dx  = xc - pGrid%cofg(XCOORD,c1)
     dy  = yc - pGrid%cofg(YCOORD,c1)
     dz  = zc - pGrid%cofg(ZCOORD,c1)
@@ -2280,7 +2293,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c1)*dy &
             + pGc(ZCOORD,GRC_MIXT_PRES,c1)*dz
 
-    el  = MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl)
+    el  = MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl,ksg)
     al  = MixtPerf_C_DGP(rl,g,pl)
 
     Vml = ul*ul + vl*vl + wl*wl
@@ -2298,6 +2311,8 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
     vr  = pCv(CV_MIXT_YMOM,c2)*irr
     wr  = pCv(CV_MIXT_ZMOM,c2)*irr
     pr  = pDv(DV_MIXT_PRES,c2)
+    
+    ksg = pRegion%mixt%piclKsg(c2) 
 
     dx  = xc - pGrid%cofg(XCOORD,c2)
     dy  = yc - pGrid%cofg(YCOORD,c2)
@@ -2319,7 +2334,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c2)*dy &
             + pGc(ZCOORD,GRC_MIXT_PRES,c2)*dz
 
-    er  = MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr)
+    er  = MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr,ksg)
     ar  = MixtPerf_C_DGP(rr,g,pr)
 
     Vmr = ur*ur + vr*vr + wr*wr

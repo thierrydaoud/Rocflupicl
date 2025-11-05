@@ -170,11 +170,19 @@ MODULE ModMixture
     ! 03/19/2025 - Thierry - added for gradient of gas volume fraction calculation of ppiclF
     REAL(RFREAL), DIMENSION(:,:), POINTER :: piclVFg
     REAL(RFREAL), DIMENSION(:,:,:), POINTER :: piclgradRhog
+    REAL(RFREAL), DIMENSION(:,:), POINTER :: piclPhiRsg
+    REAL(RFREAL), DIMENSION(:,:,:), POINTER :: piclGradPhiRsg
+    REAL(RFREAL), DIMENSION(:), POINTER :: piclKsg
+
+    REAL(RFREAL), DIMENSION(:,:), POINTER :: piclPhiQsg
+    REAL(RFREAL), DIMENSION(:,:,:), POINTER :: piclGradPhiQsg
     ! 03/19/2025 - Thierry - ends here
     ! 04/01/2025 - TLJ - adding feedback and its gradient
     REAL(RFREAL), DIMENSION(:,:), POINTER :: piclFeedback
     REAL(RFREAL), DIMENSION(:,:,:), POINTER :: piclgradFeedback
     ! 04/01/2025 - TLJ - ends here
+
+    REAL(RFREAL) :: piclGeom    
 
     REAL(RFREAL), POINTER :: sd(:,:)
     REAL(RFREAL), POINTER :: cvOld1(:,:),cvOld2(:,:)

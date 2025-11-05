@@ -86,6 +86,8 @@ MODULE RFLU_ModAUSMPlusUpFlux
   USE RFLU_ModGridSpeedUtils, ONLY: RFLU_DescaleGridSpeed
   USE RFLU_ModRindStates
 
+  USE ModMixture, ONLY: t_mixt
+
 
 
   IMPLICIT NONE
@@ -2116,6 +2118,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
                            MixtPerf_T_DPR, & 
                            RFLU_CentralFirstPatch, &
                            RFLU_CentralSecondPatch
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
   
@@ -2152,6 +2155,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
   REAL(RFREAL), DIMENSION(:,:,:), POINTER :: pGcSpec 
   TYPE(t_spec_type), POINTER :: pSpecType
 #endif  
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -2288,6 +2292,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
     vl = pCv(CV_MIXT_YMOM,c1)*irl
     wl = pCv(CV_MIXT_ZMOM,c1)*irl
     pl = pDv(DV_MIXT_PRES,c1)
+
+    ksg = pRegion%mixt%piclKsg(c1)
         
     rl = rl + pGc(XCOORD,GRC_MIXT_DENS,c1)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c1)*dy &
@@ -2319,7 +2325,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
 
     tl = MixtPerf_T_DPR(rl,pl,gcl)
     al = MixtPerf_C_GRT(gl,gcl,tl)
-    Hl = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl)
+    Hl = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl,ksg)
 
 ! ------------------------------------------------------------------------------
 !   Right state
@@ -2368,6 +2374,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
     wr = pCv(CV_MIXT_ZMOM,c2)*irr
     pr = pDv(DV_MIXT_PRES,c2)
         
+    ksg = pRegion%mixt%piclKsg(c2)
+
     rr = rr + pGc(XCOORD,GRC_MIXT_DENS,c2)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c2)*dy &
             + pGc(ZCOORD,GRC_MIXT_DENS,c2)*dz
@@ -2398,7 +2406,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
 
     tr = MixtPerf_T_DPR(rr,pr,gcr)
     ar = MixtPerf_C_GRT(gr,gcr,tr)
-    Hr = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr)
+    Hr = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr,ksg)
     
 ! ==============================================================================
 !   Compute volume fraction at face 
@@ -2573,6 +2581,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
                            MixtPerf_T_DPR, & 
                            RFLU_CentralFirstPatch, & 
                            RFLU_CentralSecondPatch
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
   
@@ -2612,6 +2621,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
   TYPE(t_spec_type), POINTER :: pSpecType
   TYPE(t_spec_input), POINTER :: pSpecInput
 #endif  
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -2742,6 +2752,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
     vl = pCv(CV_MIXT_YMOM,c1)*irl
     wl = pCv(CV_MIXT_ZMOM,c1)*irl
     pl = pDv(DV_MIXT_PRES,c1)
+
+    ksg = pRegion%mixt%piclKsg(c1)
         
     rl = rl + pGc(XCOORD,GRC_MIXT_DENS,c1)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c1)*dy &
@@ -2773,7 +2785,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
 
     tl = MixtPerf_T_DPR(rl,pl,gcl)
     al = MixtPerf_C_GRT(gl,gcl,tl)
-    Hl = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl)
+    Hl = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl,ksg)
 
 #ifdef SPEC
 ! DEBUG: Manoj-PBA1D, enthalpy for program burn
@@ -2804,7 +2816,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
         ELSE
           al = SQRT((pl/rl)*(1.0_RFREAL+(gProducts-1.0_RFREAL)*YProdl))
           Hl = (pl/rl)*(1.0_RFREAL/((gProducts-1.0_RFREAL)*YProdl)+1.0_RFREAL) &
-               + 0.5_RFREAL*(ul*ul+vl*vl+wl*wl)
+               + 0.5_RFREAL*(ul*ul+vl*vl+wl*wl) + Ksg
         END IF
       END IF ! YExpl
     END IF ! global%pbaFlag 
@@ -2849,6 +2861,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
     vr = pCv(CV_MIXT_YMOM,c2)*irr
     wr = pCv(CV_MIXT_ZMOM,c2)*irr
     pr = pDv(DV_MIXT_PRES,c2)
+
+    ksg = pRegion%mixt%piclKsg(c2)
         
     rr = rr + pGc(XCOORD,GRC_MIXT_DENS,c2)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c2)*dy &
@@ -2880,7 +2894,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
 
     tr = MixtPerf_T_DPR(rr,pr,gcr)
     ar = MixtPerf_C_GRT(gr,gcr,tr)
-    Hr = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr)
+    Hr = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr,ksg)
 
 #ifdef SPEC
 ! DEBUG: Manoj-PBA1D, enthalpy for program burn
@@ -2911,7 +2925,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
         ELSE
           ar = SQRT((pr/rr)*(1.0_RFREAL+(gProducts-1.0_RFREAL)*YProdr))
           Hr = (pr/rr)*(1.0_RFREAL/((gProducts-1.0_RFREAL)*YProdr)+1.0_RFREAL) &
-               + 0.5_RFREAL*(ur*ur+vr*vr+wr*wr)
+               + 0.5_RFREAL*(ur*ur+vr*vr+wr*wr) + ksg
         END IF
       END IF ! YExpl
     END IF ! global%pbaFlag 
@@ -3003,6 +3017,8 @@ IF (1==1) THEN
       YExpr  = irr*pRegion%spec%cv(iCvSpecExplosive,c2)
       YProdl = irl*pRegion%spec%cv(iCvSpecProducts,c1)
       YProdr = irr*pRegion%spec%cv(iCvSpecProducts,c2)
+      
+      ksg = pRegion%mixt%piclKsg(c2)
 
 ! ------------------------------------------------------------------------------
 !     Identify the interface between explosive and non-explosive  
@@ -3044,8 +3060,9 @@ IF (1==1) THEN
           vr = 0.0_RFREAL
           wr = 0.0_RFREAL
 
-          Hl  = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl)
-          Hr  = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr)
+          Hl  = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl,ksg)
+          ksg = pRegion%mixt%piclKsg(c2)
+          Hr  = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr,ksg)
         END IF ! prodInterfaceType
 
 ! ----- Product is on left side ------------------------------------------------        
@@ -3247,6 +3264,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
  USE PLAG_ModParameters
 #endif
 
+  USE ModMixture, ONLY: t_mixt
   IMPLICIT NONE
   
 ! ******************************************************************************
@@ -3281,6 +3299,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
   TYPE(t_plag), POINTER :: pPlag
   REAL(RFREAL) :: rcL,rcR,wtL,wtR
 #endif
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -3382,6 +3401,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
     vl  = pCv(CV_MIXT_YMOM,c1)*irl
     wl  = pCv(CV_MIXT_ZMOM,c1)*irl
     pl  = pDv(DV_MIXT_PRES,c1)
+
+    ksg = pRegion%mixt%piclKsg(c1)
     
     rl = rl + pGc(XCOORD,GRC_MIXT_DENS,c1)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c1)*dy &
@@ -3413,7 +3434,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
     tl = MixtPerf_T_DPR(rl,pl,gc)
 
     al = MixtPerf_C_GRT(g,gc,tl)
-    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl)
+    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl,ksg)
     
 ! ------------------------------------------------------------------------------
 !   Right state
@@ -3435,6 +3456,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
     vr  = pCv(CV_MIXT_YMOM,c2)*irr
     wr  = pCv(CV_MIXT_ZMOM,c2)*irr
     pr  = pDv(DV_MIXT_PRES,c2)
+    ksg = pRegion%mixt%piclKsg(c2)
 
     rr = rr + pGc(XCOORD,GRC_MIXT_DENS,c2)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c2)*dy &
@@ -3467,7 +3489,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
     tr = MixtPerf_T_DPR(rr,pr,gc)
 
     ar = MixtPerf_C_GRT(g,gc,tr)
-    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr)
+    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr,ksg)
     
 ! ==============================================================================
 !   Rahul - 11/10/15

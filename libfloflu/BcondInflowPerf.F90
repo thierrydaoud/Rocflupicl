@@ -119,6 +119,8 @@ SUBROUTINE BcondInflowPerf(bcOptType,bcOptFixed,ptot,ttot,betah,betav,mach, &
   REAL(RFREAL) :: al, ar, a02, cp, disc, eta, g, gm1, igm1, ql, rgas, Rm, &
                   sl, sr , tr, ul, ur, vl, vr, wl, wr
 
+  REAL(RFREAL) :: ksg
+
 !******************************************************************************
 ! gas properties
 
@@ -176,8 +178,9 @@ SUBROUTINE BcondInflowPerf(bcOptType,bcOptFixed,ptot,ttot,betah,betav,mach, &
       ur = sr*COS(betah)*COS(betav)
       vr = sr*SIN(betah)
       wr = sr*COS(betah)*SIN(betav)
+      ksg = 0.0d0 
 
-      rer = rr*MixtPerf_Eo_DGPVm(rr,g,pr,sr)
+      rer = rr*MixtPerf_Eo_DGPVm(rr,g,pr,sr,ksg)
       rur = rr*ur
       rvr = rr*vr
       rwr = rr*wr
@@ -195,7 +198,9 @@ SUBROUTINE BcondInflowPerf(bcOptType,bcOptFixed,ptot,ttot,betah,betav,mach, &
         vr = mach*ar*SIN(betah)
         wr = mach*ar*COS(betah)*SIN(betav)
 
-        rer = rr*MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr)
+        ksg = 0.0d0 
+
+        rer = rr*MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr,ksg)
         rur = rr*ur
         rvr = rr*vr
         rwr = rr*wr
@@ -214,7 +219,7 @@ SUBROUTINE BcondInflowPerf(bcOptType,bcOptFixed,ptot,ttot,betah,betav,mach, &
     vr = mach*ar*SIN(betah)
     wr = mach*ar*COS(betah)*SIN(betav) 
 
-    rer = rr*MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr)
+    rer = rr*MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr,ksg)
     rur = rr*ur
     rvr = rr*vr
     rwr = rr*wr

@@ -111,6 +111,7 @@ SUBROUTINE RFLU_InitFlowScratch(pRegion)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCv,pGv
   TYPE(t_global), POINTER :: global
   TYPE(t_mixt_input), POINTER :: pMixtInput
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -201,11 +202,15 @@ SUBROUTINE RFLU_InitFlowScratch(pRegion)
               pCv(CV_MIXT_YMOM,icg) = r*pRegion%mixtInput%iniVelY
               pCv(CV_MIXT_ZMOM,icg) = r*pRegion%mixtInput%iniVelZ
 
+              ! Initialize with zero Pseudo-Turbulence
+              pRegion%mixt%piclKsg(icg) = 0.0d0
+
               Eo = MixtPerf_Eo_DGPUVW(pCv(CV_MIXT_DENS,icg),g,    & 
                                       pRegion%mixtInput%iniPress, & 
                                       pRegion%mixtInput%iniVelX,  & 
                                       pRegion%mixtInput%iniVelY,  & 
-                                      pRegion%mixtInput%iniVelZ)
+                                      pRegion%mixtInput%iniVelZ,  &
+                                      pRegion%mixt%piclKsg(icg))
 
               pCv(CV_MIXT_ENER,icg) = pCv(CV_MIXT_DENS,icg)*Eo
             END DO ! icg    
@@ -262,8 +267,12 @@ SUBROUTINE RFLU_InitFlowScratch(pRegion)
                   + pRegion%mixtInput%iniVelY*pRegion%mixtInput%iniVelY &
                   + pRegion%mixtInput%iniVelZ*pRegion%mixtInput%iniVelZ
 
+              ! Initialize with zero Pseudo-Turbulence
+              pRegion%mixt%piclKsg(icg) = 0.0d0
+              ksg = pRegion%mixt%piclKsg(icg)
+
               pCv(CV_MIXT_ENER,icg) = pCv(CV_MIXT_DENS,icg)* &
-               MixtGasLiq_Eo_CvmTVm2(Cvm,pRegion%mixtInput%iniTemp,Vm2) 
+               MixtGasLiq_Eo_CvmTVm2(Cvm,pRegion%mixtInput%iniTemp,Vm2,ksg) 
             END DO ! icg
           ELSE
             DO icg = 1,pRegion%grid%nCellsTot

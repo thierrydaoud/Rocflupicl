@@ -5163,6 +5163,7 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
   REAL(RFREAL), DIMENSION(:), ALLOCATABLE :: keRadii,momRadii,peRadii,radii
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_global), POINTER :: global
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start, Set pointers and variables
@@ -5302,8 +5303,10 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
       Eo = pRegion%mixt%cv(CV_MIXT_ENER,icg)/r
 
       Vm2 = (ru*ru + rv*rv + rw*rw)/(r*r)
+      
+      ksg = pRegion%mixt%piclKsg(icg)
 
-      p = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2)
+      p = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2,ksg)
 
       dp = p - global%refPressure
       dh = (g/(g-1.0_RFREAL))*p/r - refH
@@ -5410,7 +5413,7 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
        xTransformed = x
        yTransformed = y+4
        radialDistTransformed = SQRT(xTransformed*xTransformed +yTransformed*yTransformed)
-       p = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2)
+       p = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2,ksg)
        !IF( radialDistTransformedi == refL/2)THEN
           PressCE = (p-refP)/(0.5_RFREAL * refD * refU * refU * refA)
           WRITE(IF_EXTR_DATA1,'(4(1X,E23.16))') xTransformed,yTransformed,radialDistTransformed,& 

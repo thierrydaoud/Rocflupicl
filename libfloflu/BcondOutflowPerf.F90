@@ -103,7 +103,7 @@ SUBROUTINE BcondOutflowPerf( bcOpt,pout,sxn,syn,szn,cpgas,mol, &
   REAL(RFREAL) :: rho, rhou, rhov, rhow, rhoe, press
   REAL(RFREAL) :: sxn, syn, szn, cpgas, mol
   REAL(RFREAL) :: rhob, rhoub, rhovb, rhowb, rhoeb
-
+  REAL(RFREAL) :: ksg
 ! ... local variables
   REAL(RFREAL) :: csound, rgas, gamma, gam1, u, v, w, mach, rrhoc, deltp, &
                   ub, vb, wb, vnd
@@ -145,7 +145,7 @@ SUBROUTINE BcondOutflowPerf( bcOpt,pout,sxn,syn,szn,cpgas,mol, &
     rhoub = rhob*ub
     rhovb = rhob*vb
     rhowb = rhob*wb
-    rhoeb = rhob*MixtPerf_Eo_DGPUVW( rhob,gamma,pout,ub,vb,wb )
+    rhoeb = rhob*MixtPerf_Eo_DGPUVW( rhob,gamma,pout,ub,vb,wb,ksg )
 
 ! supersonic flow -------------------------------------------------------------
 

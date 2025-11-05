@@ -81,6 +81,7 @@ SUBROUTINE PerfgasDependentVars( inBeg,inEnd,indCp,indMol,cv,gv,dv )
 
   USE ModDataTypes
   USE ModParameters
+  USE ModDataStruct, ONLY: t_region
 
   USE ModInterfaces, ONLY: MixtPerf_C_GRT,MixtPerf_G_CpR, & 
                            MixtPerf_P_DEoGVm2,MixtPerf_R_M,MixtPerf_T_DPR
@@ -98,6 +99,8 @@ SUBROUTINE PerfgasDependentVars( inBeg,inEnd,indCp,indMol,cv,gv,dv )
 ! ... local variables
   REAL(RFREAL) :: rgas,rrho,Vm2
   REAL(RFREAL) :: Eo,gamma,rho
+  TYPE(t_region), POINTER :: pRegion 
+  REAL(RFREAL) :: ksg
 
 !******************************************************************************
 
@@ -113,7 +116,9 @@ SUBROUTINE PerfgasDependentVars( inBeg,inEnd,indCp,indMol,cv,gv,dv )
            cv(CV_MIXT_YMOM,ic)*cv(CV_MIXT_YMOM,ic) + &
            cv(CV_MIXT_ZMOM,ic)*cv(CV_MIXT_ZMOM,ic))*rrho*rrho
 
-    dv(DV_MIXT_PRES,ic) = MixtPerf_P_DEoGVm2(rho,Eo,gamma,Vm2)
+    ksg = pRegion%mixt%piclKsg(ic)
+
+    dv(DV_MIXT_PRES,ic) = MixtPerf_P_DEoGVm2(rho,Eo,gamma,Vm2,ksg)
     dv(DV_MIXT_TEMP,ic) = MixtPerf_T_DPR(rho,dv(DV_MIXT_PRES,ic),rgas)
     dv(DV_MIXT_SOUN,ic) = MixtPerf_C_GRT(gamma,rgas,dv(DV_MIXT_TEMP,ic))
   ENDDO
