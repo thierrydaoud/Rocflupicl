@@ -1073,7 +1073,7 @@ c-----------------------------------------------------------------------
          ic = ic + PPICLF_LRP3
          call ppiclf_copy(rwork(ic,i),ppiclf_rprop4(1,i),PPICLF_LRP4)
          ic = ic + PPICLF_LRP4
-         call ppiclf_copy(rwork(ic,i),ppiclf_rprop5(1,i),PPICLF_LRP5)
+         call ppiclf_copy(rwork(ic,i),ppiclf_force(1,i),PPICLF_LRP5)
       enddo
 
       j0 = 4
@@ -1106,7 +1106,7 @@ c-----------------------------------------------------------------------
          ic = ic + PPICLF_LRP3
          call ppiclf_copy(ppiclf_rprop4(1,i),rwork(ic,i),PPICLF_LRP4)
          ic = ic + PPICLF_LRP4
-         call ppiclf_copy(ppiclf_rprop5(1,i),rwork(ic,i),PPICLF_LRP5)
+         call ppiclf_copy(ppiclf_force(1,i),rwork(ic,i),PPICLF_LRP5)
       enddo
         
       return

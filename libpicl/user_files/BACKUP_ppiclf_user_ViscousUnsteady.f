@@ -15,7 +15,7 @@
 !
 !-----------------------------------------------------------------------
 !
-      subroutine ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz,qq_du)
+      subroutine ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz)
 !
       implicit none
 !
@@ -26,7 +26,6 @@
       integer*4 i, iStage, iT
       real*8 fvux,fvuy,fvuz
       real*8 time,fH,factor,A,B,kernelVU
-      real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid,time_tilde
 
 !
 ! Code:
@@ -37,19 +36,10 @@
       iT   = 1
       time = 0.0d0
 
-      qq_du = 0.0d0
-
-      Pe = rep * rpr ! Peclet number
-
       fH     = 0.75d0 + .105d0*reyL
       ! Sangani's volume fraction correction for dilute random arrays
       ! Capping volume fraction at 0.5 
       factor = 3.0d0*rpi*rnu*dp*ppiclf_dt*(1.0+2.28*min(rphip,0.5))
-
-      ! Thermal diffusivity
-      alpha_fluid = rkappa/(rhof * rcp_fluid)
-      ! diffusive unsteady Heat Transfer
-      factor_du = (dp**2)*sqrt(rpi*alpha_fluid)*rhof*rcp_fluid*ppiclf_dt
 
       if (ppiclf_nTimeBH > 1) then
          do iT = 2,ppiclf_nTimeBH-1
@@ -70,19 +60,7 @@
             fvuz = fvuz + kernelVU*
      >                   ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
      >                     ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
-         
-            ! Diffusive Unsteady Heat Transfer starts here
-            b_du = (1.63d0 - 0.92d0*erf(0.017*(Pe - 80.0d0)))
-     >       *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
-         
-            ! Kernel for diffusive unsteady Heat Transfer
-            time_tilde = time*vmag/dp
-            kernel_du = sqrt(vmag/dp
-     >       *((2.0d0/sqrt(time_tilde)*exp(-b_du*time_tilde))**2))
-
-            qq_du = qq_du + factor_du*kernel_du*
-     >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
-          enddo
+         enddo
 
          iT = ppiclf_nTimeBH
          time = ppiclf_timeBH(iT)
@@ -102,39 +80,6 @@
          fvuz = fvuz + kernelVU*
      >                ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
      >                  ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
-
-         ! Diffusive Unsteady Heat Transfer starts here
-         b_du = (1.63d0 - 0.92d0*erf(0.017*(Pe - 80.0d0)))
-     >    *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
-         
-         ! Kernel for diffusive unsteady Heat Transfer
-         time_tilde = time*vmag/dp
-         kernel_du = 0.5d0*vmag/dp*(2.0d0/sqrt(time_tilde)
-     >                                    *exp(-b_du*time_tilde))
-
-         qq_du = qq_du + factor_du*kernel_du*
-     >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
-        
-         ! look into why vmag is becoming NaN at a certain point
-
-         if(ppiclf_iprop(5,i)==29  .and.
-     >      ppiclf_iprop(6,i)==0   .and.
-     >      ppiclf_iprop(7,i)==151) then
-      open(unit=66,file='fort.66',position='append')   
-
-      write(66,*) ppiclf_time, ppiclf_nid, ppiclf_dt,
-     >            factor_du, kernel_du,
-     >            ppiclf_dTdtMixt(iT,i),
-     >            ppiclf_dTdtPlag(iT,i),
-     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-     >            factor_du*kernel_du*
-     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-     >            qq_du
-
-      flush(66)
-
-      endif
-
       endif
 
 
@@ -181,11 +126,6 @@
      >                      ppiclf_drudtPlag(PPICLF_JY,iT-1,i)
             ppiclf_drudtPlag(PPICLF_JZ,iT,i) = 
      >                      ppiclf_drudtPlag(PPICLF_JZ,iT-1,i)
-
-            ppiclf_dTdtMixt(iT,i) = ppiclf_dTdtMixt(iT-1,i)
-            ppiclf_dTdtPlag(iT,i) = ppiclf_dTdtPlag(iT-1,i)
-            ppiclf_TMixt(iT,i)    = ppiclf_TMixt(iT-1,i)
-            ppiclf_TPlag(iT,i)    = ppiclf_TPlag(iT-1,i)
          enddo
       enddo
 
@@ -215,19 +155,17 @@
 !
 !-----------------------------------------------------------------------
 !
-      subroutine ppiclf_user_UpdatePlag(i,iStage)
+      subroutine ppiclf_user_UpdatePlag(i)
 !
       implicit none
 !
       include "PPICLF"
 !
-      integer*4 i, iStage
+      integer*4 i
       real*8 SDrho
       real*8 ug,vg,wg
       real*8 up,vp,wp
       real*8 vgradrho
-      real*8 dt
-      real*8 time_plot, am2, am1, a, ap1
 
 !
 ! Code:
@@ -273,93 +211,7 @@
       ppiclf_drudtPlag(PPICLF_JZ,1,i) =
      >   wp*SDrho + rhof*ppiclf_ydot(PPICLF_JVZ,i)
 
-      ! setting all stages to be the same at t=0
-      if(ppiclf_time .eq. 0.0d0) then
-        ppiclf_TMixt(:,i) = ppiclf_rprop(PPICLF_R_JT,i)
-        ppiclf_TPlag(:,i) = ppiclf_y(PPICLF_JT,i)
-      endif
 
-      ppiclf_TMixt(1,i) = ppiclf_rprop(PPICLF_R_JT,i)
-      ppiclf_TPlag(1,i) = ppiclf_y(PPICLF_JT,i)
-
-      ! when particle is just introduced to the processor, it will have
-      ! a zero Tp and Tg at the second step (previous step) before
-      ! shifitng occurs. Simple fix for now is to equate them when this
-      ! happens to avoid blowing up the solution 
-
-      if(ppiclf_TMixt(2,i) .eq. 0.0d0) then
-        ppiclf_TMixt(2,i) = ppiclf_TMixt(1,i)
-        ppiclf_TMixt(3,i) = ppiclf_TMixt(1,i)
-        ppiclf_TMixt(4,i) = ppiclf_TMixt(1,i)
-      endif
-
-      if(ppiclf_TPlag(2,i) .eq. 0.0d0) then
-        ppiclf_TPlag(2,i) = ppiclf_TPlag(1,i)
-      endif
-
-      ! Time difference between previous 3rd RK stage and current RK
-      ! stage
-      if(iStage==1) then 
-        dt = 8.0d0/15.0d0 * ppiclf_dt
-        time_plot = ppiclf_time
-      elseif(iStage==2) then 
-        dt = 2.0d0/3.0d0  * ppiclf_dt
-        time_plot = ppiclf_time + 8.0/15.0*ppiclf_dt
-      elseif(iStage==3) then
-        dt =                ppiclf_dt
-        time_plot = ppiclf_time + 2.0/3.0*ppiclf_dt
-      else
-        print*, "Not supported beyond RK3"
-        print*, "iStage =", iStage
-        STOP
-      endif
-
-
-      ! dT/dt update for Diffusive Unsteady HT
-      ! first-order backward difference (explicit backward Euler form)
-
-!      am2 = -dt*(dt+ppiclf_dt)/(2.0*ppiclf_dt**2*(dt+2.0*ppiclf_dt))
-!      am1 =  dt*(dt+2.0*ppiclf_dt)/(ppiclf_dt**2*(dt+ppiclf_dt))
-!      a   = -(dt+ppiclf_dt)*(dt+2.0*ppiclf_dt)/(2.0*dt*ppiclf_dt**2)
-!      ap1 =  (3.0*dt**2 + 6.0*dt*ppiclf_dt + 2.0*ppiclf_dt**2)/
-!     >       (dt*(dt+ppiclf_dt)*(dt+2.0*ppiclf_dt))
-
-!      ppiclf_dTdtMixt(1,i) = ap1*ppiclf_TMixt(1,i) + a*ppiclf_TMixt(2,i)
-!     >  + am1*ppiclf_TMixt(3,i) + am2*ppiclf_TMixt(4,i)
-      
-      ! testing to see if this will fix the oscillatory issue
-      if(iStage==3) then
-        ppiclf_dTdtMixt(1,i) = (ppiclf_TMixt(1,i)-ppiclf_TMixt(2,i))/dt
-        ppiclf_dTdtPlag(1,i) = (ppiclf_TPlag(1,i)-ppiclf_TPlag(2,i))/dt
-      endif
-
-      ! zero out the value initially
-      if(ppiclf_time .eq. 0.0d0) then 
-        ppiclf_dTdtMixt(1,i) = 0.0d0
-        ppiclf_dTdtPlag(1,i) = 0.0d0
-      endif
-
-      !if(ppiclf_nid .eq. 0 .and. i==5) then
-      if(ppiclf_iprop(5,i)==29  .and.
-     >      ppiclf_iprop(6,i)==0   .and.
-     >      ppiclf_iprop(7,i)==151) then
-      open(unit=67,file='fort.67',position='append')   
-
-      write(67,*) time_plot, ppiclf_nid, ppiclf_dt, dt
-     >                          , ppiclf_dTdtMixt(1,i)
-     >                          , ppiclf_TMixt(1,i)
-     >                          , ppiclf_TMixt(2,i)
-     >                          , ppiclf_dTdtPlag(1,i)
-     >                          , ppiclf_TPlag(1,i)
-     >                          , ppiclf_TPlag(2,i)
-     >                          , ppiclf_rprop(PPICLF_R_JUX,i)
-     >                          , ppiclf_rprop(PPICLF_R_JT,i)
-     >    ,(ppiclf_TMixt(1,i) -ppiclf_TMixt(2,i))/dt 
-
-      flush(67)
-
-      endif
-      
       return
       end
 !
@@ -402,23 +254,8 @@
             ppiclf_drudtPlag(ic,iT,i) = ppiclf_rprop3(k,i)
          enddo
          enddo
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_dTdtMixt(iT,i) = ppiclf_rprop3(k,i)
-         enddo
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_dTdtPlag(iT,i) = ppiclf_rprop3(k,i)
-         enddo
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_TMixt(iT,i) = ppiclf_rprop3(k,i)
-         enddo
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_TPlag(iT,i) = ppiclf_rprop3(k,i)
-         enddo
       enddo
+
 
       return
       end
@@ -430,14 +267,12 @@
 !
 ! Created Feb. 1, 2024
 !
-! Sets rprop3 from drudtMixt, drudtPlag, dTdtMixt, and dTdtPlag
+! Sets rprop3 from drudtMixt and drudtPlag
 ! Needed for proper particle tracking
 ! Load particle data into communication buffers rprop3
 ! See rocpart/PLAG_RFLU_ModComm.F90:
 !     SUBROUTINE PLAG_RFLU_UnloadBuffersRecv(pRegion)
 !
-! Modified Oct. 24, 2025 - Added dTdtMixt and dTdtPlag for diffusive
-!                          unsteady heat transfer model
 !-----------------------------------------------------------------------
 !
       subroutine ppiclf_user_plag2prop
@@ -464,23 +299,6 @@
             ppiclf_rprop3(k,i) = ppiclf_drudtPlag(ic,iT,i)
          enddo
          enddo
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_rprop3(k,i) = ppiclf_dTdtMixt(iT,i)
-         enddo
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_rprop3(k,i) = ppiclf_dTdtPlag(iT,i)
-         enddo
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_rprop3(k,i) = ppiclf_TMixt(iT,i)
-         enddo
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_rprop3(k,i) = ppiclf_TPlag(iT,i)
-         enddo
-
       enddo
 
 

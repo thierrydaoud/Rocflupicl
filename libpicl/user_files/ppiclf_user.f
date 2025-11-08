@@ -66,7 +66,7 @@
 
       real*8 beta,cd
 
-      real*8 factor, rcp_fluid, rmass_add
+      real*8 factor, rmass_add
 
       real*8 gkern
 
@@ -79,7 +79,7 @@
       integer*4 store_forces
 
 ! Needed for heat transfer
-      real*8 qq, rmass_therm, temp
+      real*8 qq, rmass_therm, temp, qq_du
 
 ! Needed for reactive particles
       integer*4 burnrate_model
@@ -94,7 +94,7 @@
       real*8 lift
 
 ! Finite Diff Material derivative Variables
-      integer*4 nstage, istage
+      integer*4 nstage, iStage
       integer*4 icallb
       save      icallb
       data      icallb /0/
@@ -143,15 +143,15 @@
 
       icallb = icallb + 1
       nstage = 3
-      istage = mod(icallb,nstage)
-      if (istage .eq. 0) istage = 3  
+      iStage = mod(icallb,nstage)
+      if (iStage .eq. 0) iStage = 3  
 
       ! Count every iStage=1 for debug output
       if (iStage .eq. 1) idebug = idebug + 1
 
       ! Print dt and time every time step
       if (ppiclf_nid==0) then
-      if (istage .eq. 1) then
+      if (iStage .eq. 1) then
         write(6,'(a,2x,2(1pe14.6),2x,i3)') '*** PPICLF dt, time = ',
      >      ppiclf_dt,ppiclf_time
       endif
@@ -180,7 +180,7 @@
       fac = ppiclf_rk3ark(iStage)*ppiclf_dt
       if (1==2) then
          if (ppiclf_nid==0) print*,'dt,fac=',
-     >      istage,ppiclf_dt,fac,
+     >      iStage,ppiclf_dt,fac,
      >      stationary, qs_flag, am_flag, pg_flag,
      >      collisional_flag, heattransfer_flag, feedback_flag,
      >      qs_fluct_flag, ppiclf_debug, ppiclf_nTimeBH,
@@ -335,7 +335,6 @@
          ! 08/08/2025 - Thierry  - 1.d-8 is very small
          if (vmag <= 1.d-3) cycle
 
-
          ! Thierry - at initial times when rmachp and vmag are very
          ! small, we would get very large CD (>100)
          ! This leads to NaN projected force when PseudoTurbulence is 
@@ -363,8 +362,9 @@
 
          ! TLJ: Needed for viscous unsteady force
          !      Using same nomenclature as rocinteract subroutines
-         reyL = dp*vmag*rhof/rmu
-         rnu = rmu/rhof
+         rhoMixt = rhof/(1.0d0-rphip)
+         reyL = dp*vmag*rhoMixt/rmu
+         rnu = rmu/rhoMixt
 
          ! Zero out for each particle i
          famx = 0.0d0; famy = 0.0d0; famz = 0.0d0; rmass_add = 0.0d0;
@@ -380,7 +380,7 @@
          taux = 0.0d0; tauy = 0.0d0; tauz = 0.0d0;
          liftx = 0.0d0; lifty = 0.0d0; liftz = 0.0d0;
          fvux = 0.0d0; fvuy = 0.0d0; fvuz = 0.0d0;
-         qq=0.0d0
+         qq=0.0d0; qq_du=0.0d0
          mdot_me = 0.0d0; mdot_ox = 0.0d0;
          upmean = 0.0; vpmean = 0.0; wpmean = 0.0;
          u2pmean = 0.0; v2pmean = 0.0; w2pmean = 0.0;
@@ -487,6 +487,24 @@
          fqsx = beta*vx
          fqsy = beta*vy
          fqsz = beta*vz
+!-----------------------------------------------------------------
+
+       if(ppiclf_iprop(5,i)==29  .and.                         
+     >      ppiclf_iprop(6,i)==0   .and.                      
+     >      ppiclf_iprop(7,i)==151) then                      
+      open(unit=777,file='fort.777',position='append')          
+                                                              
+      write(777,*) ppiclf_time, ppiclf_nid, ppiclf_dt
+     >                          , ppiclf_rprop(PPICLF_R_JUX,i)
+     >                          , ppiclf_rprop(PPICLF_R_JT,i) 
+                                                              
+      flush(777)                                               
+                                                              
+      endif                                                   
+
+!-----------------------------------------------------------------
+
+
 !
 ! Step 3: Force fluctuation for quasi-steady force
 !
@@ -604,7 +622,7 @@
 ! Step 7: Viscous unsteady force with history kernel
 !
          if (ViscousUnsteady_flag==1) then
-            call ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz)
+            call ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz,qq_du)
          endif
 
 !
@@ -624,6 +642,22 @@
             call ppiclf_user_HT_driver(i,qq)
          endif ! heattransfer_flag >= 1
 
+         !if(ppiclf_nid .eq. 0 .and. i==5) then
+         if(ppiclf_iprop(5,i)==29  .and.
+     >      ppiclf_iprop(6,i)==0   .and.
+     >      ppiclf_iprop(7,i)==151 .and. iStage==3) then
+          open(unit=60,file='fort.60',position='append')   
+          write(60,*) ppiclf_time, ppiclf_nid, qq_du, qq
+          flush(60)
+         endif
+! 
+! Step 8c : Diffusive Unsteady Heat Transfer model
+!
+         ! Ideally make this under the HT_driver when done coding
+         ! but setting this as a separate input flag for now
+         if(HTUnsteady_flag==0) then
+           qq_du = 0.0d0
+         endif
 !
 ! Step 9a: Angular velocity model
 !
@@ -658,7 +692,7 @@
      >                               (rmass+rmass_add)
          ppiclf_ydot(PPICLF_JVZ,i) = (fqsz+famz+fdpdz+fvuz+liftz+fcz)/
      >                               (rmass+rmass_add)
-         ppiclf_ydot(PPICLF_JT,i)  = qq/rmass_therm
+         ppiclf_ydot(PPICLF_JT,i)  = (qq+qq_du)/rmass_therm
          ppiclf_ydot(PPICLF_JOX,i) = taux/rmass_omega
          ppiclf_ydot(PPICLF_JOY,i) = tauy/rmass_omega
          ppiclf_ydot(PPICLF_JOZ,i) = tauz/rmass_omega
@@ -669,7 +703,7 @@
 ! Update data for viscous unsteady case
 !
          if (ViscousUnsteady_flag>=1) then
-            call ppiclf_user_UpdatePlag(i)
+            call ppiclf_user_UpdatePlag(i,iStage)
          endif
 
 !
@@ -791,25 +825,33 @@
 ! Step 13: Store forces
 !
          ! Thierry - just testing this for now to see if it makes a difference in R_perp
-         ppiclf_rprop5(PPICLF_R_FQSX,i)  = fqsx
-         ppiclf_rprop5(PPICLF_R_FQSY,i)  = fqsy
-         ppiclf_rprop5(PPICLF_R_FQSZ,i)  = fqsz
-         ppiclf_rprop5(PPICLF_R_FAMX,i)  = famx-rmass_add*ppiclf_ydot(PPICLF_JVX,i)
-         ppiclf_rprop5(PPICLF_R_FAMY,i)  = famy-rmass_add*ppiclf_ydot(PPICLF_JVY,i)
-         ppiclf_rprop5(PPICLF_R_FAMZ,i)  = famz-rmass_add*ppiclf_ydot(PPICLF_JVZ,i)
-         ppiclf_rprop5(PPICLF_R_FAMBX,i) = FamBinary(1)
-         ppiclf_rprop5(PPICLF_R_FAMBY,i) = FamBinary(2)
-         ppiclf_rprop5(PPICLF_R_FAMBZ,i) = FamBinary(3)
-         ppiclf_rprop5(PPICLF_R_FCX,i)   = fcx
-         ppiclf_rprop5(PPICLF_R_FCY,i)   = fcy
-         ppiclf_rprop5(PPICLF_R_FCZ,i)   = fcz
-         ppiclf_rprop5(PPICLF_R_FVUX,i)  = fvux
-         ppiclf_rprop5(PPICLF_R_FVUY,i)  = fvuy
-         ppiclf_rprop5(PPICLF_R_FVUZ,i)  = fvuz
-         ppiclf_rprop5(PPICLF_R_QQ,i)    = qq
-         ppiclf_rprop5(PPICLF_R_FPGX,i)  = fdpdx
-         ppiclf_rprop5(PPICLF_R_FPGY,i)  = fdpdy
-         ppiclf_rprop5(PPICLF_R_FPGZ,i)  = fdpdz
+         ! commenting out for now since it's not being outputted anywhere
+         ! I need to figure out how to output ppiclf_force to vtu files
+!         ppiclf_force(PPICLF_R_FQSX,i)  = fqsx
+!         ppiclf_force(PPICLF_R_FQSY,i)  = fqsy
+!         ppiclf_force(PPICLF_R_FQSZ,i)  = fqsz
+!         ppiclf_force(PPICLF_R_FAMX,i)  = famx-rmass_add*ppiclf_ydot(PPICLF_JVX,i)
+!         ppiclf_force(PPICLF_R_FAMY,i)  = famy-rmass_add*ppiclf_ydot(PPICLF_JVY,i)
+!         ppiclf_force(PPICLF_R_FAMZ,i)  = famz-rmass_add*ppiclf_ydot(PPICLF_JVZ,i)
+!         ppiclf_force(PPICLF_R_FAMBX,i) = FamBinary(1)
+!         ppiclf_force(PPICLF_R_FAMBY,i) = FamBinary(2)
+!         ppiclf_force(PPICLF_R_FAMBZ,i) = FamBinary(3)
+!         ppiclf_force(PPICLF_R_FCX,i)   = fcx
+!         ppiclf_force(PPICLF_R_FCY,i)   = fcy
+!         ppiclf_force(PPICLF_R_FCZ,i)   = fcz
+!         ppiclf_force(PPICLF_R_FVUX,i)  = fvux
+!         ppiclf_force(PPICLF_R_FVUY,i)  = fvuy
+!         ppiclf_force(PPICLF_R_FVUZ,i)  = fvuz
+!         ppiclf_force(PPICLF_R_QQ,i)    = qq
+!         ppiclf_force(PPICLF_R_FPGX,i)  = fdpdx
+!         ppiclf_force(PPICLF_R_FPGY,i)  = fdpdy
+!         ppiclf_force(PPICLF_R_FPGZ,i)  = fdpdz
+
+         ppiclf_rprop(PPICLF_R_FVUX,i)  = fvux
+         ppiclf_rprop(PPICLF_R_FVUY,i)  = fvuy
+         ppiclf_rprop(PPICLF_R_FVUZ,i)  = fvuz
+         ppiclf_rprop(PPICLF_R_QQ,i)    = qq
+         ppiclf_rprop(PPICLF_R_QQDU,i)  = qq_du
 
 !
 ! Step 14: If debug mode is ON, calculate and print the max values.

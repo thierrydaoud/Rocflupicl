@@ -11,7 +11,7 @@
 #ifndef PPICLF_VU
 #define PPICLF_VU 5
 #endif
-#define PPICLF_LRP3 6*PPICLF_VU
+#define PPICLF_LRP3 10*PPICLF_VU
 
 #define PPICLF_LRP4 12
 

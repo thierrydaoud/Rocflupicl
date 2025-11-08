@@ -8,7 +8,7 @@ c Computational particles
      >      ,PPICLF_RPROP2(PPICLF_LRP2,PPICLF_LPART)  ! Secondary real particle properties
      >      ,PPICLF_RPROP3(PPICLF_LRP3,PPICLF_LPART)  ! Third real particle properties
      >      ,PPICLF_RPROP4(PPICLF_LRP4,PPICLF_LPART)  ! Fourth real particle properties
-     >      ,PPICLF_RPROP5(PPICLF_LRP5,PPICLF_LPART)  ! Fifth real particle properties
+     >      ,PPICLF_FORCE(PPICLF_LRP5,PPICLF_LPART)  ! Fifth real particle properties
       COMMON /PPICLF_SLN_CURRENT_R/ PPICLF_Y
      >                             ,PPICLF_YDOT
      >                             ,PPICLF_YDOTC
@@ -16,7 +16,7 @@ c Computational particles
      >                             ,PPICLF_RPROP2
      >                             ,PPICLF_RPROP3
      >                             ,PPICLF_RPROP4
-     >                             ,PPICLF_RPROP5
+     >                             ,PPICLF_FORCE
 
       INTEGER*4 PPICLF_IPROP(PPICLF_LIP,PPICLF_LPART) ! Integer particle properties
       COMMON /PPICLF_SLN_CURRENT_I/  PPICLF_IPROP
@@ -32,7 +32,14 @@ c Previous time step solutions, may grow later
       REAL*8 PPICLF_TIMEBH(PPICLF_VU)
       REAL*8 PPICLF_DRUDTPLAG(3,PPICLF_VU,PPICLF_LPART)
       REAL*8 PPICLF_DRUDTMIXT(3,PPICLF_VU,PPICLF_LPART)
+      REAL*8 PPICLF_DTDTPLAG(PPICLF_VU,PPICLF_LPART)
+      REAL*8 PPICLF_DTDTMIXT(PPICLF_VU,PPICLF_LPART)
+      REAL*8 PPICLF_TMIXT(PPICLF_VU,PPICLF_LPART)
+      REAL*8 PPICLF_TPLAG(PPICLF_VU,PPICLF_LPART)
       COMMON /PPICLF_SLN_UNSTEADY/  PPICLF_TIMEBH
      >                             ,PPICLF_DRUDTPLAG
      >                             ,PPICLF_DRUDTMIXT
-
+     >                             ,PPICLF_DTDTPLAG
+     >                             ,PPICLF_DTDTMIXT
+     >                             ,PPICLF_TMIXT
+     >                             ,PPICLF_TPLAG

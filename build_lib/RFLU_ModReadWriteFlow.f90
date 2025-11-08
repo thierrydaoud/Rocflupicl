@@ -2762,11 +2762,30 @@ MODULE RFLU_ModReadWriteFlow
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 48
+! rprop: 53
 
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 
 ! rprop5: PPICLF_LRP5 - Storing Force Models
+!#define PPICLF_R_FQSX 1
+!#define PPICLF_R_FQSY 2
+!#define PPICLF_R_FQSZ 3
+!#define PPICLF_R_FAMX 4
+!#define PPICLF_R_FAMY 5
+!#define PPICLF_R_FAMZ 6
+!#define PPICLF_R_FAMBX 7
+!#define PPICLF_R_FAMBY 8
+!#define PPICLF_R_FAMBZ 9
+!#define PPICLF_R_FCX 10
+!#define PPICLF_R_FCY 11
+!#define PPICLF_R_FCZ 12
+!#define 49 13
+!#define 50 14
+!#define 51 15
+!#define 52 16
+!#define PPICLF_R_FPGX 17 
+!#define PPICLF_R_FPGY 18 
+!#define PPICLF_R_FPGZ 19 
 
 ! map: 22
 !--- x,y,z Forces Fedback to Rocflu

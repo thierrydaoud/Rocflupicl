@@ -1376,6 +1376,7 @@ c1511 continue
      >       ,rout_sln(PPICLF_LRS*PPICLF_LPART)
      >       ,rout_lrp(PPICLF_LRP*PPICLF_LPART)
      >       ,rout_lip(3      *PPICLF_LPART)
+     >       ,rout_lrp5(PPICLF_LRP5*PPICLF_LPART)
       character*3 filein
       character*12 vtufile
       character*6  prostr
@@ -1388,7 +1389,7 @@ c1511 continue
      >          iadd, if_pos, if_sln, if_lrp, if_lip, ic_pos, ic_sln,
      >          ic_lrp, ic_lip, i, j, ie, nps, nglob, nkey, ndum,
      >          icount_pos, icount_sln, icount_lrp, icount_lip, iorank,
-     >          ierr, ivtu_size
+     >          ierr, ivtu_size, ic_lrp5
       integer*4 ppiclf_iglsum
       external ppiclf_iglsum
       integer*4 istartout
@@ -1434,6 +1435,7 @@ c1511 continue
       ic_pos = iadd
       ic_sln = iadd
       ic_lrp = iadd
+      ic_lrp5 = iadd
       ic_lip = iadd
       do i=1,nxx
 
@@ -1466,6 +1468,14 @@ c1511 continue
          rout_lip(ic_lip) = real(ppiclf_iprop(j,i))
       enddo
       enddo
+
+!      ! testing if writing of forces works
+!      do j=1,PPICLF_LRP5
+!      do i=1,nxx
+!         ic_lrp5 = ic_lrp5 + 1
+!         rout_lrp5(ic_lrp5) = sngl(ppiclf_force(j,i))
+!      enddo
+!      enddo
 
 ! --------------------------------------------------
 ! FIRST GET HOW MANY PARTICLES WERE BEFORE THIS RANK
@@ -1570,6 +1580,12 @@ c1511 continue
          call ppiclf_io_WriteDataArrayVTU(vtu,prostr,1,iint)
          iint = iint + 1*isize*npt_total + isize
       enddo
+
+!      do ie=1,PPICLF_LRP5
+!         write(prostr,'(A4,I2.2)') "force",ie
+!         call ppiclf_io_WriteDataArrayVTU(vtu,prostr,1,iint)
+!         iint = iint + 1*isize*npt_total + isize
+!      enddo
 
       write(vtu,'(A)',advance='yes') '   </PointData> '
 
@@ -1717,6 +1733,38 @@ c1511 continue
      >                             ,ierr)
          call ppiclf_byte_close_mpi(pth,ierr)
       enddo
+
+! Thierry - added here for testing of force writing
+! ----------------------------------------------------------------------
+!      do i=1,PPICLF_LRP5
+!         idisp_lip = ivtu_size + isize*(3*npt_total  
+!     >                         + PPICLF_LRS*npt_total
+!     >                         + PPICLF_LRP*npt_total
+!     >                         + 3*npt_total    
+!     >                         + (i-1)*npt_total
+!     >                         + (1)*stride_len
+!     >                         + 1 + PPICLF_LRS + PPICLF_LRP + 3 + i)
+!
+!         ! integer write
+!         if (ppiclf_nid .eq. 0) then
+!           open(unit=vtu,file=vtufile,access='stream',form="unformatted"
+!     >         ,position='append')
+!           write(vtu) if_lrp
+!           close(vtu)
+!         endif
+!   
+!         call mpi_barrier(ppiclf_comm,ierr)
+!
+!         j = (i-1)*ppiclf_npart + 1
+!   
+!         ! write
+!         call ppiclf_byte_open_mpi(vtufile,pth,.false.,ierr)
+!         call ppiclf_byte_set_view(idisp_lrp,pth)
+!         call ppiclf_byte_write_mpi(rout_lrp(j),icount_lrp,iorank,pth
+!     >                             ,ierr)
+!         call ppiclf_byte_close_mpi(pth,ierr)
+!      enddo
+! ----------------------------------------------------------------------
 
       if (ppiclf_nid .eq. 0) then
       vtu=867+ppiclf_nid

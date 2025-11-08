@@ -85,7 +85,7 @@ SUBROUTINE PICL_ReadPiclSection( global )
   INTEGER :: nVals
 
   INTEGER :: iReg
-  INTEGER, PARAMETER :: NVALS_MAX = 29
+  INTEGER, PARAMETER :: NVALS_MAX = 30
 
   CHARACTER(20) :: keys(NVALS_MAX)
 
@@ -94,7 +94,7 @@ SUBROUTINE PICL_ReadPiclSection( global )
   REAL(RFREAL) :: vals(NVALS_MAX)
 
   TYPE(t_global), POINTER :: global
-
+  
 !******************************************************************************
 
   CALL RegisterFunction( global,'PICL_ReadPiclSection',__FILE__ )
@@ -132,7 +132,9 @@ SUBROUTINE PICL_ReadPiclSection( global )
   keys(27)  = 'SUBBIN'
   keys(28)  = 'REACTIVE'
   keys(29)  = 'PSEUDOTURB'
- 
+  keys(30)  = 'DU HEATTRANSFER'
+
+
   CALL ReadSection( global,IF_INPUT,nVals,keys(1:nVals),vals(1:nVals), & 
                     defined(1:nVals) ) 
   
@@ -256,6 +258,10 @@ SUBROUTINE PICL_ReadPiclSection( global )
 
   IF (defined(29) .EQV. .TRUE. ) THEN
     global%piclPseudoTurbFlag = NINT(vals(29))
+  END IF
+
+  IF (defined(30) .EQV. .TRUE. ) THEN
+     global%piclHTUnsteadyFlag = NINT(vals(30))
   END IF
 
 ! finalize

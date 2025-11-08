@@ -1,9 +1,28 @@
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 48
+! rprop: 53
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
+!#define PPICLF_R_FQSX 1
+!#define PPICLF_R_FQSY 2
+!#define PPICLF_R_FQSZ 3
+!#define PPICLF_R_FAMX 4
+!#define PPICLF_R_FAMY 5
+!#define PPICLF_R_FAMZ 6
+!#define PPICLF_R_FAMBX 7
+!#define PPICLF_R_FAMBY 8
+!#define PPICLF_R_FAMBZ 9
+!#define PPICLF_R_FCX 10
+!#define PPICLF_R_FCY 11
+!#define PPICLF_R_FCZ 12
+!#define 49 13
+!#define 50 14
+!#define 51 15
+!#define 52 16
+!#define PPICLF_R_FPGX 17
+!#define PPICLF_R_FPGY 18
+!#define PPICLF_R_FPGZ 19
 ! map: 22
 !--- x,y,z Forces Fedback to Rocflu
 !---
@@ -14,11 +33,11 @@ c Computational particles
       REAL*8 PPICLF_Y (12 ,20000) ! Solution
      > ,PPICLF_YDOT (12 ,20000) ! Total solution RHS
      > ,PPICLF_YDOTC (12 ,20000) ! Coupled solution RHS
-     > ,PPICLF_RPROP (48 ,20000) ! Real particle properties
+     > ,PPICLF_RPROP (53 ,20000) ! Real particle properties
      > ,PPICLF_RPROP2(4,20000) ! Secondary real particle properties
-     > ,PPICLF_RPROP3(6*5,20000) ! Third real particle properties
+     > ,PPICLF_RPROP3(10*50,20000) ! Third real particle properties
      > ,PPICLF_RPROP4(12,20000) ! Fourth real particle properties
-     > ,PPICLF_RPROP5(19,20000) ! Fifth real particle properties
+     > ,PPICLF_FORCE(19,20000) ! Fifth real particle properties
       COMMON /PPICLF_SLN_CURRENT_R/ PPICLF_Y
      > ,PPICLF_YDOT
      > ,PPICLF_YDOTC
@@ -26,7 +45,7 @@ c Computational particles
      > ,PPICLF_RPROP2
      > ,PPICLF_RPROP3
      > ,PPICLF_RPROP4
-     > ,PPICLF_RPROP5
+     > ,PPICLF_FORCE
       INTEGER*4 PPICLF_IPROP(11,20000) ! Integer particle properties
       COMMON /PPICLF_SLN_CURRENT_I/ PPICLF_IPROP
       COMMON /PPICLF_SLN_CURRENT_N/ PPICLF_NPART
@@ -35,18 +54,45 @@ c Previous time step solutions, may grow later
       REAL*8 PPICLF_Y1(12*20000)
       COMMON /PPICLF_SLN_PREVIOUS_R/ PPICLF_Y1
 c Previous time step solutions, may grow later
-      REAL*8 PPICLF_TIMEBH(5)
-      REAL*8 PPICLF_DRUDTPLAG(3,5,20000)
-      REAL*8 PPICLF_DRUDTMIXT(3,5,20000)
+      REAL*8 PPICLF_TIMEBH(50)
+      REAL*8 PPICLF_DRUDTPLAG(3,50,20000)
+      REAL*8 PPICLF_DRUDTMIXT(3,50,20000)
+      REAL*8 PPICLF_DTDTPLAG(50,20000)
+      REAL*8 PPICLF_DTDTMIXT(50,20000)
+      REAL*8 PPICLF_TMIXT(50,20000)
+      REAL*8 PPICLF_TPLAG(50,20000)
       COMMON /PPICLF_SLN_UNSTEADY/ PPICLF_TIMEBH
      > ,PPICLF_DRUDTPLAG
      > ,PPICLF_DRUDTMIXT
+     > ,PPICLF_DTDTPLAG
+     > ,PPICLF_DTDTMIXT
+     > ,PPICLF_TMIXT
+     > ,PPICLF_TPLAG
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 48
+! rprop: 53
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
+!#define PPICLF_R_FQSX 1
+!#define PPICLF_R_FQSY 2
+!#define PPICLF_R_FQSZ 3
+!#define PPICLF_R_FAMX 4
+!#define PPICLF_R_FAMY 5
+!#define PPICLF_R_FAMZ 6
+!#define PPICLF_R_FAMBX 7
+!#define PPICLF_R_FAMBY 8
+!#define PPICLF_R_FAMBZ 9
+!#define PPICLF_R_FCX 10
+!#define PPICLF_R_FCY 11
+!#define PPICLF_R_FCZ 12
+!#define 49 13
+!#define 50 14
+!#define 51 15
+!#define 52 16
+!#define PPICLF_R_FPGX 17
+!#define PPICLF_R_FPGY 18
+!#define PPICLF_R_FPGZ 19
 ! map: 22
 !--- x,y,z Forces Fedback to Rocflu
 !---
@@ -102,9 +148,28 @@ C Grid
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 48
+! rprop: 53
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
+!#define PPICLF_R_FQSX 1
+!#define PPICLF_R_FQSY 2
+!#define PPICLF_R_FQSZ 3
+!#define PPICLF_R_FAMX 4
+!#define PPICLF_R_FAMY 5
+!#define PPICLF_R_FAMZ 6
+!#define PPICLF_R_FAMBX 7
+!#define PPICLF_R_FAMBY 8
+!#define PPICLF_R_FAMBZ 9
+!#define PPICLF_R_FCX 10
+!#define PPICLF_R_FCY 11
+!#define PPICLF_R_FCZ 12
+!#define 49 13
+!#define 50 14
+!#define 51 15
+!#define 52 16
+!#define PPICLF_R_FPGX 17
+!#define PPICLF_R_FPGY 18
+!#define PPICLF_R_FPGZ 19
 ! map: 22
 !--- x,y,z Forces Fedback to Rocflu
 !---
@@ -142,9 +207,28 @@ c Particle options
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 48
+! rprop: 53
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
+!#define PPICLF_R_FQSX 1
+!#define PPICLF_R_FQSY 2
+!#define PPICLF_R_FQSZ 3
+!#define PPICLF_R_FAMX 4
+!#define PPICLF_R_FAMY 5
+!#define PPICLF_R_FAMZ 6
+!#define PPICLF_R_FAMBX 7
+!#define PPICLF_R_FAMBY 8
+!#define PPICLF_R_FAMBZ 9
+!#define PPICLF_R_FCX 10
+!#define PPICLF_R_FCY 11
+!#define PPICLF_R_FCZ 12
+!#define 49 13
+!#define 50 14
+!#define 51 15
+!#define 52 16
+!#define PPICLF_R_FPGX 17
+!#define PPICLF_R_FPGY 18
+!#define PPICLF_R_FPGZ 19
 ! map: 22
 !--- x,y,z Forces Fedback to Rocflu
 !---
@@ -181,8 +265,8 @@ c Bins
       COMMON /PPICLF_PARALLEL_BIN_LOCAL_N/ PPICLF_BX, PPICLF_BY
      > ,PPICLF_BZ
 C Ghost particles
-      REAL*8 PPICLF_RPROP_GP(12 +48 +22,26*20000)
-     > ,PPICLF_CP_MAP(12 +48 +22,20000)
+      REAL*8 PPICLF_RPROP_GP(12 +53 +22,26*20000)
+     > ,PPICLF_CP_MAP(12 +53 +22,20000)
       COMMON /PPICLF_PARALLEL_GHOST_R/ PPICLF_RPROP_GP, PPICLF_CP_MAP
       INTEGER*4 PPICLF_NB_R(3,20000)
      > ,PPICLF_NB_G(3,26*20000)
@@ -194,9 +278,28 @@ C Ghost particles
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 48
+! rprop: 53
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
+!#define PPICLF_R_FQSX 1
+!#define PPICLF_R_FQSY 2
+!#define PPICLF_R_FQSZ 3
+!#define PPICLF_R_FAMX 4
+!#define PPICLF_R_FAMY 5
+!#define PPICLF_R_FAMZ 6
+!#define PPICLF_R_FAMBX 7
+!#define PPICLF_R_FAMBY 8
+!#define PPICLF_R_FAMBZ 9
+!#define PPICLF_R_FCX 10
+!#define PPICLF_R_FCY 11
+!#define PPICLF_R_FCZ 12
+!#define 49 13
+!#define 50 14
+!#define 51 15
+!#define 52 16
+!#define PPICLF_R_FPGX 17
+!#define PPICLF_R_FPGY 18
+!#define PPICLF_R_FPGZ 19
 ! map: 22
 !--- x,y,z Forces Fedback to Rocflu
 !---
@@ -212,7 +315,8 @@ C Ghost particles
      > rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
      > qs_fluct_filter_adapt_flag,
      > ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     > sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
+     > sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag,
+     > HTUnsteady_flag
       real*8 :: rmu_ref, tref, suth, ksp, erest
       common /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag,
      > collisional_flag, heattransfer_flag, feedback_flag,
@@ -220,17 +324,18 @@ C Ghost particles
      > rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag,
      > qs_fluct_filter_adapt_flag, ksp, erest,
      > ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH,
-     > sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
+     > sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag,
+     > HTUnsteady_flag
       real*8 rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,
      > rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac,
      > vx,vy,vz,
      > rcp_part,rpr,
-     > phi, mp, re, rem
+     > phi, mp, re, rem, rcp_fluid
       common /RFLU_user/ rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,
      > rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac,
      > vx,vy,vz,
      > rcp_part,rpr,
-     > phi,mp,re, rem
+     > phi,mp,re, rem, rcp_fluid
 !
 ! For misc values
 !
@@ -304,9 +409,28 @@ C Ghost particles
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 48
+! rprop: 53
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
+!#define PPICLF_R_FQSX 1
+!#define PPICLF_R_FQSY 2
+!#define PPICLF_R_FQSZ 3
+!#define PPICLF_R_FAMX 4
+!#define PPICLF_R_FAMY 5
+!#define PPICLF_R_FAMZ 6
+!#define PPICLF_R_FAMBX 7
+!#define PPICLF_R_FAMBY 8
+!#define PPICLF_R_FAMBZ 9
+!#define PPICLF_R_FCX 10
+!#define PPICLF_R_FCY 11
+!#define PPICLF_R_FCZ 12
+!#define 49 13
+!#define 50 14
+!#define 51 15
+!#define 52 16
+!#define PPICLF_R_FPGX 17
+!#define PPICLF_R_FPGY 18
+!#define PPICLF_R_FPGZ 19
 ! map: 22
 !--- x,y,z Forces Fedback to Rocflu
 !---

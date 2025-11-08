@@ -1,6 +1,6 @@
 #define PPICLF_LPART 20000
 #define PPICLF_LRS 12
-#define PPICLF_LRP 48
+#define PPICLF_LRP 53
 #define PPICLF_LEE 60000
 #define PPICLF_LEX 2
 #define PPICLF_LEY 2
@@ -9,7 +9,7 @@
 #define PPICLF_LRP_PRO 22
 
 ! number of timesteps kept in history kernels
-#define PPICLF_VU 5
+#define PPICLF_VU 50
 ! maximum number of triangular patch boundaries
 #define PPICLF_LWALL 20
 
@@ -76,6 +76,11 @@
 #define PPICLF_R_XIPAR 46
 #define PPICLF_R_XIPERP 47
 #define PPICLF_R_XIT 48
+#define PPICLF_R_FVUX 49
+#define PPICLF_R_FVUY 50
+#define PPICLF_R_FVUZ 51
+#define PPICLF_R_QQ 52
+#define PPICLF_R_QQDU 53
 
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 #define PPICLF_R_JRSG11 1
@@ -92,25 +97,25 @@
 #define PPICLF_R_JTSG3 12
 
 ! rprop5: PPICLF_LRP5 - Storing Force Models
-#define PPICLF_R_FQSX 1
-#define PPICLF_R_FQSY 2
-#define PPICLF_R_FQSZ 3
-#define PPICLF_R_FAMX 4
-#define PPICLF_R_FAMY 5
-#define PPICLF_R_FAMZ 6
-#define PPICLF_R_FAMBX 7
-#define PPICLF_R_FAMBY 8
-#define PPICLF_R_FAMBZ 9
-#define PPICLF_R_FCX 10
-#define PPICLF_R_FCY 11
-#define PPICLF_R_FCZ 12
-#define PPICLF_R_FVUX 13
-#define PPICLF_R_FVUY 14
-#define PPICLF_R_FVUZ 15
-#define PPICLF_R_QQ 16
-#define PPICLF_R_FPGX 17 
-#define PPICLF_R_FPGY 18 
-#define PPICLF_R_FPGZ 19 
+!#define PPICLF_R_FQSX 1
+!#define PPICLF_R_FQSY 2
+!#define PPICLF_R_FQSZ 3
+!#define PPICLF_R_FAMX 4
+!#define PPICLF_R_FAMY 5
+!#define PPICLF_R_FAMZ 6
+!#define PPICLF_R_FAMBX 7
+!#define PPICLF_R_FAMBY 8
+!#define PPICLF_R_FAMBZ 9
+!#define PPICLF_R_FCX 10
+!#define PPICLF_R_FCY 11
+!#define PPICLF_R_FCZ 12
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
+!#define PPICLF_R_FPGX 17 
+!#define PPICLF_R_FPGY 18 
+!#define PPICLF_R_FPGZ 19 
 
 ! map: PPICLF_LRP_PRO
 #define PPICLF_P_JPHIP 1
