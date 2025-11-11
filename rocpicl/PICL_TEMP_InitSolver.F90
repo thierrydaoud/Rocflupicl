@@ -126,14 +126,14 @@ INTEGER :: errorFlag,icg
    REAL(RFREAL) :: y(PPICLF_LRS, PPICLF_LPART), &
                    rprop(PPICLF_LRP, PPICLF_LPART)
    REAL(RFREAL), DIMENSION(:,:), ALLOCATABLE :: rocGrid 
-   REAL(RFREAL), DIMENSION(:,:,:,:), ALLOCATABLE :: xGrid, yGrid, zGrid
+   REAL(RFREAL), DIMENSION(:,:), ALLOCATABLE :: xGrid, yGrid, zGrid
    REAL(RFREAL),ALLOCATABLE,DIMENSION(:) :: xData,yData,zData,rData,dumData    
    REAL(RFREAL), DIMENSION(:), ALLOCATABLE :: volp,SPL 
    REAL(RFREAL), DIMENSION(3) :: tpw1,tpw2,tpw3         
    REAL(RFREAL) :: xin, wout, pi
    REAL(RFREAL) :: rmass
 
-   INTEGER :: seed(33), isize
+   INTEGER :: seed(33), isize, CellVertices
 
    INTEGER :: stationary, qs_flag, am_flag, pg_flag, &
         collisional_flag, heattransfer_flag, feedback_flag, &
@@ -474,19 +474,19 @@ END IF ! global%restartFromScratch
 ! User sets up overlap grid:
 nCells = pRegion%grid%nCells
  
-ALLOCATE(xGrid(2,2,2,nCells),STAT=errorFlag)
+ALLOCATE(xGrid(8,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
   CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:xGrid')
 END IF ! global%error
 
-ALLOCATE(yGrid(2,2,2,nCells),STAT=errorFlag)
+ALLOCATE(yGrid(8,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
   CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:yGrid')
 END IF ! global%error
 
-ALLOCATE(zGrid(2,2,2,nCells),STAT=errorFlag)
+ALLOCATE(zGrid(8,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
   CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:zGrid')
@@ -497,46 +497,44 @@ IF ( global%error /= ERR_NONE ) THEN
   CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:rocGrid')
 END IF ! global%error
 
-! *** This assumes hexahedral elements. Change here for future unstructured grid ***
 DO i = 1, nCells 
-
-   vi = pRegion%grid%hex2v(1,i) 
-            xGrid(1,1,1,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(1,1,1,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(1,1,1,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(4,i) 
-            xGrid(2,1,1,i) = pRegion%grid%xyz(XCOORD,vi)  
-            yGrid(2,1,1,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(2,1,1,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(5,i) 
-            xGrid(1,2,1,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(1,2,1,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(1,2,1,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(8,i) 
-            xGrid(2,2,1,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(2,2,1,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(2,2,1,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(2,i) 
-            xGrid(1,1,2,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(1,1,2,i) = pRegion%grid%xyz(YCOORD,vi)
-            zGrid(1,1,2,i) = pRegion%grid%xyz(ZCOORD,vi)
-   vi = pRegion%grid%hex2v(3,i) 
-            xGrid(2,1,2,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(2,1,2,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(2,1,2,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(6,i) 
-            xGrid(1,2,2,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(1,2,2,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(1,2,2,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(7,i) 
-            xGrid(2,2,2,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(2,2,2,i) = pRegion%grid%xyz(YCOORD,vi)
-            zGrid(2,2,2,i) = pRegion%grid%xyz(ZCOORD,vi) 
-
-END DO !nCells
-
+  IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
+    ! Tetrahedral Cell
+    CellVertices = 4
+    DO k = 1, CellVertices
+      vi = pRegion%grid%tet2v(k,i) 
+             xGrid(k,i) = pRegion%grid%xyz(XCOORD,vi) 
+             yGrid(k,i) = pRegion%grid%xyz(YCOORD,vi) 
+             zGrid(k,i) = pRegion%grid%xyz(ZCOORD,vi) 
+    END DO
+  ELSE IF(pGrid%cellGlob2Loc(1,i) == 2) THEN
+    ! Hexahedral Cell
+    CellVertices = 8
+    DO k = 1, CellVertices
+      vi = pRegion%grid%hex2v(k,i) 
+             xGrid(k,i) = pRegion%grid%xyz(XCOORD,vi) 
+             yGrid(k,i) = pRegion%grid%xyz(YCOORD,vi) 
+             zGrid(k,i) = pRegion%grid%xyz(ZCOORD,vi) 
+    END DO !nCells
+  ELSE
+    CellVertices = 0
+    WRITE(*,*) 'ERROR: Rocflupicl only support tetrahedral and hexahedral cell types.'
+    CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:CellLen')
+  END IF
+END DO
 ! Find cell lengths
 DO i = 1,nCells
+  IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
+    ! Tetrahedral Cell
+    CellVertices = 4
+  ELSE IF(pGrid%cellGlob2Loc(1,i) == 2) THEN
+    ! Hexahedral Cell
+    CellVertices = 8
+  ELSE
+    CellVertices = 0
+    WRITE(*,*) 'ERROR: Rocflupicl only support tetrahedral and hexahedral cell types.'
+    CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:CellLen')
+  END IF
   ! Initialize as zero for each element
   DO l = 1,3
     MaxPoint(l) = -1.0D10 
@@ -545,35 +543,39 @@ DO i = 1,nCells
     Max_CellLen(l)  =  1.23456789D-10
   END DO !l
   ! Add all x,y,z cell corners for centroid and find extremes
-    DO k = 1,2
-      DO j = 1,2
-        DO m = 1,2
-          IF (xGrid(k,j,m,i) > MaxPoint(1)) &
-            MaxPoint(1) = xGrid(k,j,m,i)
-          IF (xGrid(k,j,m,i) < MinPoint(1)) &
-            MinPoint(1) = xGrid(k,j,m,i)
-          IF (yGrid(k,j,m,i) > MaxPoint(2)) &
-            MaxPoint(2) = yGrid(k,j,m,i)  
-          IF (yGrid(k,j,m,i) < MinPoint(2)) &
-            MinPoint(2) = yGrid(k,j,m,i)
-          IF (zGrid(k,j,m,i) > MaxPoint(3)) &
-            MaxPoint(3) = zGrid(k,j,m,i)  
-          IF (zGrid(k,j,m,i) < MinPoint(3)) &
-            MinPoint(3) = zGrid(k,j,m,i)
-        END DO !i
-      END DO !j
-    END DO !k
+  DO k = 1,CellVertices
+    IF (xGrid(k,i) > MaxPoint(1)) &
+      MaxPoint(1) = xGrid(k,i)
+    IF (xGrid(k,i) < MinPoint(1)) &
+      MinPoint(1) = xGrid(k,i)
+    IF (yGrid(k,i) > MaxPoint(2)) &
+      MaxPoint(2) = yGrid(k,i)  
+    IF (yGrid(k,i) < MinPoint(2)) &
+      MinPoint(2) = yGrid(k,i)
+    IF (zGrid(k,i) > MaxPoint(3)) &
+      MaxPoint(3) = zGrid(k,i)  
+    IF (zGrid(k,i) < MinPoint(3)) &
+      MinPoint(3) = zGrid(k,i)
+  END DO !k
   DO l = 1,3
     ! Find element length in all dimensions
     CellLen(l) = ABS(MaxPoint(l)-MinPoint(l))
     ! Find max lengths for all grid cells on this processor
     IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
     IF(CellLen(l) > 1D-2 .OR. CellLen(l) < 1D-7) THEN
-      WRITE(*,*) 'Error in calculating max element size'
+      WRITE(*,*) 'Likely error in calculating max element size'
       WRITE(*,*) 'Max & Min points:', MaxPoint(l), MinPoint(l), 'Dimension:',l
       CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:CellLen')
     END IF
   END DO !l
+  IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
+    ! Make max cell length same in all dimensions for tetrahedral
+    ! This is due to their shape not being rectangular
+    DO l = 1,3
+      CellLen(l) = MAX(CellLen(1),CellLen(2),CellLen(3))
+      IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
+    END DO !l
+  END IF
 
   rocGrid(1,i) = pRegion%grid%cofg(1,i) !Cell Centroid x position
   rocGrid(2,i) = pRegion%grid%cofg(2,i) !Cell Centroid y position
@@ -582,7 +584,6 @@ DO i = 1,nCells
   rocGrid(5,i) = CellLen(2)             !Cell largest dy
   rocGrid(6,i) = CellLen(3)             !Cell largest dz
   rocGrid(7,i) = pRegion%grid%vol(i)    !Cell volume
-
 END DO !i
 
 MinFluidCells = 2.0D0 !Number of fluid cells for Minimum Bin Size and ppiclf_filter(1:3)
