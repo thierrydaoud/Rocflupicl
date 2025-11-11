@@ -1782,7 +1782,8 @@ c----------------------------------------------------------------------
         w = 0.0D0
         wsum = 0.0D0
         DO k = 1,nnearest
-          dist = ppiclf_Part2Cell_dist(ip,k) + eps
+          ! Interpolation Weighting: 1/(distance^3)
+          dist = ppiclf_Part2Cell_dist(ip,k)**3 + eps
           w(k) = 1.0d0 / dist
           wsum = w(k) + wsum
         END DO ! k

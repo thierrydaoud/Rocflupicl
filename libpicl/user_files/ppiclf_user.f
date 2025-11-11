@@ -163,13 +163,13 @@
       ! Count every iStage=1 for debug output
       if (iStage .eq. 1) idebug = idebug + 1
 
-      ! Print dt and time every time step
-      if (ppiclf_nid==0) then
-        if (istage .eq. 1) then
-          write(6,'(a,2x,2(1pe14.6),2x,i3)') '*** PPICLF dt, time = ',
-     >      ppiclf_dt,ppiclf_time
-        endif
-      endif
+!      ! Print dt and time every time step
+!      if (ppiclf_nid==0) then
+!        if (istage .eq. 1) then
+!          write(6,'(a,2x,2(1pe14.6),2x,i3)') '*** PPICLF dt, time = ',
+!     >      ppiclf_dt,ppiclf_time
+!        endif
+!      endif
 
       burnrate_model = 0
       if (burnrate_flag .gt. 0) then
