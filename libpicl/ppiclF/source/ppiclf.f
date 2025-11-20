@@ -179,7 +179,7 @@
       rpr        = 0.70d0
       rcp_fluid  = 1004.64d0
 
-      fac = ppiclf_rk3ark(iStage)*ppiclf_dt
+      fac = ppiclf_rk3dtrk(iStage)*ppiclf_dt
       if (1==2) then
          if (ppiclf_nid==0) print*,'dt,fac=',
      >      iStage,ppiclf_dt,fac,
@@ -332,7 +332,7 @@
          ! TLJ - 04/03/2025; Do not calculate forces if vmag = 0
          !       Otherwise the particles might move before the 
          !       shock arrives
-         !if (vmag <= 1.d-8) cycle
+!         if (vmag <= 1.d-8) cycle
          
          ! 08/08/2025 - Thierry  - 1.d-8 is very small
          if (vmag <= 1.d-3) cycle
@@ -363,10 +363,7 @@
          rphif = 1.0d0-rphip
 
          ! TLJ: Needed for viscous unsteady force
-         !      Using same nomenclature as rocinteract subroutines
-         rhoMixt = rhof/(1.0d0-rphip)
-         reyL = dp*vmag*rhoMixt/rmu
-         rnu = rmu/rhoMixt
+         rnu = rmu/rhof
 
          ! Zero out for each particle i
          famx = 0.0d0; famy = 0.0d0; famz = 0.0d0; rmass_add = 0.0d0;
@@ -489,23 +486,6 @@
          fqsx = beta*vx
          fqsy = beta*vy
          fqsz = beta*vz
-!-----------------------------------------------------------------
-
-       if(ppiclf_iprop(5,i)==29  .and.                         
-     >      ppiclf_iprop(6,i)==0   .and.                      
-     >      ppiclf_iprop(7,i)==151) then                      
-      open(unit=777,file='fort.777',position='append')          
-                                                              
-      write(777,*) ppiclf_time, ppiclf_nid, ppiclf_dt
-     >                          , ppiclf_rprop(PPICLF_R_JUX,i)
-     >                          , ppiclf_rprop(PPICLF_R_JT,i) 
-                                                              
-      flush(777)                                               
-                                                              
-      endif                                                   
-
-!-----------------------------------------------------------------
-
 
 !
 ! Step 3: Force fluctuation for quasi-steady force
@@ -622,7 +602,7 @@
 
 !
 ! Step 7: Viscous unsteady force with history kernel
-!
+!         Diffusive unsteady heat transfer is also calculated in this call
          if (ViscousUnsteady_flag==1) then
             call ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz,qq_du)
          endif
@@ -644,22 +624,10 @@
             call ppiclf_user_HT_driver(i,qq)
          endif ! heattransfer_flag >= 1
 
-         !if(ppiclf_nid .eq. 0 .and. i==5) then
-         if(ppiclf_iprop(5,i)==29  .and.
-     >      ppiclf_iprop(6,i)==0   .and.
-     >      ppiclf_iprop(7,i)==151 .and. iStage==3) then
-          open(unit=60,file='fort.60',position='append')   
-          write(60,*) ppiclf_time, ppiclf_nid, qq_du, qq
-          flush(60)
-         endif
 ! 
 ! Step 8c : Diffusive Unsteady Heat Transfer model
-!
-         ! Ideally make this under the HT_driver when done coding
-         ! but setting this as a separate input flag for now
-         if(HTUnsteady_flag==0) then
-           qq_du = 0.0d0
-         endif
+!           Calculated in this same subroutine as Viscous Unsteady
+         if(HTUnsteady_flag==0) qq_du = 0.0d0
 !
 ! Step 9a: Angular velocity model
 !
@@ -849,12 +817,6 @@
 !         ppiclf_force(PPICLF_R_FPGY,i)  = fdpdy
 !         ppiclf_force(PPICLF_R_FPGZ,i)  = fdpdz
 
-         ppiclf_rprop(PPICLF_R_FVUX,i)  = fvux
-         ppiclf_rprop(PPICLF_R_FVUY,i)  = fvuy
-         ppiclf_rprop(PPICLF_R_FVUZ,i)  = fvuz
-         ppiclf_rprop(PPICLF_R_QQ,i)    = qq
-         ppiclf_rprop(PPICLF_R_QQDU,i)  = qq_du
-
 !
 ! Step 14: If debug mode is ON, calculate and print the max values.
 !          The user should not have this ON for production runs.
@@ -921,13 +883,11 @@
                if (iStage==3) then
                   if (i==1) then
                      write(7010,*) i,ppiclf_time,rmass,vmag,rhof,dp,
-     >                rep,rphip,rphif,rmachp,rhop,rhoMixt,reyL,
-     >             rmu,rnu,rkappa
+     >                rep,rphip,rphif,rmachp,rhop,rmu,rnu,rkappa
                   endif
                   if (i==ppiclf_npart) then
                      write(7011,*) i,ppiclf_time,rmass,vmag,rhof,dp,
-     >                rep,rphip,rphif,rmachp,rhop,rhoMixt,reyL,
-     >                rmu,rnu,rkappa
+     >                rep,rphip,rphif,rmachp,rhop,rmu,rnu,rkappa
                   endif
                endif
             endif
@@ -1920,7 +1880,7 @@
          if (i<=10) then
             write(7350+(i-1)*1,*) i,ppiclf_time,             ! 0-1
      >         rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,  ! 2-10
-     >         rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac, ! 11-18
+     >         rphif,asndf,rmachp,rhop,rnu,fac,              ! 11-18
      >         vx,vy,vz,ppiclf_dt,                           ! 19-22
      >         ppiclf_npart,ppiclf_n_bins(1:3),              ! 23-26
      >         ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3), ! 27
@@ -2200,7 +2160,7 @@
          if (i<=10) then
             write(7350+(i-1)*1,*) i,ppiclf_time,             ! 0-1
      >         rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,  ! 2-10
-     >         rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac, ! 11-18
+     >         rphif,asndf,rmachp,rhop,rnu,fac,              ! 11-18
      >         vx,vy,vz,ppiclf_dt,                           ! 19-22
      >         ppiclf_npart,ppiclf_n_bins(1:3),              ! 23-26
      >         ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3), ! 27
@@ -4151,7 +4111,7 @@ c--  then add mean PTKE
       integer*4 i, iStage, iT
       real*8 fvux,fvuy,fvuz
       real*8 time,fH,factor,A,B,kernelVU
-      real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid,time_tilde
+      real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid
 
 !
 ! Code:
@@ -4166,23 +4126,23 @@ c--  then add mean PTKE
 
       Pe = rep * rpr ! Peclet number
 
-      fH     = 0.75d0 + .105d0*reyL
+      fH     = 0.75d0 + .1055d0*rep
       ! Sangani's volume fraction correction for dilute random arrays
       ! Capping volume fraction at 0.5 
-      factor = 3.0d0*rpi*rnu*dp*ppiclf_dt*(1.0+2.28*min(rphip,0.5))
+      factor = 3.0d0*rpi*rnu*dp*fac*(1.0+2.28*min(rphip,0.5))
 
       ! Thermal diffusivity
       alpha_fluid = rkappa/(rhof * rcp_fluid)
       ! diffusive unsteady Heat Transfer
-      factor_du = (dp**2)*sqrt(rpi*alpha_fluid)*rhof*rcp_fluid*ppiclf_dt
+      factor_du = sqrt(rpi*(dp**3)*rkappa*rhof*rcp_fluid*vmag)*fac
 
       if (ppiclf_nTimeBH > 1) then
          do iT = 2,ppiclf_nTimeBH-1
             time = ppiclf_timeBH(iT)
 
             A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
-            B  = (0.5d0*rpi*(vmag**3)*(time**2)/ 
-     >                 (0.5d0*dp*rnu*(fH**3)))**(.5d0)
+            B  = (rpi*(vmag**3)*(time**2)/ 
+     >                 (dp*rnu*(fH**3)))**(.5d0)
 
             kernelVU = factor*(A+B)**(-2)
 
@@ -4201,9 +4161,7 @@ c--  then add mean PTKE
      >       *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
          
             ! Kernel for diffusive unsteady Heat Transfer
-            time_tilde = time*vmag/dp
-            kernel_du = sqrt(vmag/dp
-     >       *((2.0d0/sqrt(time_tilde)*exp(-b_du*time_tilde))**2))
+            kernel_du=2.0d0*sqrt(dp/(vmag*time))*exp(-b_du*vmag*time/dp)
 
             qq_du = qq_du + factor_du*kernel_du*
      >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
@@ -4213,8 +4171,8 @@ c--  then add mean PTKE
          time = ppiclf_timeBH(iT)
 
          A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
-         B  = (0.5d0*rpi*(vmag**3)*(time**2)/ 
-     >                 (0.5d0*dp*rnu*(fH**3)))**(.5d0)
+         B  = (rpi*(vmag**3)*(time**2)/ 
+     >                 (dp*rnu*(fH**3)))**(.5d0)
 
          kernelVU = 0.5d0*factor*(A+B)**(-2)
 
@@ -4233,32 +4191,28 @@ c--  then add mean PTKE
      >    *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
          
          ! Kernel for diffusive unsteady Heat Transfer
-         time_tilde = time*vmag/dp
-         kernel_du = 0.5d0*vmag/dp*(2.0d0/sqrt(time_tilde)
-     >                                    *exp(-b_du*time_tilde))
-
+         kernel_du = 0.5d0*2.0d0*sqrt(dp/(vmag*time))
+     >                      *exp(-b_du*vmag*time/dp)
          qq_du = qq_du + factor_du*kernel_du*
      >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
-        
-         ! look into why vmag is becoming NaN at a certain point
 
-         if(ppiclf_iprop(5,i)==29  .and.
-     >      ppiclf_iprop(6,i)==0   .and.
-     >      ppiclf_iprop(7,i)==151) then
-      open(unit=66,file='fort.66',position='append')   
-
-      write(66,*) ppiclf_time, ppiclf_nid, ppiclf_dt,
-     >            factor_du, kernel_du,
-     >            ppiclf_dTdtMixt(iT,i),
-     >            ppiclf_dTdtPlag(iT,i),
-     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-     >            factor_du*kernel_du*
-     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-     >            qq_du
-
-      flush(66)
-
-      endif
+!         if(ppiclf_iprop(5,i)==29  .and.
+!     >      ppiclf_iprop(6,i)==0   .and.
+!     >      ppiclf_iprop(7,i)==151) then
+!      open(unit=66,file='fort.66',position='append')   
+!
+!      write(66,*) ppiclf_time, ppiclf_nid, ppiclf_dt,
+!     >            factor_du, kernel_du,
+!     >            ppiclf_dTdtMixt(iT,i),
+!     >            ppiclf_dTdtPlag(iT,i),
+!     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+!     >            factor_du*kernel_du*
+!     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+!     >            qq_du
+!
+!      flush(66)
+!
+!      endif
 
       endif
 
@@ -4311,6 +4265,7 @@ c--  then add mean PTKE
             ppiclf_dTdtPlag(iT,i) = ppiclf_dTdtPlag(iT-1,i)
             ppiclf_TMixt(iT,i)    = ppiclf_TMixt(iT-1,i)
             ppiclf_TPlag(iT,i)    = ppiclf_TPlag(iT-1,i)
+          
          enddo
       enddo
 
@@ -4346,13 +4301,12 @@ c--  then add mean PTKE
 !
       include "PPICLF"
 !
-      integer*4 i, iStage
+      integer*4 i, iStage, jj
       real*8 SDrho
       real*8 ug,vg,wg
       real*8 up,vp,wp
       real*8 vgradrho
-      real*8 dt
-      real*8 time_plot, am2, am1, a, ap1
+      real*8 dt, time_plot
 
 !
 ! Code:
@@ -4398,93 +4352,56 @@ c--  then add mean PTKE
       ppiclf_drudtPlag(PPICLF_JZ,1,i) =
      >   wp*SDrho + rhof*ppiclf_ydot(PPICLF_JVZ,i)
 
-      ! setting all stages to be the same at t=0
-      if(ppiclf_time .eq. 0.0d0) then
-        ppiclf_TMixt(:,i) = ppiclf_rprop(PPICLF_R_JT,i)
-        ppiclf_TPlag(:,i) = ppiclf_y(PPICLF_JT,i)
-      endif
-
       ppiclf_TMixt(1,i) = ppiclf_rprop(PPICLF_R_JT,i)
       ppiclf_TPlag(1,i) = ppiclf_y(PPICLF_JT,i)
 
-      ! when particle is just introduced to the processor, it will have
-      ! a zero Tp and Tg at the second step (previous step) before
-      ! shifitng occurs. Simple fix for now is to equate them when this
-      ! happens to avoid blowing up the solution 
-
+      ! Set the old step equal to the first one initially
       if(ppiclf_TMixt(2,i) .eq. 0.0d0) then
         ppiclf_TMixt(2,i) = ppiclf_TMixt(1,i)
-        ppiclf_TMixt(3,i) = ppiclf_TMixt(1,i)
-        ppiclf_TMixt(4,i) = ppiclf_TMixt(1,i)
       endif
 
       if(ppiclf_TPlag(2,i) .eq. 0.0d0) then
         ppiclf_TPlag(2,i) = ppiclf_TPlag(1,i)
       endif
 
-      ! Time difference between previous 3rd RK stage and current RK
-      ! stage
-      if(iStage==1) then 
-        dt = 8.0d0/15.0d0 * ppiclf_dt
-        time_plot = ppiclf_time
-      elseif(iStage==2) then 
-        dt = 2.0d0/3.0d0  * ppiclf_dt
-        time_plot = ppiclf_time + 8.0/15.0*ppiclf_dt
-      elseif(iStage==3) then
-        dt =                ppiclf_dt
-        time_plot = ppiclf_time + 2.0/3.0*ppiclf_dt
-      else
-        print*, "Not supported beyond RK3"
-        print*, "iStage =", iStage
-        STOP
-      endif
+      ! 11/10/2025 - Thierry 
+      ! dT/dt is very oscillatory when calculated at every RK stage.
+      ! the fix for now is to calculate it at every step (3rd stage)
+      ! only. but should revisit this after finalizing my paper.
 
+      if(iStage==1) then
+        dt = 5.0/15.0*ppiclf_dt
+        time_plot = ppiclf_time
+      elseif(iStage==2) then
+        dt = 13.0/15.0*ppiclf_dt
+        time_plot = 5.0/15.0*dt + ppiclf_time
+      elseif(iStage==3) then
+        dt = ppiclf_dt
+        time_plot = 13.0/15.0*dt + ppiclf_time
+      endif
 
       ! dT/dt update for Diffusive Unsteady HT
       ! first-order backward difference (explicit backward Euler form)
-
-!      am2 = -dt*(dt+ppiclf_dt)/(2.0*ppiclf_dt**2*(dt+2.0*ppiclf_dt))
-!      am1 =  dt*(dt+2.0*ppiclf_dt)/(ppiclf_dt**2*(dt+ppiclf_dt))
-!      a   = -(dt+ppiclf_dt)*(dt+2.0*ppiclf_dt)/(2.0*dt*ppiclf_dt**2)
-!      ap1 =  (3.0*dt**2 + 6.0*dt*ppiclf_dt + 2.0*ppiclf_dt**2)/
-!     >       (dt*(dt+ppiclf_dt)*(dt+2.0*ppiclf_dt))
-
-!      ppiclf_dTdtMixt(1,i) = ap1*ppiclf_TMixt(1,i) + a*ppiclf_TMixt(2,i)
-!     >  + am1*ppiclf_TMixt(3,i) + am2*ppiclf_TMixt(4,i)
-      
-      ! testing to see if this will fix the oscillatory issue
-      if(iStage==3) then
+!      if(iStage==3) then
         ppiclf_dTdtMixt(1,i) = (ppiclf_TMixt(1,i)-ppiclf_TMixt(2,i))/dt
         ppiclf_dTdtPlag(1,i) = (ppiclf_TPlag(1,i)-ppiclf_TPlag(2,i))/dt
+!      endif
+
+        if(ppiclf_iprop(5,i) .eq. 7 .and.
+     >     ppiclf_iprop(7,i) .eq. 1724) then
+          open(unit=67,file='fort.67',position='append')   
+          write(67,*) ppiclf_time, time_plot, dt, ppiclf_dt,
+     >                ppiclf_dTdtMixt(1,i),     
+     >                ppiclf_TMixt(1,i),
+     >                ppiclf_TMixt(2,i),
+     >                ppiclf_dTdtPlag(1,i),
+     >                ppiclf_ydot(PPICLF_JT,i),
+     >                ppiclf_TPlag(1,i),
+     >                ppiclf_TPlag(2,i)
+          flush(67)
       endif
+!----------------------------------------------------------      
 
-      ! zero out the value initially
-      if(ppiclf_time .eq. 0.0d0) then 
-        ppiclf_dTdtMixt(1,i) = 0.0d0
-        ppiclf_dTdtPlag(1,i) = 0.0d0
-      endif
-
-      !if(ppiclf_nid .eq. 0 .and. i==5) then
-      if(ppiclf_iprop(5,i)==29  .and.
-     >      ppiclf_iprop(6,i)==0   .and.
-     >      ppiclf_iprop(7,i)==151) then
-      open(unit=67,file='fort.67',position='append')   
-
-      write(67,*) time_plot, ppiclf_nid, ppiclf_dt, dt
-     >                          , ppiclf_dTdtMixt(1,i)
-     >                          , ppiclf_TMixt(1,i)
-     >                          , ppiclf_TMixt(2,i)
-     >                          , ppiclf_dTdtPlag(1,i)
-     >                          , ppiclf_TPlag(1,i)
-     >                          , ppiclf_TPlag(2,i)
-     >                          , ppiclf_rprop(PPICLF_R_JUX,i)
-     >                          , ppiclf_rprop(PPICLF_R_JT,i)
-     >    ,(ppiclf_TMixt(1,i) -ppiclf_TMixt(2,i))/dt 
-
-      flush(67)
-
-      endif
-      
       return
       end
 !
@@ -5267,8 +5184,8 @@ c--  then add mean PTKE
       if (ppiclf_nid.eq.0) then
 
          if (ViscousUnsteady_flag>=1) then
-            fH     = 0.75d0 + .105d0*reyL
-            factor = 3.0d0*rpi*rnu*dp*fac
+            fH     = 0.75d0 + .1055d0*rep
+            factor = 3.0d0*rpi*rmu*dp*fac
             FVUoutput = 0.0
             if (ppiclf_nTimeBH>1) then
                do iT = 2,ppiclf_nTimeBH-1
@@ -12795,7 +12712,7 @@ c     ndum    = ppiclf_neltb*n
       !***************************************************************
       IF(ppiclf_neltbbb .EQ. 0 . AND. ppiclf_npart .GT. 0) PRINT*,
      >  'No elements. Num Particles/Proc ID: ', ppiclf_npart, ppiclf_nid
-      eps = 1.0e-12 !machine epsilon
+      eps = 1.0e-20 !machine epsilon
       nxyz = PPICLF_LEX*PPICLF_LEY*PPICLF_LEZ !number of points in mesh
                                                !element 
       ! Calculate centroid, max cell lengths
@@ -12917,18 +12834,6 @@ c     ndum    = ppiclf_neltb*n
           PRINT *, ppiclf_y(1:PPICLF_LRS, ip)
           CALL ppiclf_exittr('Failed to interpolate',0.0d0,nnearest)
         ELSE
-          !-----------checking the current cell the particle is in-begs
-          if(ppiclf_iprop(5,ip)==29  .and.
-     >       ppiclf_iprop(6,ip)==0   .and.
-     >       ppiclf_iprop(7,ip)==151) then
-            nearest_cell = inearest(1)
-            open(unit=77,file='fort.77',position='append')
-            WRITE(77,*) ppiclf_time, ip, center(1,1),
-     >          center(2,1), center(3,1), nearest_cell
-            flush(77)
-          endif
-          !nnearest = 1 ! trying zeroth order interp
-          !-----------checking the current cell the particle is in----ends
             DO i=1,nnearest
               DO j=1,3
                 A(i, j) = xp(j) - center(j, i)
@@ -12953,7 +12858,11 @@ c     ndum    = ppiclf_neltb*n
               ppiclf_rprop(j, ip) = 0
               wsum = 0
               DO k=1,nnearest
-                w(k) = 1.0d0 / (SQRT(d2(k)) + eps)
+                ! 19/11/2025 - Avery, Thierry, Bala
+                ! The inverse interpolation leads to some jump when
+                ! particle is moving from cell to another. temporary fix
+                ! is to have it inverse distance to power 4. 
+                w(k) = 1.0d0 / (SQRT(d2(k)) + eps)**4
                 ppiclf_rprop(j, ip) = ppiclf_rprop(j, ip) + w(k)*b(k, 1)
                 wsum = wsum + w(k)
               ENDDO ! k
@@ -13340,6 +13249,13 @@ c----------------------------------------------------------------------
         ppiclf_rk3ark(1) = 8.0d0/15.0d0
         ppiclf_rk3ark(2) = 5.0d0/12.0d0
         ppiclf_rk3ark(3) = 0.75d0
+
+        ! 11/20/2025 - These are the time fraction steps between
+        ! the different RK stages. Multiply by ppiclf_dt to get the
+        ! dt at the current stage
+        ppiclf_rk3dtrk(1) = 8.0d0/15.0d0
+        ppiclf_rk3dtrk(2) = 2.0d0/15.0d0
+        ppiclf_rk3dtrk(3) = 5.0d0/15.0d0
 
         ppiclf_rk3coef(1,1) = 0.d00
         ppiclf_rk3coef(2,1) = 1.0d0

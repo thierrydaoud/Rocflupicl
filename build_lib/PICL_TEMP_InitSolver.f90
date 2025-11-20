@@ -108,7 +108,7 @@ SUBROUTINE PICL_TEMP_InitSolver( pRegion)
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 53
+! rprop: 48
 
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 
@@ -125,10 +125,10 @@ SUBROUTINE PICL_TEMP_InitSolver( pRegion)
 !#define PPICLF_R_FCX 10
 !#define PPICLF_R_FCY 11
 !#define PPICLF_R_FCZ 12
-!#define 49 13
-!#define 50 14
-!#define 51 15
-!#define 52 16
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
 !#define PPICLF_R_FPGX 17 
 !#define PPICLF_R_FPGY 18 
 !#define PPICLF_R_FPGZ 19 
@@ -189,7 +189,7 @@ INTEGER :: errorFlag,icg
                    zpf_factor,xpf_factor,dp,neighborWidth,dp_max_l,xp_min,xp_max, &
                    xp_min_l,xp_max_l
    REAL(KIND=8) :: y(12, 20000), &
-                   rprop(53, 20000)
+                   rprop(48, 20000)
    REAL(KIND=8), DIMENSION(:,:,:,:), ALLOCATABLE :: xGrid, yGrid, zGrid,vfP
    REAL(RFREAL),ALLOCATABLE,DIMENSION(:) :: xData,yData,zData,rData,dumData     
    REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: volp,SPL 
@@ -436,7 +436,7 @@ IF (global%restartFromScratch) THEN
     !  print*,global%myProcid,npart,i_global_min,i_global_max
    !ENDIF
 
-   rprop(1:53,1:20000) = 0.0d0
+   rprop(1:48,1:20000) = 0.0d0
   
    dp_max = 0.0d0
    xp_min_l = +17400000.0
@@ -459,7 +459,7 @@ IF (global%restartFromScratch) THEN
          y(10,i) = 0.0d0
   
          ! initially zero out all properties
-         !do ii=1,53
+         !do ii=1,48
          !  rprop(ii, i) = 0.0d0
          !end do
 

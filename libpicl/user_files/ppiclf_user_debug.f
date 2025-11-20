@@ -99,8 +99,8 @@
       if (ppiclf_nid.eq.0) then
 
          if (ViscousUnsteady_flag>=1) then
-            fH     = 0.75d0 + .105d0*reyL
-            factor = 3.0d0*rpi*rnu*dp*fac
+            fH     = 0.75d0 + .1055d0*rep
+            factor = 3.0d0*rpi*rmu*dp*fac
             FVUoutput = 0.0
             if (ppiclf_nTimeBH>1) then
                do iT = 2,ppiclf_nTimeBH-1

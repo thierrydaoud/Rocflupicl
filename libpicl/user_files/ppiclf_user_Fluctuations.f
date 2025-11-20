@@ -141,7 +141,7 @@
          if (i<=10) then
             write(7350+(i-1)*1,*) i,ppiclf_time,             ! 0-1
      >         rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,  ! 2-10
-     >         rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac, ! 11-18
+     >         rphif,asndf,rmachp,rhop,rnu,fac,              ! 11-18
      >         vx,vy,vz,ppiclf_dt,                           ! 19-22
      >         ppiclf_npart,ppiclf_n_bins(1:3),              ! 23-26
      >         ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3), ! 27
@@ -421,7 +421,7 @@
          if (i<=10) then
             write(7350+(i-1)*1,*) i,ppiclf_time,             ! 0-1
      >         rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,  ! 2-10
-     >         rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac, ! 11-18
+     >         rphif,asndf,rmachp,rhop,rnu,fac,              ! 11-18
      >         vx,vy,vz,ppiclf_dt,                           ! 19-22
      >         ppiclf_npart,ppiclf_n_bins(1:3),              ! 23-26
      >         ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3), ! 27

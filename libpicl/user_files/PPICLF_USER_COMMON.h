@@ -24,12 +24,12 @@
      >   HTUnsteady_flag
 
       real*8 rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,
-     >   rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac,
+     >   rphif,asndf,rmachp,rhop,rnu,fac,
      >   vx,vy,vz,
      >   rcp_part,rpr,
      >   phi, mp, re, rem, rcp_fluid
       common /RFLU_user/ rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,
-     >   rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac,
+     >   rphif,asndf,rmachp,rhop,rnu,fac,
      >   vx,vy,vz,
      >   rcp_part,rpr,
      >   phi,mp,re, rem, rcp_fluid

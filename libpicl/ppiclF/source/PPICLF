@@ -1,7 +1,7 @@
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 53
+! rprop: 48
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
 !#define PPICLF_R_FQSX 1
@@ -16,10 +16,10 @@
 !#define PPICLF_R_FCX 10
 !#define PPICLF_R_FCY 11
 !#define PPICLF_R_FCZ 12
-!#define 49 13
-!#define 50 14
-!#define 51 15
-!#define 52 16
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
 !#define PPICLF_R_FPGX 17
 !#define PPICLF_R_FPGY 18
 !#define PPICLF_R_FPGZ 19
@@ -33,7 +33,7 @@ c Computational particles
       REAL*8 PPICLF_Y (12 ,20000) ! Solution
      > ,PPICLF_YDOT (12 ,20000) ! Total solution RHS
      > ,PPICLF_YDOTC (12 ,20000) ! Coupled solution RHS
-     > ,PPICLF_RPROP (53 ,20000) ! Real particle properties
+     > ,PPICLF_RPROP (48 ,20000) ! Real particle properties
      > ,PPICLF_RPROP2(4,20000) ! Secondary real particle properties
      > ,PPICLF_RPROP3(10*50,20000) ! Third real particle properties
      > ,PPICLF_RPROP4(12,20000) ! Fourth real particle properties
@@ -71,7 +71,7 @@ c Previous time step solutions, may grow later
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 53
+! rprop: 48
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
 !#define PPICLF_R_FQSX 1
@@ -86,10 +86,10 @@ c Previous time step solutions, may grow later
 !#define PPICLF_R_FCX 10
 !#define PPICLF_R_FCY 11
 !#define PPICLF_R_FCZ 12
-!#define 49 13
-!#define 50 14
-!#define 51 15
-!#define 52 16
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
 !#define PPICLF_R_FPGX 17
 !#define PPICLF_R_FPGY 18
 !#define PPICLF_R_FPGZ 19
@@ -148,7 +148,7 @@ C Grid
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 53
+! rprop: 48
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
 !#define PPICLF_R_FQSX 1
@@ -163,10 +163,10 @@ C Grid
 !#define PPICLF_R_FCX 10
 !#define PPICLF_R_FCY 11
 !#define PPICLF_R_FCZ 12
-!#define 49 13
-!#define 50 14
-!#define 51 15
-!#define 52 16
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
 !#define PPICLF_R_FPGX 17
 !#define PPICLF_R_FPGY 18
 !#define PPICLF_R_FPGZ 19
@@ -199,15 +199,16 @@ c Particle options
      > ,PPICLF_IENDIAN, PPICLF_IWALLM
       REAL*8 PPICLF_FILTER, PPICLF_ALPHA, PPICLF_RK3COEF(3,3), PPICLF_DT
      > ,PPICLF_TIME, PPICLF_D2CHK(3)
-      REAL*8 PPICLF_RK3ARK(3)
+      REAL*8 PPICLF_RK3ARK(3), PPICLF_RK3DTRK(3)
       COMMON /PPICLF_OPT_PARAM_R/ PPICLF_FILTER, PPICLF_ALPHA
      > ,PPICLF_RK3COEF, PPICLF_DT
      > ,PPICLF_TIME, PPICLF_D2CHK
      > ,PPICLF_RK3ARK
+     > ,PPICLF_RK3DTRK
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 53
+! rprop: 48
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
 !#define PPICLF_R_FQSX 1
@@ -222,10 +223,10 @@ c Particle options
 !#define PPICLF_R_FCX 10
 !#define PPICLF_R_FCY 11
 !#define PPICLF_R_FCZ 12
-!#define 49 13
-!#define 50 14
-!#define 51 15
-!#define 52 16
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
 !#define PPICLF_R_FPGX 17
 !#define PPICLF_R_FPGY 18
 !#define PPICLF_R_FPGZ 19
@@ -265,8 +266,8 @@ c Bins
       COMMON /PPICLF_PARALLEL_BIN_LOCAL_N/ PPICLF_BX, PPICLF_BY
      > ,PPICLF_BZ
 C Ghost particles
-      REAL*8 PPICLF_RPROP_GP(12 +53 +22,26*20000)
-     > ,PPICLF_CP_MAP(12 +53 +22,20000)
+      REAL*8 PPICLF_RPROP_GP(12 +48 +22,26*20000)
+     > ,PPICLF_CP_MAP(12 +48 +22,20000)
       COMMON /PPICLF_PARALLEL_GHOST_R/ PPICLF_RPROP_GP, PPICLF_CP_MAP
       INTEGER*4 PPICLF_NB_R(3,20000)
      > ,PPICLF_NB_G(3,26*20000)
@@ -278,7 +279,7 @@ C Ghost particles
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 53
+! rprop: 48
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
 !#define PPICLF_R_FQSX 1
@@ -293,10 +294,10 @@ C Ghost particles
 !#define PPICLF_R_FCX 10
 !#define PPICLF_R_FCY 11
 !#define PPICLF_R_FCZ 12
-!#define 49 13
-!#define 50 14
-!#define 51 15
-!#define 52 16
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
 !#define PPICLF_R_FPGX 17
 !#define PPICLF_R_FPGY 18
 !#define PPICLF_R_FPGZ 19
@@ -327,12 +328,12 @@ C Ghost particles
      > sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag,
      > HTUnsteady_flag
       real*8 rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,
-     > rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac,
+     > rphif,asndf,rmachp,rhop,rnu,fac,
      > vx,vy,vz,
      > rcp_part,rpr,
      > phi, mp, re, rem, rcp_fluid
       common /RFLU_user/ rpi,rmu,rkappa,rmass,vmag,rhof,dp,rep,rphip,
-     > rphif,asndf,rmachp,rhop,rhoMixt,reyL,rnu,fac,
+     > rphif,asndf,rmachp,rhop,rnu,fac,
      > vx,vy,vz,
      > rcp_part,rpr,
      > phi,mp,re, rem, rcp_fluid
@@ -409,7 +410,7 @@ C Ghost particles
 ! number of timesteps kept in history kernels
 ! maximum number of triangular patch boundaries
 ! y, y1, ydot, ydotc: 12
-! rprop: 53
+! rprop: 48
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 ! rprop5: PPICLF_LRP5 - Storing Force Models
 !#define PPICLF_R_FQSX 1
@@ -424,10 +425,10 @@ C Ghost particles
 !#define PPICLF_R_FCX 10
 !#define PPICLF_R_FCY 11
 !#define PPICLF_R_FCZ 12
-!#define 49 13
-!#define 50 14
-!#define 51 15
-!#define 52 16
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
 !#define PPICLF_R_FPGX 17
 !#define PPICLF_R_FPGY 18
 !#define PPICLF_R_FPGZ 19

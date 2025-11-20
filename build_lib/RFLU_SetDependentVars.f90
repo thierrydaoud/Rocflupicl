@@ -105,7 +105,7 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 53
+! rprop: 48
 
 ! rprop4: PPICLF_LRP4 - Reynolds Subgrid Stress Components
 
@@ -122,10 +122,10 @@ SUBROUTINE RFLU_SetDependentVars(pRegion,icgBeg,icgEnd)
 !#define PPICLF_R_FCX 10
 !#define PPICLF_R_FCY 11
 !#define PPICLF_R_FCZ 12
-!#define 49 13
-!#define 50 14
-!#define 51 15
-!#define 52 16
+!#define PPICLF_R_FVUX 13
+!#define PPICLF_R_FVUY 14
+!#define PPICLF_R_FVUZ 15
+!#define PPICLF_R_QQ 16
 !#define PPICLF_R_FPGX 17 
 !#define PPICLF_R_FPGY 18 
 !#define PPICLF_R_FPGZ 19 

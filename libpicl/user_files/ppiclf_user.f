@@ -177,7 +177,7 @@
       rpr        = 0.70d0
       rcp_fluid  = 1004.64d0
 
-      fac = ppiclf_rk3ark(iStage)*ppiclf_dt
+      fac = ppiclf_rk3dtrk(iStage)*ppiclf_dt
       if (1==2) then
          if (ppiclf_nid==0) print*,'dt,fac=',
      >      iStage,ppiclf_dt,fac,
@@ -330,7 +330,7 @@
          ! TLJ - 04/03/2025; Do not calculate forces if vmag = 0
          !       Otherwise the particles might move before the 
          !       shock arrives
-         !if (vmag <= 1.d-8) cycle
+!         if (vmag <= 1.d-8) cycle
          
          ! 08/08/2025 - Thierry  - 1.d-8 is very small
          if (vmag <= 1.d-3) cycle
@@ -361,10 +361,7 @@
          rphif = 1.0d0-rphip
 
          ! TLJ: Needed for viscous unsteady force
-         !      Using same nomenclature as rocinteract subroutines
-         rhoMixt = rhof/(1.0d0-rphip)
-         reyL = dp*vmag*rhoMixt/rmu
-         rnu = rmu/rhoMixt
+         rnu = rmu/rhof
 
          ! Zero out for each particle i
          famx = 0.0d0; famy = 0.0d0; famz = 0.0d0; rmass_add = 0.0d0;
@@ -487,23 +484,6 @@
          fqsx = beta*vx
          fqsy = beta*vy
          fqsz = beta*vz
-!-----------------------------------------------------------------
-
-       if(ppiclf_iprop(5,i)==29  .and.                         
-     >      ppiclf_iprop(6,i)==0   .and.                      
-     >      ppiclf_iprop(7,i)==151) then                      
-      open(unit=777,file='fort.777',position='append')          
-                                                              
-      write(777,*) ppiclf_time, ppiclf_nid, ppiclf_dt
-     >                          , ppiclf_rprop(PPICLF_R_JUX,i)
-     >                          , ppiclf_rprop(PPICLF_R_JT,i) 
-                                                              
-      flush(777)                                               
-                                                              
-      endif                                                   
-
-!-----------------------------------------------------------------
-
 
 !
 ! Step 3: Force fluctuation for quasi-steady force
@@ -620,7 +600,7 @@
 
 !
 ! Step 7: Viscous unsteady force with history kernel
-!
+!         Diffusive unsteady heat transfer is also calculated in this call
          if (ViscousUnsteady_flag==1) then
             call ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz,qq_du)
          endif
@@ -642,22 +622,10 @@
             call ppiclf_user_HT_driver(i,qq)
          endif ! heattransfer_flag >= 1
 
-         !if(ppiclf_nid .eq. 0 .and. i==5) then
-         if(ppiclf_iprop(5,i)==29  .and.
-     >      ppiclf_iprop(6,i)==0   .and.
-     >      ppiclf_iprop(7,i)==151 .and. iStage==3) then
-          open(unit=60,file='fort.60',position='append')   
-          write(60,*) ppiclf_time, ppiclf_nid, qq_du, qq
-          flush(60)
-         endif
 ! 
 ! Step 8c : Diffusive Unsteady Heat Transfer model
-!
-         ! Ideally make this under the HT_driver when done coding
-         ! but setting this as a separate input flag for now
-         if(HTUnsteady_flag==0) then
-           qq_du = 0.0d0
-         endif
+!           Calculated in this same subroutine as Viscous Unsteady
+         if(HTUnsteady_flag==0) qq_du = 0.0d0
 !
 ! Step 9a: Angular velocity model
 !
@@ -847,12 +815,6 @@
 !         ppiclf_force(PPICLF_R_FPGY,i)  = fdpdy
 !         ppiclf_force(PPICLF_R_FPGZ,i)  = fdpdz
 
-         ppiclf_rprop(PPICLF_R_FVUX,i)  = fvux
-         ppiclf_rprop(PPICLF_R_FVUY,i)  = fvuy
-         ppiclf_rprop(PPICLF_R_FVUZ,i)  = fvuz
-         ppiclf_rprop(PPICLF_R_QQ,i)    = qq
-         ppiclf_rprop(PPICLF_R_QQDU,i)  = qq_du
-
 !
 ! Step 14: If debug mode is ON, calculate and print the max values.
 !          The user should not have this ON for production runs.
@@ -919,13 +881,11 @@
                if (iStage==3) then
                   if (i==1) then
                      write(7010,*) i,ppiclf_time,rmass,vmag,rhof,dp,
-     >                rep,rphip,rphif,rmachp,rhop,rhoMixt,reyL,
-     >             rmu,rnu,rkappa
+     >                rep,rphip,rphif,rmachp,rhop,rmu,rnu,rkappa
                   endif
                   if (i==ppiclf_npart) then
                      write(7011,*) i,ppiclf_time,rmass,vmag,rhof,dp,
-     >                rep,rphip,rphif,rmachp,rhop,rhoMixt,reyL,
-     >                rmu,rnu,rkappa
+     >                rep,rphip,rphif,rmachp,rhop,rmu,rnu,rkappa
                   endif
                endif
             endif
