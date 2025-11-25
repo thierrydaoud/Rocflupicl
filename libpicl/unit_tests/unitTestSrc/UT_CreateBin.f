@@ -11,12 +11,12 @@
       INTEGER*4 i, j, k, l, ie, BinMaxNum(3), loop, wf
       REAL*8    numBins, xmin, xmax, ymin, ymax, zmin, zmax,
      >          BinMinLen(3)
-      LOGICAL   binGen
+      LOGICAL   BinsCreated
       CHARACTER*50 filename, testNum
 
       rootProc = 0
       PI       = 4.0D0*ATAN(1.0) ! pi
-      binGen   = .FALSE.
+      BinsCreated   = .TRUE.
 
 ! MPI Setup
 !**********************************************************************
@@ -105,9 +105,15 @@
 
         DO i = 1,100000
           ppiclf_np = i
+          DO j = 1,3
+            ppiclf_n_bins(j) = 0
+          END DO
           CALL ppiclf_comm_CreateBin
+          ! Catches errors
           numBins = ppiclf_n_bins(1)*
      >               ppiclf_n_bins(2)*ppiclf_n_bins(3)
+          IF(numBins .LT. 1 .OR. numBins .GT. ppiclf_np) 
+     >       BinsCreated = .FALSE.
           WRITE(wf,*) ppiclf_np, 
      >       ppiclf_n_bins(1), ppiclf_n_bins(2), ppiclf_n_bins(3),
      >       numBins , numBins/ppiclf_np*100
@@ -122,8 +128,10 @@
         CLOSE(UNIT=wf)
       END DO
       ! Only passing criteria is the program didn't crash.
-      IF(nid .EQ. rootProc) THEN
+      IF(BinsCreated .AND. nid .EQ. rootProc) THEN
         PRINT*,' CreateBin Test - PASSED'
+      ELSE
+        PRINT*,' CreateBin Test - FAILED'
       END IF
       CALL MPI_FINALIZE(ierr)
       END PROGRAM
