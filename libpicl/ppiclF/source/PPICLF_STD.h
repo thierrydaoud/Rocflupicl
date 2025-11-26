@@ -37,6 +37,7 @@
 #ifndef PPICLF_INTERP
 #define PPICLF_INTERP 1
 #endif
+
 #ifndef PPICLF_LRP_INT
 #undef PPICLF_INTERP
 #define PPICLF_INTERP 0
@@ -58,7 +59,7 @@
 #endif
 
 #ifndef PPICLF_LIP_GP
-#define PPICLF_LIP_GP 5
+#define PPICLF_LIP_GP 8
 #endif
 
 #ifndef PPICLF_LEX

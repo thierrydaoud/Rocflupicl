@@ -1,4 +1,4 @@
-#define PPICLF_LPART 30000
+#define PPICLF_LPART 100000
 #define PPICLF_LRS 12
 #define PPICLF_LRP 48
 #define PPICLF_LRP2 0
@@ -9,11 +9,14 @@
 #define PPICLF_LRP_PRO 22
 
 ! number of timesteps kept in history kernels
-#define PPICLF_VU 0
-#define PPICLF_LRP3 6*PPICLF_VU
+
+!Change here when viscous unsteady on
+!#define PPICLF_VU 0
+!#define PPICLF_LRP3 6*PPICLF_VU
+#define PPICLF_LRP3 0
 
 ! maximum number of triangular patch boundaries
-#define PPICLF_LWALL 20
+#define PPICLF_LWALL 2000
 
 ! y, y1, ydot, ydotc: PPICLF_LRS
 #define PPICLF_JX 1
