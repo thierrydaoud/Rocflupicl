@@ -83,7 +83,7 @@
 !
 ! External:
 !
-      INTEGER*4 ie, i
+      INTEGER*4 ie, i, ierr
 !
       ppiclf_overlap = .TRUE.
 
@@ -95,7 +95,8 @@
 
       IF(ncell .GT. PPICLF_LEE .OR. ncell .LT. 0) THEN
         PRINT*, '***ERROR*** PPICLF_LEE', PPICLF_LEE, 'in', 
-     >   'InitMapOverlapGrid must be greater than', ncell 
+     >   'InitMapOverlapGrid must be greater than', ncell
+        CALL MPI_BARRIER(ppiclf_comm,ierr) 
         CALL ppiclf_exittr('Increase LEE in InitOverlap$',0.0d0,ncell)
       END IF
 
@@ -107,8 +108,6 @@
           ppiclf_fluid_grid(i,ie) = fluidGrid(i,ie)
         END DO
       END DO
-
-      !CALL ppiclf_solve_InitSolve
 
       RETURN
       END
@@ -572,20 +571,28 @@
         icount = icount + PPICLF_LRS
         CALL ppiclf_copy(rtemp(icount,i),ppiclf_rprop(1,i),PPICLF_LRP)
         icount = icount + PPICLF_LRP
+        IF(PPICLF_LRP2 .GT. 1) THEN
+          CALL ppiclf_copy(rtemp(icount,i),
+     >                     ppiclf_rprop2(1,i),PPICLF_LRP2)
+          icount = icount + PPICLF_LRP2
+        END IF
+        IF(PPICLF_LRP3 .GT. 1) THEN
+          CALL ppiclf_copy(rtemp(icount,i),
+     >                     ppiclf_rprop3(1,i),PPICLF_LRP3)
+          icount = icount + PPICLF_LRP3
+        END IF
+        IF(PPICLF_LRP4 .GT. 1) THEN
+          CALL ppiclf_copy(rtemp(icount,i),
+     >                     ppiclf_rprop4(1,i),PPICLF_LRP4)
+          icount = icount + PPICLF_LRP4
+        END IF
+        IF(PPICLF_LRP5 .GT. 1) THEN
+          CALL ppiclf_copy(rtemp(icount,i),
+     >                     ppiclf_rprop5(1,i),PPICLF_LRP5)
+          icount = icount + PPICLF_LRP5
+        END IF
         CALL ppiclf_copy(rtemp(icount,i),
-     >           ppiclf_rprop2(1,i),PPICLF_LRP2)
-        icount = icount + PPICLF_LRP2
-        CALL ppiclf_copy(rtemp(icount,i),
-     >           ppiclf_rprop3(1,i),PPICLF_LRP3)
-        icount = icount + PPICLF_LRP3
-        CALL ppiclf_copy(rtemp(icount,i),
-     >           ppiclf_rprop4(1,i),PPICLF_LRP4)
-        icount = icount + PPICLF_LRP4
-         CALL ppiclf_copy(rtemp(icount,i),
-     >           ppiclf_rprop5(1,i),PPICLF_LRP5)
-        icount = icount + PPICLF_LRP5
-         CALL ppiclf_copy(rtemp(icount,i),
-     >            ppiclf_feedbk(1,i),PPICLF_LRP_PRO)
+     >                   ppiclf_feedbk(1,i),PPICLF_LRP_PRO)
       END DO
       
       j0 = 4 ! index of ppiclf_iprop that contains rank to send to
@@ -616,18 +623,26 @@
         icount = icount + PPICLF_LRS
         CALL ppiclf_copy(ppiclf_rprop(1,i),rtemp(icount,i),PPICLF_LRP)
         icount = icount + PPICLF_LRP
+        IF(PPICLF_LRP2 .GT. 1) THEN
         CALL ppiclf_copy(ppiclf_rprop2(1,i),rtemp(icount,i),
      >                   PPICLF_LRP2)
         icount = icount + PPICLF_LRP2
-        CALL ppiclf_copy(ppiclf_rprop3(1,i),rtemp(icount,i),
-     >                   PPICLF_LRP3)
-        icount = icount + PPICLF_LRP3
-        CALL ppiclf_copy(ppiclf_rprop4(1,i),rtemp(icount,i),
-     >                   PPICLF_LRP4)
-        icount = icount + PPICLF_LRP4
-        CALL ppiclf_copy(ppiclf_rprop5(1,i),rtemp(icount,i),
-     >                   PPICLF_LRP5)
-        icount = icount + PPICLF_LRP5
+        END IF
+        IF(PPICLF_LRP3 .GT. 1) THEN
+          CALL ppiclf_copy(ppiclf_rprop3(1,i),rtemp(icount,i),
+     >                     PPICLF_LRP3)
+          icount = icount + PPICLF_LRP3
+        END IF
+        IF(PPICLF_LRP4 .GT. 1) THEN
+          CALL ppiclf_copy(ppiclf_rprop4(1,i),rtemp(icount,i),
+     >                     PPICLF_LRP4)
+          icount = icount + PPICLF_LRP4
+        END IF
+        IF(PPICLF_LRP5 .GT. 1) THEN
+          CALL ppiclf_copy(ppiclf_rprop5(1,i),rtemp(icount,i),
+     >                     PPICLF_LRP5)
+          icount = icount + PPICLF_LRP5
+        END IF
         CALL ppiclf_copy(ppiclf_feedbk(1,i),rtemp(icount,i),
      >           PPICLF_LRP_PRO)
       END DO
@@ -808,6 +823,17 @@
         iee = ppiclf_cell_map(1,ie)
         CALL ppiclf_copy(ppiclf_picl_grid(1,ie)
      >                 ,ppiclf_fluid_grid(1,iee),7)
+ 
+        ! ppiclf_filter initially set in PICL_TEMP_InitSolver
+        ! Want to only consider cells that reside in the particle domain
+        ! Update ppiclf_filter for next binning cycle 2.1*dx since next
+        ! layer of cells in a growing particle domain may be slightly larger
+        ! and we want filter equal a minimum of 2 cells.
+        DO l = 1,3
+          IF(ppiclf_filter(l) .LT. ppiclf_fluid_grid(3+l,iee)) THEN
+            ppiclf_filter(l) = 2.1D0*ppiclf_fluid_grid(3+l,iee)
+          END IF
+        END DO
       END DO
 
       ! Copy mapping since it is need to send fluid properties in interp
