@@ -127,15 +127,12 @@
       INTEGER*4  ndim    ! From rocpicl: 3
       INTEGER*4  iendian ! From rocpicl: 0
       INTEGER*4  npart
-      INTEGER*4  ierr
       INTEGER*4  l
       REAL*8     y(*)
       REAL*8     rprop(*)
       REAL*8     filt2(3)
       REAL*8     filt3
-!
-!      call mpi_barrier(ppiclf_comm,ierr)
-!
+
       IF(.NOT. PPICLF_LCOMM)
      >CALL ppiclf_exittr('InitMPI must be before InitParticle$',0.0d0
      >   ,ppiclf_nid)
@@ -1077,6 +1074,7 @@ c----------------------------------------------------------------------
 !     >  CALL ppiclf_solve_InitSolve
       CALL ppiclf_solve_InitSolve
       CALL ppiclf_user_SetYdot
+
       RETURN
       END
 !----------------------------------------------------------------------
@@ -1089,19 +1087,16 @@ c----------------------------------------------------------------------
 ! 
 ! Internal: 
 ! 
-      INTEGER*4 :: i, j, ierr
+      INTEGER*4 :: i, j
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
       ! bin coordinates changed
       CALL ppiclf_comm_CreateBin
-   
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! ppiclf_particleMoved set in FindParticle
       ! ppiclf_particleMoved .EQ. 0 means all particles
       ! stayed in same bin as previous RK Stage.
       CALL ppiclf_comm_FindParticle
-
       IF(ppiclf_particleMoved .NE. 0 .OR.
      >              ppiclf_binchanged) THEN
         CALL ppiclf_comm_MoveParticle
@@ -1190,7 +1185,7 @@ c----------------------------------------------------------------------
 !
 ! Internal:
 !
-      INTEGER*4 ierr,j
+      INTEGER*4 j
 !
       ! Copies Grid Cell ID for all Rocflu elements that map
       ! to ppiclf domain for GSLIB Transfer.  This copy is from
@@ -1203,19 +1198,13 @@ c----------------------------------------------------------------------
          CALL ppiclf_solve_InterpField(j)
       END DO
       
-      CALL MPI_BARRIER(ppiclf_comm,ierr) 
-
       ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
       ! cells that map to ppiclf domain.
       CALL ppiclf_solve_InterpTupleTransfer
 
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
-
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
       CALL ppiclf_solve_SBParticleToCellMap
-
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
@@ -1332,7 +1321,7 @@ c----------------------------------------------------------------------
 !
       REAL*8 FLD(PPICLF_LEX,PPICLF_LEY,PPICLF_LEZ,PPICLF_LEE),
      >       Max_CellLen(3)
-      INTEGER*4 nkey(2), nl, nii, njj, nrr, ie, l, ierr
+      INTEGER*4 nkey(2), nl, nii, njj, nrr, ie, l 
       LOGICAL partl
 !
       ! send it all
@@ -1376,8 +1365,6 @@ c----------------------------------------------------------------------
         ppiclf_interp_dchk(l) = Max_CellLen(l)*1.5D0
       END DO
 
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
-
       RETURN
       END
 
@@ -1392,7 +1379,7 @@ c----------------------------------------------------------------------
 
       ! Local Variables
       INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
-     >          CellID_nearest(28), partCount, ierr
+     >          CellID_nearest(28), partCount
       REAL*8    dSQl, dSQi, dSQ(28), xp(3),  
      >          CellCenter(3,28), w(27), binblength(3),  
      >          Max_CellLen(3), Max_CellLenSQ(3), dSQchk(3)
@@ -1419,8 +1406,6 @@ c----------------------------------------------------------------------
      >           firstSB(3), lastSB(3)  
       REAL*8    bin_Min(3), x_range(3), size_SBin(3)
       !***************************************************************
-
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       IF(ppiclf_npart .LT. 1) RETURN
       IF(ppiclf_nCells_Interp .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
@@ -1834,14 +1819,24 @@ c----------------------------------------------------------------------
      >          (ppiclf_ydotc (1,icount), ppiclf_ydotc(1,i), PPICLF_LRS)
                CALL ppiclf_copy
      >          (ppiclf_rprop (1,icount), ppiclf_rprop(1,i), PPICLF_LRP)
-               CALL ppiclf_copy
+               IF(PPICLF_LRP2 .GT. 1) THEN
+                 CALL ppiclf_copy
      >          (ppiclf_rprop2(1,icount),ppiclf_rprop2(1,i),PPICLF_LRP2)
-               CALL ppiclf_copy
+               END IF
+               IF(PPICLF_LRP3 .GT. 1) THEN
+                 CALL ppiclf_copy
      >          (ppiclf_rprop3(1,icount),ppiclf_rprop3(1,i),PPICLF_LRP3)
-               CALL ppiclf_copy
+               END IF
+               IF(PPICLF_LRP4 .GT. 1) THEN
+                 CALL ppiclf_copy
      >          (ppiclf_rprop4(1,icount),ppiclf_rprop4(1,i),PPICLF_LRP4)
-               CALL ppiclf_copy
+               END IF
+               IF(PPICLF_LRP5 .GT. 1) THEN
+                 CALL ppiclf_copy
      >          (ppiclf_rprop5(1,icount),ppiclf_rprop5(1,i),PPICLF_LRP5)
+               END IF
+               CALL ppiclf_copy(ppiclf_feedbk(1,icount), 
+     >                          ppiclf_feedbk(1,i), PPICLF_LRP_PRO)
                CALL ppiclf_icopy
      >          (ppiclf_iprop(1,icount) , ppiclf_iprop(1,i), PPICLF_LIP)
             END IF
@@ -1866,7 +1861,7 @@ c----------------------------------------------------------------------
 
       ! Internal:
       INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj,
-     >          nrr, nkey(2), iee, ierr
+     >          nrr, nkey(2), iee
       REAL*8    CellVol, GaussianConst, dist, w(27), wsum,
      >          x_norm, y_norm, z_norm, PI, eps
       LOGICAL   partl 
@@ -1924,8 +1919,6 @@ c----------------------------------------------------------------------
      >         ppiclf_cell_map_interp(1,i),PPICLF_LRMAX)
       END DO
 
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
-
       nl = 0
       nii = PPICLF_LRMAX
       njj = 2 ! original processor with cell for fluid grid
@@ -1944,8 +1937,6 @@ c----------------------------------------------------------------------
      >      ,partl,nl                       ! Logical data
      >      ,ppiclf_pro_fld_picl,nrr        ! Real data
      >      ,nkey,2)                        ! Sorting order
-
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ppiclf_pro_fld = 0.0d0
       DO ie=1,ppiclf_nCells_Proj
