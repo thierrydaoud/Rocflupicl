@@ -4129,12 +4129,12 @@ c--  then add mean PTKE
       fH     = 0.75d0 + .1055d0*rep
       ! Sangani's volume fraction correction for dilute random arrays
       ! Capping volume fraction at 0.5 
-      factor = 3.0d0*rpi*rnu*dp*fac*(1.0+2.28*min(rphip,0.5))
+      factor = 3.0d0*rpi*rnu*dp*ppiclf_dt*(1.0+2.28*min(rphip,0.5))
 
       ! Thermal diffusivity
       alpha_fluid = rkappa/(rhof * rcp_fluid)
       ! diffusive unsteady Heat Transfer
-      factor_du = sqrt(rpi*(dp**3)*rkappa*rhof*rcp_fluid*vmag)*fac
+      factor_du = sqrt(rpi*(dp**3)*rkappa*rhof*rcp_fluid*vmag)*ppiclf_dt
 
       if (ppiclf_nTimeBH > 1) then
          do iT = 2,ppiclf_nTimeBH-1
@@ -4165,6 +4165,24 @@ c--  then add mean PTKE
 
             qq_du = qq_du + factor_du*kernel_du*
      >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
+
+        if(ppiclf_iprop(5,i) .eq. 7 .and.
+     >     ppiclf_iprop(7,i) .eq. 1724) then
+      open(unit=66,file='fort.66',position='append')   
+
+      write(66,*) ppiclf_time, iT, time,
+     >            factor_du, kernel_du,
+     >            ppiclf_dTdtMixt(iT,i),
+     >            ppiclf_dTdtPlag(iT,i),
+     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+     >            factor_du*kernel_du*
+     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+     >            qq_du,
+     >            kernelVU, A, B, factor 
+
+      flush(66)
+
+      endif
           enddo
 
          iT = ppiclf_nTimeBH
@@ -4196,23 +4214,23 @@ c--  then add mean PTKE
          qq_du = qq_du + factor_du*kernel_du*
      >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-!         if(ppiclf_iprop(5,i)==29  .and.
-!     >      ppiclf_iprop(6,i)==0   .and.
-!     >      ppiclf_iprop(7,i)==151) then
-!      open(unit=66,file='fort.66',position='append')   
-!
-!      write(66,*) ppiclf_time, ppiclf_nid, ppiclf_dt,
-!     >            factor_du, kernel_du,
-!     >            ppiclf_dTdtMixt(iT,i),
-!     >            ppiclf_dTdtPlag(iT,i),
-!     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!     >            factor_du*kernel_du*
-!     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!     >            qq_du
-!
-!      flush(66)
-!
-!      endif
+        if(ppiclf_iprop(5,i) .eq. 7 .and.
+     >     ppiclf_iprop(7,i) .eq. 1724) then
+      open(unit=66,file='fort.66',position='append')   
+
+      write(66,*) ppiclf_time, iT, time,
+     >            factor_du, kernel_du,
+     >            ppiclf_dTdtMixt(iT,i),
+     >            ppiclf_dTdtPlag(iT,i),
+     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+     >            factor_du*kernel_du*
+     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+     >            qq_du,
+     >            kernelVU, A, B, factor 
+
+      flush(66)
+
+      endif
 
       endif
 
@@ -4364,28 +4382,24 @@ c--  then add mean PTKE
         ppiclf_TPlag(2,i) = ppiclf_TPlag(1,i)
       endif
 
-      ! 11/10/2025 - Thierry 
-      ! dT/dt is very oscillatory when calculated at every RK stage.
-      ! the fix for now is to calculate it at every step (3rd stage)
-      ! only. but should revisit this after finalizing my paper.
-
       if(iStage==1) then
         dt = 5.0/15.0*ppiclf_dt
         time_plot = ppiclf_time
       elseif(iStage==2) then
-        dt = 13.0/15.0*ppiclf_dt
+        dt = (5.0/15.0 + 8.0/15.0)*ppiclf_dt
         time_plot = 5.0/15.0*dt + ppiclf_time
       elseif(iStage==3) then
         dt = ppiclf_dt
         time_plot = 13.0/15.0*dt + ppiclf_time
+      else
+        print*, "Unsupported beyond RK3 in Viscous-Unsteady"
+        call ppiclf_exittr('Unsupported iStage', 0.0, 0)
       endif
 
       ! dT/dt update for Diffusive Unsteady HT
       ! first-order backward difference (explicit backward Euler form)
-!      if(iStage==3) then
         ppiclf_dTdtMixt(1,i) = (ppiclf_TMixt(1,i)-ppiclf_TMixt(2,i))/dt
         ppiclf_dTdtPlag(1,i) = (ppiclf_TPlag(1,i)-ppiclf_TPlag(2,i))/dt
-!      endif
 
         if(ppiclf_iprop(5,i) .eq. 7 .and.
      >     ppiclf_iprop(7,i) .eq. 1724) then

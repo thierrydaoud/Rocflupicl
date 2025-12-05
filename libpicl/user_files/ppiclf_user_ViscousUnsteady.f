@@ -44,12 +44,12 @@
       fH     = 0.75d0 + .1055d0*rep
       ! Sangani's volume fraction correction for dilute random arrays
       ! Capping volume fraction at 0.5 
-      factor = 3.0d0*rpi*rnu*dp*fac*(1.0+2.28*min(rphip,0.5))
+      factor = 3.0d0*rpi*rnu*dp*ppiclf_dt*(1.0+2.28*min(rphip,0.5))
 
       ! Thermal diffusivity
       alpha_fluid = rkappa/(rhof * rcp_fluid)
       ! diffusive unsteady Heat Transfer
-      factor_du = sqrt(rpi*(dp**3)*rkappa*rhof*rcp_fluid*vmag)*fac
+      factor_du = sqrt(rpi*(dp**3)*rkappa*rhof*rcp_fluid*vmag)*ppiclf_dt
 
       if (ppiclf_nTimeBH > 1) then
          do iT = 2,ppiclf_nTimeBH-1
@@ -80,6 +80,24 @@
 
             qq_du = qq_du + factor_du*kernel_du*
      >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
+
+        if(ppiclf_iprop(5,i) .eq. 7 .and.
+     >     ppiclf_iprop(7,i) .eq. 1724) then
+      open(unit=66,file='fort.66',position='append')   
+
+      write(66,*) ppiclf_time, iT, time,
+     >            factor_du, kernel_du,
+     >            ppiclf_dTdtMixt(iT,i),
+     >            ppiclf_dTdtPlag(iT,i),
+     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+     >            factor_du*kernel_du*
+     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+     >            qq_du,
+     >            kernelVU, A, B, factor 
+
+      flush(66)
+
+      endif
           enddo
 
          iT = ppiclf_nTimeBH
@@ -111,23 +129,23 @@
          qq_du = qq_du + factor_du*kernel_du*
      >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-!         if(ppiclf_iprop(5,i)==29  .and.
-!     >      ppiclf_iprop(6,i)==0   .and.
-!     >      ppiclf_iprop(7,i)==151) then
-!      open(unit=66,file='fort.66',position='append')   
-!
-!      write(66,*) ppiclf_time, ppiclf_nid, ppiclf_dt,
-!     >            factor_du, kernel_du,
-!     >            ppiclf_dTdtMixt(iT,i),
-!     >            ppiclf_dTdtPlag(iT,i),
-!     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!     >            factor_du*kernel_du*
-!     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!     >            qq_du
-!
-!      flush(66)
-!
-!      endif
+        if(ppiclf_iprop(5,i) .eq. 7 .and.
+     >     ppiclf_iprop(7,i) .eq. 1724) then
+      open(unit=66,file='fort.66',position='append')   
+
+      write(66,*) ppiclf_time, iT, time,
+     >            factor_du, kernel_du,
+     >            ppiclf_dTdtMixt(iT,i),
+     >            ppiclf_dTdtPlag(iT,i),
+     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+     >            factor_du*kernel_du*
+     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+     >            qq_du,
+     >            kernelVU, A, B, factor 
+
+      flush(66)
+
+      endif
 
       endif
 
