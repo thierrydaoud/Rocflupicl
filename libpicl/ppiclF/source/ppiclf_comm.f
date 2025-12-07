@@ -390,18 +390,18 @@
       total_bin = 0
       minBinError = 1.0D9
       ideal_bin_index = 0
-      DO ix = 0,5
-        iBin(1) = ppiclf_n_bins(1) + (ix-3)
+      DO ix = 0,2
+        iBin(1) = ppiclf_n_bins(1) + (ix-1)
         ppiclf_bins_dx(1) = binb_length(1)/iBin(1)
         IF(ppiclf_bins_dx(1) .LT. BinMinLen(1) .OR.
      >                           iBin(1) .LT. 1) CYCLE
-        DO iy = 0,3
-          iBin(2) = ppiclf_n_bins(2) + (iy-3)
+        DO iy = 0,2
+          iBin(2) = ppiclf_n_bins(2) + (iy-1)
           ppiclf_bins_dx(2) = binb_length(2)/iBin(2)
           IF(ppiclf_bins_dx(2) .LT. BinMinLen(2) .OR.
      >                             iBin(2) .LT. 1) CYCLE
-          DO iz = 0,3
-            iBin(3) = ppiclf_n_bins(3) + (iz-3)
+          DO iz = 0,2
+            iBin(3) = ppiclf_n_bins(3) + (iz-1)
             ppiclf_bins_dx(3) = binb_length(3)/iBin(3)
             IF(ppiclf_bins_dx(3) .LT. BinMinLen(3) .OR.
      >                               iBin(3) .LT. 1) CYCLE
@@ -435,7 +435,7 @@
         ! same number of bin equation as in above loops with best
         ! indices
         ppiclf_n_bins(i) = INT(binsReal(i)+0.5D0)
-     >                     + (ideal_bin_index(i) - 3)
+     >                     + (ideal_bin_index(i) - 1)
         ppiclf_bins_dx(i) = binb_length(i)/ppiclf_n_bins(i)
         total_bin = total_bin*ppiclf_n_bins(i)
         IF(total_bin .GT. ppiclf_np) THEN
@@ -831,7 +831,7 @@
         ! and we want filter equal a minimum of 2 cells.
         DO l = 1,3
           IF(ppiclf_filter(l) .LT. ppiclf_fluid_grid(3+l,iee)) THEN
-            ppiclf_filter(l) = 2.1D0*ppiclf_fluid_grid(3+l,iee)
+            ppiclf_filter(l) = 1.1D0*ppiclf_fluid_grid(3+l,iee)
           END IF
         END DO
       END DO
