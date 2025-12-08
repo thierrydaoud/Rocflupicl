@@ -151,10 +151,11 @@
 
       ! Print dt and time every time step
       if (ppiclf_nid==0) then
-      if (iStage .eq. 1) then
-        write(6,'(a,2x,2(1pe14.6),2x,i3)') '*** PPICLF dt, time = ',
-     >      ppiclf_dt,ppiclf_time
-      endif
+      !if (iStage .eq. 1) then
+        write(6,'(a,2x,i4,2x,2(1pe14.6),2x,i3)') 
+     >      '*** PPICLF dt, time = ',
+     >      iStage,ppiclf_dt,ppiclf_time
+      !endif
       endif
 
       burnrate_model = 0
@@ -599,10 +600,24 @@
          endif ! collisional_flag >= 1
 
 !
-! Step 7: Viscous unsteady force with history kernel
-!         Diffusive unsteady heat transfer is also calculated in this call
+! Step 7: Viscous-unsteady force with history kernel
+!         Diffusive-unsteady heat transfer is also calculated in this call
+         ! 1 == original Trapezoidal code for uniform dt
+         ! 2 == original Trapezoidal code for variable dt
+         ! 3 == modified Trapezoidal method for variable dt
+         ! 4 == Hinsberg method for variable dt
          if (ViscousUnsteady_flag==1) then
-            call ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz,qq_du)
+            call ppiclf_user_history_uniformtrap
+     >           (i,iStage,fvux,fvuy,fvuz,qq_du)
+         elseif (ViscousUnsteady_flag==2) then
+            call ppiclf_user_history_variabletrap
+     >           (i,iStage,fvux,fvuy,fvuz,qq_du)
+         elseif (ViscousUnsteady_flag==3) then
+            call ppiclf_user_history_modifiedtrap
+     >           (i,iStage,fvux,fvuy,fvuz,qq_du)
+         elseif (ViscousUnsteady_flag==4) then
+            call ppiclf_user_history_hinsberg
+     >           (i,iStage,fvux,fvuy,fvuz,qq_du)
          endif
 
 !
@@ -624,8 +639,8 @@
 
 ! 
 ! Step 8c : Diffusive Unsteady Heat Transfer model
-!           Calculated in this same subroutine as Viscous Unsteady
-         if(HTUnsteady_flag==0) qq_du = 0.0d0
+!           Calculated in same subroutine as Viscous Unsteady
+         if (HTUnsteady_flag==0) qq_du = 0.0d0
 !
 ! Step 9a: Angular velocity model
 !
@@ -668,7 +683,7 @@
          ppiclf_ydot(PPICLF_JOXIDE,i)  = mdot_ox
 
 !
-! Update data for viscous unsteady case
+! Update data for viscous unsteady case at every RK3 stage
 !
          if (ViscousUnsteady_flag>=1) then
             call ppiclf_user_UpdatePlag(i,iStage)
@@ -1019,7 +1034,8 @@
       ! Print out every 10th iStage=1 counts
       if (ppiclf_debug   .ge. 1) then
       if (iStage         .eq. 1) then
-      if (mod(idebug,10) .eq. 0) then
+      if (mod(idebug,1) .eq. 0) then
+      !if (mod(idebug,10) .eq. 0) then
          call ppiclf_user_debug
       endif
       endif

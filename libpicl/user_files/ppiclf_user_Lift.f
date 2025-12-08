@@ -162,7 +162,7 @@
       d1 = 0.675d0 + 0.15d0*(1.0d0 + tanh(0.28d0*(epi-2.0d0)))
       CL = 1.0d0 - d1*tanh(0.18*sqrt(rep))
 
-      factor = 0.125d0*dp*dp*dp*rhof
+      factor = 0.125d0*rpi*dp*dp*dp*rhof
 
       ! Compute lift components
       elx = vy*omgz - vz*omgy

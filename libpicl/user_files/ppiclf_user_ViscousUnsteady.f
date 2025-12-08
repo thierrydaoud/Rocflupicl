@@ -1,21 +1,39 @@
 !-----------------------------------------------------------------------
 !
-! Created Feb. 1, 2024
+! Created Feb.  1, 2024
+! Modified Dec. 1, 2025     
 !
 ! Subroutine for viscous unsteady force with history kernel
+! Updated to includes diffusive-unsteady Heat Transfer
 !
-! Mei-Adrian history kernel
+! Mei-Adrian history kernel for viscous-unsteady
 !
-! Copied from either files in rocintereact/
+! Original code copied from either files in rocintereact/
 !   INRT_CalcDragUnsteady_AMImplicit.F90
 !   INRT_CalcDragUnsteady_AMExplicit.F90
 !
 ! The number of time steps kept for the history
 !   kernel is set in libpicl/ppiclF/source/PPICLF_STD.h
 !
+!
+! Below we include several schemes for the integration
+!   of this viscous and diffusive history integrals
+!   1. Original trapezoidal method for uniform time steps
+!   2. Original trapezoidal method for variable time steps
+!   3. Modified trapezoidal method for variable time steps
+!   4. Hinsberg method for variable time steps
+!
+!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
-      subroutine ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz,qq_du)
+!     Trapezoidal Method with uniform time steps only
+!     Caution - Only use this if you manually set 
+!               global%dtMin = constant inside 
+!               rocflu/RFLU_TimeStepping.F90
+!               see line 507
+!
+      subroutine ppiclf_user_history_uniformtrap
+     >           (i,iStage,fvux,fvuy,fvuz,qq_du)
 !
       implicit none
 !
@@ -27,6 +45,335 @@
       real*8 fvux,fvuy,fvuz
       real*8 time,fH,factor,A,B,kernelVU
       real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid
+      real*8 dti, theta_sangani
+      integer*4 i1,i2
+
+      i1 = 2
+      i2 = 78
+
+!
+! Code:
+!
+      fvux = 0.0d0
+      fvuy = 0.0d0
+      fvuz = 0.0d0
+      iT   = 1
+      time = 0.0d0
+
+      ! Thermal diffusivity and Peclet number
+      alpha_fluid = rkappa/(rhof * rcp_fluid)
+      Pe = rep * rpr 
+
+      ! Viscous-unsteady
+      !   Sangani's volume fraction correction for dilute random arrays
+      !   Capping volume fraction at 0.5 
+      theta_sangani = 1.0d0 + 2.28d0*min(rphip,0.5d0)
+      factor = 3.0d0*rpi*rnu*dp*theta_sangani
+      fH     = 0.75d0 + .1055d0*rep
+
+      ! Diffusive-unsteady Heat Transfer
+      factor_du = 2.0d0*(dp**2)*sqrt(rpi*rkappa*rhof*rcp_fluid)
+      b_du = (1.63d0 - 0.92d0*erf(0.017*(Pe - 80.0d0)))
+     >       *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
+
+      ! For uniform time step
+      dti = ppiclf_dt
+
+      if (ppiclf_nTimeBH > 1) then
+         do iT = 2,ppiclf_nTimeBH-1
+            time = ppiclf_timeBH(iT)
+
+            ! Viscous-unsteady
+            A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
+            B  = (rpi*(vmag**3)*(time**2)/ 
+     >                 (dp*rnu*(fH**3)))**(.5d0)
+
+            kernelVU = factor*(A+B)**(-2)
+
+            fvux = fvux + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JX,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JX,iT,i) )
+            fvuy = fvuy + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JY,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JY,iT,i) )
+            fvuz = fvuz + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
+         
+            ! Diffusive-unsteady
+            kernel_du = exp(-b_du*vmag*time/dp)/sqrt(time)
+            qq_du = qq_du + dti * factor_du*kernel_du*
+     >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
+
+
+!           if(ppiclf_iprop(5,i) .eq. 7 .and.
+!    >         ppiclf_iprop(7,i) .eq. 1724) then
+!              !open(unit=66,file='fort.66',position='append')   
+
+!              write(66,*) ppiclf_time, iT, time,
+!    >            factor_du, kernel_du,
+!    >            ppiclf_dTdtMixt(iT,i),
+!    >            ppiclf_dTdtPlag(iT,i),
+!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+!    >            factor_du*kernel_du*
+!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+!    >            qq_du,fvux,fvuy,fvuz,
+!    >            kernelVU, A, B, factor 
+
+!              flush(66)
+!           endif
+         enddo
+
+         iT = ppiclf_nTimeBH
+         time = ppiclf_timeBH(iT)
+
+         ! Viscous-unsteady
+         A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
+         B  = (rpi*(vmag**3)*(time**2)/ 
+     >                 (dp*rnu*(fH**3)))**(.5d0)
+         kernelVU = 0.5d0*factor*(A+B)**(-2)
+         fvux = fvux + dti * kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JX,iT,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JX,iT,i) )
+         fvuy = fvuy + dti * kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JY,iT,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JY,iT,i) )
+         fvuz = fvuz + dti * kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
+
+         ! Diffusive-unsteady
+         kernel_du = 0.5d0*exp(-b_du*vmag*time/dp)/sqrt(time)
+         qq_du = qq_du + dti * factor_du*kernel_du*
+     >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
+
+
+!        if(ppiclf_iprop(5,i) .eq. 7 .and.
+!    >      ppiclf_iprop(7,i) .eq. 1724) then
+!           !open(unit=66,file='fort.66',position='append')   
+
+!           write(66,*) ppiclf_time, iT, time,
+!    >            factor_du, kernel_du,
+!    >            ppiclf_dTdtMixt(iT,i),
+!    >            ppiclf_dTdtPlag(iT,i),
+!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+!    >            factor_du*kernel_du*
+!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+!    >            qq_du,fvux,fvuy,fvuz,
+!    >            kernelVU, A, B, factor 
+
+!           flush(66)
+!        endif
+      endif
+
+      if (ppiclf_iprop(5,i) .eq. i1 .and.
+     >    ppiclf_iprop(7,i) .eq. i2) then
+          if (istage == 3) then
+             write(66,*) ppiclf_time,qq_du,fvux,fvuy,fvuz
+          endif
+      endif
+
+      return
+      end
+!
+!-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
+!
+!     Trapezoidal Method with non-uniform time steps
+!
+      subroutine ppiclf_user_history_variabletrap
+     >           (i,iStage,fvux,fvuy,fvuz,qq_du)
+!
+      implicit none
+!
+      include "PPICLF"
+!
+! Internal:
+!
+      integer*4 i, iStage, iT
+      real*8 fvux,fvuy,fvuz
+      real*8 time,fH,factor,A,B,kernelVU
+      real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid
+      real*8 dti, theta_sangani
+      integer*4 i1,i2
+
+      i1 = 2
+      i2 = 78
+!
+! Code:
+!
+      fvux = 0.0d0
+      fvuy = 0.0d0
+      fvuz = 0.0d0
+      iT   = 1
+      time = 0.0d0
+
+      qq_du = 0.0d0
+
+      ! Thermal diffusivity and Peclet number
+      alpha_fluid = rkappa/(rhof * rcp_fluid)
+      Pe = rep * rpr
+
+      ! Viscous-unsteady
+      !   Sangani's volume fraction correction for dilute random arrays
+      !   Capping volume fraction at 0.5 
+      theta_sangani = 1.0d0 + 2.28d0*min(rphip,0.5d0)
+      factor = 3.0d0*rpi*rnu*dp*theta_sangani
+      fH     = 0.75d0 + .1055d0*rep
+
+      ! Diffusive-unsteady Heat Transfer
+      factor_du = 2.0d0*(dp**2)*sqrt(rpi*rkappa*rhof*rcp_fluid)
+      b_du = (1.63d0 - 0.92d0*erf(0.017*(Pe - 80.0d0)))
+     >    *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
+
+      if (ppiclf_nTimeBH > 1) then
+         do iT = 3,ppiclf_nTimeBH
+            dti = ppiclf_timeBH(iT)-ppiclf_timeBH(iT-1)
+
+            time = ppiclf_timeBH(iT)
+            ! Viscous-unsteady
+            A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
+            B  = (rpi*(vmag**3)*(time**2)/ 
+     >                 (dp*rnu*(fH**3)))**(.5d0)
+            kernelVU = 0.5d0 * factor*(A+B)**(-2)
+            fvux = fvux + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JX,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JX,iT,i) )
+            fvuy = fvuy + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JY,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JY,iT,i) )
+            fvuz = fvuz + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
+            ! Diffusive-unsteady
+            kernel_du = 0.5d0 * exp(-b_du*vmag*time/dp)/sqrt(time)
+            qq_du = qq_du + dti * factor_du*kernel_du*
+     >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
+
+            time = ppiclf_timeBH(iT-1)
+            ! Viscous-unsteady
+            A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
+            B  = (rpi*(vmag**3)*(time**2)/ 
+     >                 (dp*rnu*(fH**3)))**(.5d0)
+            kernelVU = 0.5d0 * factor*(A+B)**(-2)
+            fvux = fvux + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JX,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JX,iT-1,i) )
+            fvuy = fvuy + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JY,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JY,iT-1,i) )
+            fvuz = fvuz + dti * kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JZ,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JZ,iT-1,i) )
+            ! Diffusive-unsteady
+            kernel_du = 0.5d0 * exp(-b_du*vmag*time/dp)/sqrt(time)
+            qq_du = qq_du + dti * factor_du*kernel_du*
+     >                (ppiclf_dTdtMixt(iT-1,i) -ppiclf_dTdtPlag(iT-1,i))
+
+
+!           if(ppiclf_iprop(5,i) .eq. i1 .and.
+!    >         ppiclf_iprop(7,i) .eq. i2) then
+!           if (iStage==3) then
+!             !stop
+!              !open(unit=66,file='fort.66',position='append')   
+!
+!              time = ppiclf_timeBH(iT)
+!              write(66,*) ppiclf_time, iT, time,
+!    >            factor_du, kernel_du,
+!    >            ppiclf_dTdtMixt(iT,i),
+!    >            ppiclf_dTdtPlag(iT,i),
+!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+!    >            factor_du*kernel_du*
+!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+!    >            qq_du,fvux,fvuy,fvuz,
+!    >            kernelVU, A, B, factor 
+!
+!              flush(66)
+!           endif
+!           endif
+         enddo
+
+         iT = 2
+         time = ppiclf_timeBH(2)
+         dti = ppiclf_timeBH(2)-ppiclf_timeBH(1)
+         ! Viscous-unsteady
+         A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
+         B  = (rpi*(vmag**3)*(time**2)/ 
+     >                 (dp*rnu*(fH**3)))**(.5d0)
+         kernelVU = 0.5d0*factor*(A+B)**(-2)
+         fvux = fvux + dti * kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JX,iT,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JX,iT,i) )
+         fvuy = fvuy + dti * kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JY,iT,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JY,iT,i) )
+         fvuz = fvuz + dti * kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
+         ! Diffusive-unsteady
+         kernel_du = 0.5d0*exp(-b_du*vmag*time/dp)/sqrt(time)
+         qq_du = qq_du + dti * factor_du*kernel_du*
+     >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
+
+
+!        if(ppiclf_iprop(5,i) .eq. i1 .and.
+!    >      ppiclf_iprop(7,i) .eq. i2) then
+!        if (istage == 3) then
+!           !open(unit=66,file='fort.66',position='append')   
+
+!           iT = 2
+!           time = ppiclf_timeBH(2)
+!           write(66,*) ppiclf_time, iT, time,
+!    >            factor_du, kernel_du,
+!    >            ppiclf_dTdtMixt(iT,i),
+!    >            ppiclf_dTdtPlag(iT,i),
+!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+!    >            factor_du*kernel_du*
+!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+!    >            qq_du,fvux,fvuy,fvuz,
+!    >            kernelVU, A, B, factor 
+
+!           flush(66)
+!        endif
+!        endif
+      endif
+
+      if (ppiclf_iprop(5,i) .eq. i1 .and.
+     >    ppiclf_iprop(7,i) .eq. i2) then
+          if (istage == 3) then
+             write(66,*) ppiclf_time,qq_du,fvux,fvuy,fvuz
+          endif
+      endif
+
+
+      return
+      end
+!
+!-----------------------------------------------------------------------
+!
+!     Modified Trapezodial Method with non-uniform time steps
+!       This subroutines factors out 1/sqrt(s) integrable singularity
+!
+      subroutine ppiclf_user_history_modifiedtrap
+     >           (i,iStage,fvux,fvuy,fvuz,qq_du)
+!
+      implicit none
+!
+      include "PPICLF"
+!
+! Internal:
+!
+      integer*4 i, iStage, iT
+      real*8 fvux,fvuy,fvuz
+      real*8 time,fH,factor,A,B,kernelVU
+      real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid
+      real*8 s1,s2,dsi
+      real*8 sx1,sx2,sy1,sy2,sz1,sz2,g1,g2
+      real*8 theta_sangani
+      integer*4 i1,i2
+
+      i1 = 2
+      i2 = 78
 
 !
 ! Code:
@@ -39,116 +386,326 @@
 
       qq_du = 0.0d0
 
-      Pe = rep * rpr ! Peclet number
-
-      fH     = 0.75d0 + .1055d0*rep
-      ! Sangani's volume fraction correction for dilute random arrays
-      ! Capping volume fraction at 0.5 
-      factor = 3.0d0*rpi*rnu*dp*ppiclf_dt*(1.0+2.28*min(rphip,0.5))
-
-      ! Thermal diffusivity
+      ! Thermal diffusivity and Peclet number
       alpha_fluid = rkappa/(rhof * rcp_fluid)
-      ! diffusive unsteady Heat Transfer
-      factor_du = sqrt(rpi*(dp**3)*rkappa*rhof*rcp_fluid*vmag)*ppiclf_dt
+      Pe = rep * rpr
+
+      ! Viscous-unsteady
+      !   Sangani's volume fraction correction for dilute random arrays
+      !   Capping volume fraction at 0.5 
+      theta_sangani = 1.0d0 + 2.28d0*min(rphip,0.5d0)
+      factor = 3.0d0*rpi*rnu*dp*theta_sangani
+      fH     = 0.75d0 + .1055d0*rep
+
+      ! Diffusive-unsteady Heat Transfer
+      factor_du = 2.0d0*(dp**2)*sqrt(rpi*rkappa*rhof*rcp_fluid)
+      b_du = (1.63d0 - 0.92d0*erf(0.017*(Pe - 80.0d0)))
+     >       *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
 
       if (ppiclf_nTimeBH > 1) then
-         do iT = 2,ppiclf_nTimeBH-1
-            time = ppiclf_timeBH(iT)
+         ! Do interval [t_i,t_i-1],  i=2,...,N-1
+         do iT = 2,ppiclf_nTimeBH
+            s1 = ppiclf_timeBH(iT-1)
+            s2 = ppiclf_timeBH(iT)
+            dsi = (s2 - s1)/(sqrt(s1)+sqrt(s2))
 
-            A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
-            B  = (rpi*(vmag**3)*(time**2)/ 
-     >                 (dp*rnu*(fH**3)))**(.5d0)
-
+            ! Viscous-unsteady
+            ! at s1 = s(i-1)
+            A  = (4.0d0*rpi*rnu/(dp**2))**(.25d0)
+            B  = (rpi*(vmag**3)/(dp*rnu*(fH**3)))**(.5d0)
+     >           * (s1**0.75d0)
             kernelVU = factor*(A+B)**(-2)
+            sx1 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JX,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JX,iT-1,i) )
+            sy1 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JY,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JY,iT-1,i) )
+            sz1 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JZ,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JZ,iT-1,i) )
 
-            fvux = fvux + kernelVU*
+            ! at s2 = s(i)
+            A  = (4.0d0*rpi*rnu/(dp**2))**(.25d0)
+            B  = (rpi*(vmag**3)/(dp*rnu*(fH**3)))**(.5d0)
+     >           * (s2**0.75d0)
+            kernelVU = factor*(A+B)**(-2)
+            sx2 = kernelVU*
      >                   ( ppiclf_drudtMixt(PPICLF_JX,iT,i) -
      >                     ppiclf_drudtPlag(PPICLF_JX,iT,i) )
-            fvuy = fvuy + kernelVU*
+            sy2 = kernelVU*
      >                   ( ppiclf_drudtMixt(PPICLF_JY,iT,i) -
      >                     ppiclf_drudtPlag(PPICLF_JY,iT,i) )
-            fvuz = fvuz + kernelVU*
+            sz2 = kernelVU*
      >                   ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
      >                     ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
-         
-            ! Diffusive Unsteady Heat Transfer starts here
-            b_du = (1.63d0 - 0.92d0*erf(0.017*(Pe - 80.0d0)))
-     >       *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
-         
-            ! Kernel for diffusive unsteady Heat Transfer
-            kernel_du=2.0d0*sqrt(dp/(vmag*time))*exp(-b_du*vmag*time/dp)
 
-            qq_du = qq_du + factor_du*kernel_du*
+            fvux = fvux + (sx1 + sx2)*dsi
+            fvuy = fvuy + (sy1 + sy2)*dsi
+            fvuz = fvuz + (sz1 + sz2)*dsi
+
+            ! Diffusive-unsteady Heat Transfer
+            ! at s1 = s(i-1)
+            kernel_du = exp(-b_du*vmag*s1/dp)
+            g1 = factor_du*kernel_du*
+     >                (ppiclf_dTdtMixt(iT-1,i) -ppiclf_dTdtPlag(iT-1,i))
+            ! at s2 = s(i)
+            kernel_du = exp(-b_du*vmag*s2/dp)
+            g2 = factor_du*kernel_du*
      >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-        if(ppiclf_iprop(5,i) .eq. 7 .and.
-     >     ppiclf_iprop(7,i) .eq. 1724) then
-      open(unit=66,file='fort.66',position='append')   
+            qq_du = qq_du + (g1+g2)*dsi
 
-      write(66,*) ppiclf_time, iT, time,
-     >            factor_du, kernel_du,
-     >            ppiclf_dTdtMixt(iT,i),
-     >            ppiclf_dTdtPlag(iT,i),
-     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-     >            factor_du*kernel_du*
-     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-     >            qq_du,
-     >            kernelVU, A, B, factor 
 
-      flush(66)
+!           if(ppiclf_iprop(5,i) .eq. 7 .and.
+!    >           ppiclf_iprop(7,i) .eq. 1724) then
+!              !open(unit=66,file='fort.66',position='append')   
+
+!              time = ppiclf_timeBH(iT)
+!              write(66,*) ppiclf_time, iT, time,
+!    >            factor_du, kernel_du,
+!    >            ppiclf_dTdtMixt(iT,i),
+!    >            ppiclf_dTdtPlag(iT,i),
+!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+!    >            factor_du*kernel_du*
+!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+!    >            qq_du,fvux,fvuy,fvuz,
+!    >            kernelVU, A, B, factor 
+
+!              flush(66)
+!           endif
+         enddo
 
       endif
-          enddo
 
-         iT = ppiclf_nTimeBH
-         time = ppiclf_timeBH(iT)
+      if (ppiclf_iprop(5,i) .eq. i1 .and.
+     >    ppiclf_iprop(7,i) .eq. i2) then
+          if (istage == 3) then
+             write(66,*) ppiclf_time,qq_du,fvux,fvuy,fvuz
+          endif
+      endif
 
-         A  = (4.0d0*rpi*time*rnu/(dp**2))**(.25d0)
-         B  = (rpi*(vmag**3)*(time**2)/ 
-     >                 (dp*rnu*(fH**3)))**(.5d0)
+      return
+      end
+!
+!-----------------------------------------------------------------------
+!
+!     Hinsberg Method with non-uniform time steps
+!
+      subroutine ppiclf_user_history_hinsberg
+     >           (i,iStage,fvux,fvuy,fvuz,qq_du)
+!
+      implicit none
+!
+      include "PPICLF"
+!
+! Internal:
+!
+      integer*4 i, iStage, iT
+      real*8 fvux,fvuy,fvuz
+      real*8 time,fH,factor,A,B,kernelVU
+      real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid
+      real*8 TwoThirds
+      real*8 s1,s2,dsinv,dsi1,dsi2,dsi3,dsi4
+      real*8 sx1,sx2,sy1,sy2,sz1,sz2
+      real*8 gx,gy,gz,g1,g2,g
+      real*8 theta_sangani
+      integer*4 i1,i2
 
-         kernelVU = 0.5d0*factor*(A+B)**(-2)
+      i1 = 2
+      i2 = 78
 
-         fvux = fvux + kernelVU*
+!
+! Code:
+!
+      fvux = 0.0d0
+      fvuy = 0.0d0
+      fvuz = 0.0d0
+      iT   = 1
+      time = 0.0d0
+      TwoThirds = 2.0d0/3.0d0
+
+      qq_du = 0.0d0
+
+      ! Thermal diffusivity and Peclet number
+      alpha_fluid = rkappa/(rhof * rcp_fluid)
+      Pe = rep * rpr
+
+      ! Viscous-unsteady
+      !   Sangani's volume fraction correction for dilute random arrays
+      !   Capping volume fraction at 0.5 
+      theta_sangani = 1.0d0 + 2.28d0*min(rphip,0.5d0)
+      factor = 3.0d0*rpi*rnu*dp*theta_sangani
+      fH     = 0.75d0 + .1055d0*rep
+
+      ! Diffusive-unsteady Heat Transfer
+      factor_du = 2.0d0*(dp**2)*sqrt(rpi*rkappa*rhof*rcp_fluid)
+      b_du = (1.63d0 - 0.92d0*erf(0.017*(Pe - 80.0d0)))
+     >       *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
+
+      if (ppiclf_nTimeBH > 1) then
+         do iT = 3,ppiclf_nTimeBH
+            ! Do interval [t_i,t_i-1],  i=2,...,N-1
+            s1 = ppiclf_timeBH(iT-1)
+            s2 = ppiclf_timeBH(iT)
+            dsinv = 1.0d0/(sqrt(s1)+sqrt(s2))
+            dsi1 = s1*dsinv
+            dsi2 = s2*dsinv
+            dsi3 = (s2+sqrt(s1*s2)+s1)*dsinv
+
+            ! Viscous-unsteady
+            A  = (4.0d0*rpi*rnu/(dp**2))**(.25d0)
+            B  = (rpi*(vmag**3)/(dp*rnu*(fH**3)))**(.5d0)
+     >           * (s1**0.75d0)
+            kernelVU = factor*(A+B)**(-2)
+            sx1 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JX,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JX,iT-1,i) )
+            sy1 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JY,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JY,iT-1,i) )
+            sz1 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JZ,iT-1,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JZ,iT-1,i) )
+
+            A  = (4.0d0*rpi*rnu/(dp**2))**(.25d0)
+            B  = (rpi*(vmag**3)/(dp*rnu*(fH**3)))**(.5d0)
+     >           * (s2**0.75d0)
+            kernelVU = factor*(A+B)**(-2)
+            sx2 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JX,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JX,iT,i) )
+            sy2 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JY,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JY,iT,i) )
+            sz2 = kernelVU*
+     >                   ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
+     >                     ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
+
+            gx = 2.0d0*(sx1*dsi2-sx2*dsi1)+TwoThirds*(sx2-sx1)*dsi3
+            gy = 2.0d0*(sy1*dsi2-sy2*dsi1)+TwoThirds*(sx2-sx1)*dsi3
+            gz = 2.0d0*(sz1*dsi2-sz2*dsi1)+TwoThirds*(sx2-sx1)*dsi3
+
+            fvux = fvux + gx
+            fvuy = fvuy + gy
+            fvuz = fvuy + gz
+         
+            ! Diffusive-unsteady
+            kernel_du = exp(-b_du*vmag*s1/dp)
+            g1 = factor_du*kernel_du*
+     >                (ppiclf_dTdtMixt(iT-1,i) -ppiclf_dTdtPlag(iT-1,i))
+            kernel_du = exp(-b_du*vmag*s2/dp)
+            g2 = factor_du*kernel_du*
+     >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
+
+            g = 2.0d0*(g1*dsi2-g2*dsi1)+TwoThirds*(g2-g1)*dsi3
+            qq_du = qq_du + g
+
+!           if(ppiclf_iprop(5,i) .eq. 7 .and.
+!    >         ppiclf_iprop(7,i) .eq. 1724) then
+!              !open(unit=66,file='fort.66',position='append')   
+
+!              write(66,*) ppiclf_time, iT, time,
+!    >            factor_du, kernel_du,
+!    >            ppiclf_dTdtMixt(iT,i),
+!    >            ppiclf_dTdtPlag(iT,i),
+!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+!    >            factor_du*kernel_du*
+!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+!    >            qq_du,fvux,fvuy,fvuz,
+!    >            kernelVU, A, B, factor 
+
+!              flush(66)
+!           endif
+         enddo
+
+         ! Do interval [t_{N-1},t_{N-1}+dnk(iStage)]  
+         !s1 = ppiclf_timeBH(1)
+         s1 = ppiclf_timeBH(1)*(1.0d0+ppiclf_rk3dtrk(iStage))
+         s2 = ppiclf_timeBH(2)
+         dsinv = 1.0d0/(sqrt(s1)+sqrt(s2))
+         dsi1 = s1*dsinv
+         dsi2 = s2*dsinv
+         dsi3 = (s2+sqrt(s1*s2)+s1)*dsinv
+         dsi4 = (s2-s1)*dsinv
+
+         ! Viscous-unsteady
+         iT = 2
+         A  = (4.0d0*rpi*rnu/(dp**2))**(.25d0)
+         B  = (rpi*(vmag**3)/(dp*rnu*(fH**3)))**(.5d0)
+     >        * (s2**0.75d0)
+         kernelVU = factor*(A+B)**(-2)
+         sx2 = kernelVU*
      >                ( ppiclf_drudtMixt(PPICLF_JX,iT,i) -
      >                  ppiclf_drudtPlag(PPICLF_JX,iT,i) )
-         fvuy = fvuy + kernelVU*
+         sy2 = kernelVU*
      >                ( ppiclf_drudtMixt(PPICLF_JY,iT,i) -
      >                  ppiclf_drudtPlag(PPICLF_JY,iT,i) )
-         fvuz = fvuz + kernelVU*
+         sz2 = kernelVU*
      >                ( ppiclf_drudtMixt(PPICLF_JZ,iT,i) -
      >                  ppiclf_drudtPlag(PPICLF_JZ,iT,i) )
-
-         ! Diffusive Unsteady Heat Transfer starts here
-         b_du = (1.63d0 - 0.92d0*erf(0.017*(Pe - 80.0d0)))
-     >    *(1.0d0 - 0.4d0*exp(-Pe/16.0d0)-0.6d0*exp(-Pe**2/30.0d0))
          
-         ! Kernel for diffusive unsteady Heat Transfer
-         kernel_du = 0.5d0*2.0d0*sqrt(dp/(vmag*time))
-     >                      *exp(-b_du*vmag*time/dp)
-         qq_du = qq_du + factor_du*kernel_du*
-     >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
+         A  = (4.0d0*rpi*rnu/(dp**2))**(.25d0)
+         B  = (rpi*(vmag**3)/(dp*rnu*(fH**3)))**(.5d0)
+     >        * (s1**0.75d0)
+         kernelVU = factor*(A+B)**(-2)
+         sx1 = kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JX,iT-1,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JX,iT-1,i) )
+         sy1 = kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JY,iT-1,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JY,iT-1,i) )
+         sz1 = kernelVU*
+     >                ( ppiclf_drudtMixt(PPICLF_JZ,iT-1,i) -
+     >                  ppiclf_drudtPlag(PPICLF_JZ,iT-1,i) )
 
-        if(ppiclf_iprop(5,i) .eq. 7 .and.
-     >     ppiclf_iprop(7,i) .eq. 1724) then
-      open(unit=66,file='fort.66',position='append')   
+         gx = (sx2+sx1)*dsi4
+         gy = (sy2+sy1)*dsi4
+         gz = (sz2+sz1)*dsi4
 
-      write(66,*) ppiclf_time, iT, time,
-     >            factor_du, kernel_du,
-     >            ppiclf_dTdtMixt(iT,i),
-     >            ppiclf_dTdtPlag(iT,i),
-     >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-     >            factor_du*kernel_du*
-     >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-     >            qq_du,
-     >            kernelVU, A, B, factor 
+         fvux = fvux + gx
+         fvuy = fvuy + gy
+         fvuz = fvuy + gz
+         
+         ! Diffusive-unsteady Heat Transfer
+         kernel_du = exp(-b_du*vmag*s2/dp)
+         g2 = factor_du*kernel_du*
+     >           (ppiclf_dTdtMixt(iT,i)-ppiclf_dTdtPlag(iT,i))
 
-      flush(66)
+         kernel_du = exp(-b_du*vmag*s1/dp)
+         g1 = factor_du*kernel_du*
+     >           (ppiclf_dTdtMixt(iT-1,i)-ppiclf_dTdtPlag(iT-1,i))
 
+         g = (g2+g1)*dsi4
+         qq_du = qq_du + g
+
+
+!        if(ppiclf_iprop(5,i) .eq. 7 .and.
+!    >      ppiclf_iprop(7,i) .eq. 1724) then
+!           !open(unit=66,file='fort.66',position='append')   
+
+!           iT = 2
+!           time = ppiclf_timeBH(iT)
+!           write(66,*) ppiclf_time, iT, time,
+!    >            factor_du, kernel_du,
+!    >            ppiclf_dTdtMixt(iT,i),
+!    >            ppiclf_dTdtPlag(iT,i),
+!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
+!    >            factor_du*kernel_du*
+!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
+!    >            qq_du,fvux,fvuy,fvuz,
+!    >            kernelVU, A, B, factor 
+
+!           flush(66)
+!        endif
       endif
 
+      if (ppiclf_iprop(5,i) .eq. i1 .and.
+     >    ppiclf_iprop(7,i) .eq. i2) then
+          if (istage == 3) then
+             write(66,*) ppiclf_time,qq_du,fvux,fvuy,fvuz
+          endif
       endif
-
 
       return
       end
@@ -158,8 +715,10 @@
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024
+! Modified Dec. 1, 2025
 !
-! Shift arrays for Viscous Unsteady Force
+! Shift arrays for Viscous Unsteady Force and Diffusive Unsteady
+!    Heat Transfer
 !
 ! See rocpart/PLAG_RFLU_ShiftUnsteadyData.F90
 !
@@ -207,9 +766,12 @@
             ppiclf_nTimeBH = ppiclf_nTimeBH + 1
       endif
 
+      ! Note that ppiclf_timeBH stores s=t-tau, not tau
+      ! i.e., ppiclf_timeBH(i) == s(i) == t(N-i+2), i=2,...,M
       do iT = ppiclf_nTimeBH,2,-1
             ppiclf_timeBH(it) = ppiclf_timeBH(iT-1) + ppiclf_dt
       enddo
+      ppiclf_timeBH(1) = 0.0d0
 
 
       return
@@ -223,6 +785,8 @@
 ! Created Feb. 1, 2024
 !
 ! Update arrays for Viscous Unsteady Force for JT=1 (current time step)
+!
+! Note: index 1 is for current time
 !
 ! See libpicl/user_files/ppiclf_user_AddedMass.f
 !
@@ -318,7 +882,7 @@
 
         if(ppiclf_iprop(5,i) .eq. 7 .and.
      >     ppiclf_iprop(7,i) .eq. 1724) then
-          open(unit=67,file='fort.67',position='append')   
+          !open(unit=67,file='fort.67',position='append')   
           write(67,*) ppiclf_time, time_plot, dt, ppiclf_dt,
      >                ppiclf_dTdtMixt(1,i),     
      >                ppiclf_TMixt(1,i),
