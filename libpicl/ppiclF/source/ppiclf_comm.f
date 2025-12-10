@@ -831,7 +831,7 @@
         ! and we want filter equal a minimum of 2 cells.
         DO l = 1,3
           IF(ppiclf_filter(l) .LT. ppiclf_fluid_grid(3+l,iee)) THEN
-            ppiclf_filter(l) = 1.1D0*ppiclf_fluid_grid(3+l,iee)
+            ppiclf_filter(l) = 2.1D0*ppiclf_fluid_grid(3+l,iee)
           END IF
         END DO
       END DO
