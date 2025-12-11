@@ -260,7 +260,7 @@
                         END IF
                       END DO
                       dist = SQRT(dist)
-                      wInterp(icount) = 1.0D0/((dist + eps))
+                      wInterp(icount) = 1.0D0/((dist + eps))**3
                       wInterpTot  = wInterp(icount) + wInterpTot 
 
                     ELSE IF(loopcount .EQ. 2) THEN

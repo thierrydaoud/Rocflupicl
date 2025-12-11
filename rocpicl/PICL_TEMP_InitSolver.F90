@@ -273,12 +273,6 @@ END IF
  ppiclf_nUnsteadyData = PPICLF_VU
 ! ************************************************************
 
-! *** I think we can delete this? Random not used -Avery
-!seed = 1
-!CALL RANDOM_SEED(put=seed)
-!CALL RANDOM_SEED(size=isize)
-!***
-
 ! Josh Gillis - Fixed restart probelm
 ! TLJ - we should probably use the .rin file instead
 global%restartFromScratch = .true.
@@ -447,6 +441,24 @@ IF(global%restartFromScratch) THEN
       print*
    END IF
 
+
+   IF(xp_min < x_per_min .OR. xp_max < x_per_max .OR. &
+      xp_min < x_per_min .OR. xp_max < x_per_max .OR. &
+      xp_min < x_per_min .OR. xp_max < x_per_max) THEN
+     IF(global%myProcid == MASTERPROC) THEN
+       WRITE(*,*) 'WARNING - Particles initalized outside of fluid domain'
+       WRITE(*,*) 'Particle domain boundaries at t=0'
+       WRITE(*,*) 'x - min, max, dx', xp_min, xp_max, xp_max - xp_min
+       WRITE(*,*) 'y - min, max, dx', yp_min, yp_max, yp_max - yp_min
+       WRITE(*,*) 'z - min, max, dx', zp_min, zp_max, zp_max - zp_min
+       WRITE(*,*) 'x fluid min/max', x_per_min, x_per_max
+       WRITE(*,*) 'y fluid min/max', y_per_min, y_per_max
+       WRITE(*,*) 'z fluid min/max', z_per_min, z_per_max
+     END IF
+     CALL MPI_Barrier(global%mpiComm,errorFlag)
+     CALL ErrorStop(global,0,459,"rocpicl Init: Particles outside fluid domain")
+   END IF
+
    ! Close points.dat file
    CLOSE(iFile, IOSTAT=errorFlag)
    global%error = errorFlag   
@@ -590,14 +602,6 @@ DO i = 1,nCells
       IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
       ! For tets, make a rectangular box around it with maxCellLength equal in all dimensions
       IF(pGrid%cellGlob2Loc(1,i) == 1) Max_CellLen(l) = MAXVAL(Max_CellLen(:))
-!      IF(CellLen(l) > 1.0D-3 .OR. CellLen(l) < 1D-7) THEN
-!        WRITE(*,*) 'Likely error in calculating max element size'
-!        WRITE(*,*) 'Max & Min points:', MaxPoint(l), MinPoint(l), 'Dimension:',l
-!        WRITE(*,*) 'Centroid:', pRegion%grid%cofg(1,i), pRegion%grid%cofg(2,i), pRegion%grid%cofg(3,i)
-!        WRITE(*,*) 'Type (1==Tet,2==Hex)', pGrid%cellGlob2Loc(1,i)
-!        WRITE(*,*) 'Vertex locations'
-!        CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:CellLen')
-!      END IF
     END IF
   END DO !l
   IF(pGrid%cellGlob2Loc(1,i) == 1) THEN

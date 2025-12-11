@@ -125,9 +125,10 @@
       INTEGER*4 ix, iy, iz, npt_total, i, j, k, idum, jdum, kdum, 
      >          total_bin, targetTotBin, idealBin(3), Temp_iBin(3),
      >          iBin(3), iBinTot, tempi, ideal_bin_index(3), largeBin, 
+     >          medBin, smallBin,
      >          ppiclf_iglsum, NBMax, ierr, MaxPotentialBins(3), 
      >          maxbincount1, maxbincount2, BinCheck, minbin(3),
-     >          ppiclf_iglmax 
+     >          ppiclf_iglmax, binNegBound, binPosBound, binIterations
      >          
       REAL*8    xmin, ymin, zmin, xmax, ymax, zmax, temp1, temp2,
      >          binb_length(3), BinMinLen(3), ppiclf_glmin, 
@@ -136,7 +137,7 @@
      >          increaseRatio
       EXTERNAL  ppiclf_iglsum, ppiclf_glmin, ppiclf_glmax, ppiclf_glsum,
      >          ppiclf_iglmax
-      LOGICAL   MaxBinsAchieved(3)
+      LOGICAL   MaxBinsAchieved(3), TwoSmallBins
 !
 
       ix = 1
@@ -280,7 +281,11 @@
 !*** Start active bin iteration loop here      
       ! Update with targetTotBin based on active/inactive
       targetTotBin = ppiclf_np
-
+      ! This sets the number of bin permutations to try to find optimal
+      ! balance
+      binPosBound = 1
+      binNegBound = 1
+      binIterations = binPosBound + binNegBound 
       DO i = 1,3
         MaxPotentialBins(i) = FLOOR(binb_length(i)/BinMinLen(i))
         IF(MaxPotentialBins(i) .LT. 1) THEN
@@ -319,29 +324,54 @@
         ! Ensures most bins don't exceed number of 
         ! processors in case where one direction is
         ! much longer than the others.
+        ! Ranking the bins Real numbers
         largeBin = 1 
+        smallBin = 1
+        medBin   = 1
         DO i = 1,3
           ! INT(x+0.5) is equivalent to ROUND(x). 
           ! Round isn't a built in fortran function.
           IF(binsReal(i) .LT. 0.50D0) binsReal(i) = 0.51D0
           ppiclf_n_bins(i) = INT(binsReal(i)+0.5D0)
-          minBin(i) = ppiclf_n_bins(i) - 3
+          minBin(i) = ppiclf_n_bins(i) - binNegBound
           IF(minBin(i) .LT. 1) minBin(i) = 1
           IF(binsReal(i) .GT. binsReal(largeBin)) largeBin = i
+          IF(binsReal(i) .LT. binsReal(smallBin)) smallBin = i
         END DO
+        DO i = 1,3
+          IF(i .EQ. largeBin) CYCLE
+          IF(i .EQ. smallBin) CYCLE
+          medBin = i
+        END DO
+        ! This checks to make sure at least one combination is within
+        ! criteria of the largest possible total bins
         IF(minBin(1)*minBin(2)*minBin(3) .GT. targetTotBin) THEN
-        ! Make largest dimension equal to number of processors.
-        ! Make second largest dimension 0.99, so that it gets a larger
-        ! number of bins over the third dimension.
-          DO i = 1,3
-            IF(i .EQ. largeBin) THEN
-              ppiclf_n_bins(largeBin) = targetTotBin 
-              binsReal(largeBin) = REAL(ppiclf_n_bins(largeBin))
-            ELSE
-              ppiclf_n_bins(i) = 1
-              binsReal(i) = 0.51D0
-            END IF
-          END DO
+          IF(binsReal(medBin) .LT. 1) THEN
+            ! Make largest dimension equal to number of processors.
+            ! Other two dimensions are small
+            DO i = 1,3
+              IF(i .EQ. largeBin) THEN
+                ppiclf_n_bins(largeBin) = targetTotBin 
+                binsReal(largeBin) = REAL(ppiclf_n_bins(largeBin))
+              ELSE
+                ppiclf_n_bins(i) = 1
+                binsReal(i) = 0.51D0
+              END IF
+            END DO
+          ELSE
+            ! Set bins of two large dimensions proportionally by length
+            ! Set small dimension with 1 bins.
+            binsReal(smallBin) = 0.51D0
+            ppiclf_n_bins(smallBin) = 1
+
+            binsReal(medBin) = SQRT(REAL(targetTotBin)) *
+     >                    binb_length(medBin)/binb_length(largeBin)
+            ppiclf_n_bins(medBin) = INT(binsReal(medBin)+0.5D0)
+
+            binsReal(largeBin) = SQRT(REAL(targetTotBin)) *
+     >                     binb_length(largeBin)/binb_length(medBin)
+            ppiclf_n_bins(largeBin) = INT(binsReal(largeBin)+0.5D0)
+          END IF 
         END IF
         ! Ensures bins don't violate minimum length criteria
         maxbincount1  = 0
@@ -390,24 +420,26 @@
       total_bin = 0
       minBinError = 1.0D9
       ideal_bin_index = 0
-      DO ix = 0,2
-        iBin(1) = ppiclf_n_bins(1) + (ix-1)
+      DO ix = 0,binIterations
+        iBin(1) = ppiclf_n_bins(1) + (ix-binNegBound)
         ppiclf_bins_dx(1) = binb_length(1)/iBin(1)
         IF(ppiclf_bins_dx(1) .LT. BinMinLen(1) .OR.
      >                           iBin(1) .LT. 1) CYCLE
-        DO iy = 0,2
-          iBin(2) = ppiclf_n_bins(2) + (iy-1)
+        DO iy = 0,binIterations
+          iBin(2) = ppiclf_n_bins(2) + (iy-binNegBound)
           ppiclf_bins_dx(2) = binb_length(2)/iBin(2)
           IF(ppiclf_bins_dx(2) .LT. BinMinLen(2) .OR.
      >                             iBin(2) .LT. 1) CYCLE
-          DO iz = 0,2
-            iBin(3) = ppiclf_n_bins(3) + (iz-1)
+          DO iz = 0,binIterations
+            iBin(3) = ppiclf_n_bins(3) + (iz-binNegBound)
             ppiclf_bins_dx(3) = binb_length(3)/iBin(3)
             IF(ppiclf_bins_dx(3) .LT. BinMinLen(3) .OR.
      >                               iBin(3) .LT. 1) CYCLE
             iBinTot = iBin(1)*iBin(2)*iBin(3)
             IF(iBinTot .GE. total_bin .AND. iBinTot .GT. 0 .AND.
      >                     iBinTot .LE. targetTotBin) THEN
+              ! This resets the error min when a larger amount of
+              ! total bins are found.
               IF(iBinTot .GT. total_bin) THEN
                 minBinError = 1.0D9
               END IF
@@ -428,6 +460,10 @@
           END DO !iz
         END DO !iy
       END DO !ix
+      IF(total_bin .EQ. 0 .AND. ppiclf_nid .EQ. 0) THEN
+        PRINT*, 'correct bin combination not found'
+      END IF
+
       tempi = 0
       total_bin = 1      
       DO i = 1,3
@@ -435,12 +471,14 @@
         ! same number of bin equation as in above loops with best
         ! indices
         ppiclf_n_bins(i) = INT(binsReal(i)+0.5D0)
-     >                     + (ideal_bin_index(i) - 1)
+     >                     + (ideal_bin_index(i) - binNegBound)
         ppiclf_bins_dx(i) = binb_length(i)/ppiclf_n_bins(i)
         total_bin = total_bin*ppiclf_n_bins(i)
         IF(total_bin .GT. ppiclf_np) THEN
-          PRINT*, 'binERROR: Num Bins > NumProcessors',total_bin,
+          IF(ppiclf_nid .EQ. 0) THEN
+            PRINT*, 'binERROR: Num Bins > NumProcessors',total_bin,
      >            ppiclf_np, targetTotBin
+          END IF
           CALL ppiclf_exittr('Error in Createbins',0.0,0)
         END IF
         IF(ppiclf_n_bins(i) .LT. 1) THEN
