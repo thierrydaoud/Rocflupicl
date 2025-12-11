@@ -45,7 +45,7 @@
 ! Internal:
 !
       real*8 :: ppiclf_rcp_part, ppiclf_p0
-      integer :: ppiclf_moveparticle
+      integer :: ppiclf_moveparticle, ierr
       CHARACTER(12) :: ppiclf_matname
       common /RFLU_ppiclf_misc01/ ppiclf_rcp_part
       common /RFLU_ppiclf_misc02/ ppiclf_matname
@@ -131,7 +131,7 @@
      >       + 1) - 1))
       INTEGER*4 i_Bin(3), n_SBin(3), tot_SBin
 
-!
+
 ! Unit Test only Code:
 !-----------------------------------------------------------------------
 !
@@ -163,13 +163,13 @@
       ! Count every iStage=1 for debug output
       if (iStage .eq. 1) idebug = idebug + 1
 
-!      ! Print dt and time every time step
-!      if (ppiclf_nid==0) then
-!        if (istage .eq. 1) then
-!          write(6,'(a,2x,2(1pe14.6),2x,i3)') '*** PPICLF dt, time = ',
-!     >      ppiclf_dt,ppiclf_time
-!        endif
-!      endif
+      ! Print dt and time every time step
+      if (ppiclf_nid==0) then
+        if (istage .eq. 1) then
+          write(6,'(a,2x,2(1pe14.6),2x,i3)') '*** PPICLF dt, time = ',
+     >      ppiclf_dt,ppiclf_time
+        endif
+      endif
 
       burnrate_model = 0
       if (burnrate_flag .gt. 0) then
@@ -208,16 +208,11 @@
 !
 ! Reapply axi-sym collision correction
 ! Right now hard coding smallest radius  
-!     do i=1,ppiclf_npart
-!        ppiclf_rprop(PPICLF_R_JDPe,i) = 
-!     > (0.00005/ppiclf_rprop(PPICLF_R_JSPT,i))
-!     > * ppiclf_rprop(PPICLF_R_JDP,i)  
-        !if (ppiclf_npart .gt. 0) then
-        !if ((i .eq. 1) .or. (i .eq. ppiclf_npart)) then
-        !  write(*,*) "i,JSPT",i,ppiclf_rprop(PPICLF_R_JSPT,i)       
-        !endif
-        !endif
-!      end do 
+      do i=1,ppiclf_npart
+        ppiclf_rprop(PPICLF_R_JDPe,i) = 
+     > (0.00005/ppiclf_rprop(PPICLF_R_JSPT,i))
+     > * ppiclf_rprop(PPICLF_R_JDP,i)  
+      end do 
 !
 !-----------------------------------------------------------------------
 !
@@ -238,7 +233,6 @@
         call ppiclf_user_subbinMap(i_Bin, n_SBin, tot_SBin 
      >                               ,SBin_counter ,SBin_map)
       endif ! Collisions, QS Fluct, Briney AM, or pseudoTurb flags on
-      
 !
 !-----------------------------------------------------------------------
 !
@@ -305,10 +299,10 @@
          ! TLJ - 04/03/2025; Do not calculate forces if vmag = 0
          !       Otherwise the particles might move before the 
          !       shock arrives
-         !if (vmag <= 1.d-8) cycle
+         if (vmag <= 1.d-8) cycle
 
          ! 08/08/2025 - Thierry  - 1.d-8 is very small
-         !if (vmag <= 1.d-3) cycle
+         if (vmag <= 1.d-3) cycle
          !***
          ! Avery - This is planar-shock curtain specific.  Shouldn't be in main code
          !***
@@ -321,7 +315,7 @@
 
          ! Thierry - seeing if that fixes the issue of very large CD
          ! initially 
-         !if(vmag .lt. 1.0 .or. rmachp .lt. 1.d-3) cycle
+         if(vmag .lt. 1.0 .or. rmachp .lt. 1.d-3) cycle
  
          ! TLJ - redefined rprop(PPICLF_R_JSPT,i) to be the particle
          !   velocity magnitude for plotting purposes - 01/03/2025
@@ -385,6 +379,7 @@
             call ppiclf_user_AM_Briney_Unary(i,iStage,
      >           famx,famy,famz,rmass_add)
          endif ! end am_flag = 2
+
 
 !
 ! Step 1b: Call NearestNeighbor if particles i and j interact
@@ -451,11 +446,12 @@
          IF ( 1 .EQ. 1 ) THEN !sbNearest_flag .EQ. 1) THEN
             CALL ppiclf_solve_NearestNeighborSB(
      >           i,tot_SBin,SBin_counter,SBin_map,n_SBin,i_Bin)
-         ELSE
+!         ELSE
 !             CALL ppiclf_solve_NearestNeighbor(i)
          END IF
 
          end if ! end Step 1b; nearestneighbor
+
 
 !
 ! Step 2: Force component quasi-steady
@@ -476,6 +472,7 @@
          fqsx = beta*vx
          fqsy = beta*vy
          fqsz = beta*vz
+
 !
 ! Step 3: Force fluctuation for quasi-steady force
 !
@@ -503,6 +500,7 @@
          ppiclf_rprop(PPICLF_R_XIPAR,i)  = xi_par
          ppiclf_rprop(PPICLF_R_XIPERP,i) = xi_perp
          ppiclf_rprop(PPICLF_R_XIT,i)    = xi_T
+
 
 !
 ! Step 4: Force component added mass
@@ -543,6 +541,7 @@
             endif
          endif
 
+
 !-----------------------------------------------------------------------
 
 !
@@ -570,7 +569,6 @@
             fdpdz = fdpdz + fdpvdz
          endif ! end pg_flag = 1
 
-
 !
 ! Step 6: Force component collisional force, ie, particle-particle
 !
@@ -589,12 +587,14 @@
 
          endif ! collisional_flag >= 1
 
+
 !
 ! Step 7: Viscous unsteady force with history kernel
 !
          if (ViscousUnsteady_flag==1) then
             call ppiclf_user_VU_Rocflu(i,iStage,fvux,fvuy,fvuz)
          endif
+
 
 !
 ! Step 8a: Combustion model for reactive particles
@@ -612,6 +612,7 @@
          if (heattransfer_flag >= 1) then
             call ppiclf_user_HT_driver(i,qq)
          endif ! heattransfer_flag >= 1
+
 
 !
 ! Step 9a: Angular velocity model
@@ -634,6 +635,7 @@
          if (collisional_flag == 4) then
             call ppiclf_user_Lift_driver(i,iStage,liftx,lifty,liftz)
          endif ! collisional_flag == 4
+
 
 !
 ! Step 10: Set ydot for all PPICLF_SLN number of equations
@@ -761,7 +763,7 @@
      >   ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JVZ,i)
         ppiclf_feedbk(PPICLF_P_JPHIPT,i) =
      >   ppiclf_rprop(PPICLF_R_JVOLP,i)*ppiclf_y(PPICLF_JT,i)
- 
+
 
 ! Step 12: If stationary, don't move particles. Feedback can still be on
 ! though.
@@ -795,33 +797,35 @@
             ppiclf_ydot(PPICLF_JOZ,i) = 0.0d0
          endif
 
+
+
 !
 ! Step 13: Store forces
-!
-         ! Thierry - just testing this for now to see if it makes a difference in R_perp
-         ppiclf_rprop5(PPICLF_R_FQSX,i)  = fqsx
-         ppiclf_rprop5(PPICLF_R_FQSY,i)  = fqsy
-         ppiclf_rprop5(PPICLF_R_FQSZ,i)  = fqsz
-         ppiclf_rprop5(PPICLF_R_FAMX,i)  = famx - rmass_add*
-     >                                     ppiclf_ydot(PPICLF_JVX,i)
-         ppiclf_rprop5(PPICLF_R_FAMY,i)  = famy - rmass_add*
-     >                                     ppiclf_ydot(PPICLF_JVY,i)
-         ppiclf_rprop5(PPICLF_R_FAMZ,i)  = famz - rmass_add*
-     >                                     ppiclf_ydot(PPICLF_JVZ,i)
-         ppiclf_rprop5(PPICLF_R_FAMBX,i) = FamBinary(1)
-         ppiclf_rprop5(PPICLF_R_FAMBY,i) = FamBinary(2)
-         ppiclf_rprop5(PPICLF_R_FAMBZ,i) = FamBinary(3)
-         ppiclf_rprop5(PPICLF_R_FCX,i)   = fcx
-         ppiclf_rprop5(PPICLF_R_FCY,i)   = fcy
-         ppiclf_rprop5(PPICLF_R_FCZ,i)   = fcz
-         ppiclf_rprop5(PPICLF_R_FVUX,i)  = fvux
-         ppiclf_rprop5(PPICLF_R_FVUY,i)  = fvuy
-         ppiclf_rprop5(PPICLF_R_FVUZ,i)  = fvuz
-         ppiclf_rprop5(PPICLF_R_QQ,i)    = qq
-         ppiclf_rprop5(PPICLF_R_FPGX,i)  = fdpdx
-         ppiclf_rprop5(PPICLF_R_FPGY,i)  = fdpdy
-         ppiclf_rprop5(PPICLF_R_FPGZ,i)  = fdpdz
 
+         IF(PPICLF_LRP5 .EQ. 19) THEN
+           ppiclf_rprop5(PPICLF_R_FQSX,i)  = fqsx
+           ppiclf_rprop5(PPICLF_R_FQSY,i)  = fqsy
+           ppiclf_rprop5(PPICLF_R_FQSZ,i)  = fqsz
+           ppiclf_rprop5(PPICLF_R_FAMX,i)  = famx - rmass_add*
+     >                                       ppiclf_ydot(PPICLF_JVX,i)
+           ppiclf_rprop5(PPICLF_R_FAMY,i)  = famy - rmass_add*
+     >                                       ppiclf_ydot(PPICLF_JVY,i)
+           ppiclf_rprop5(PPICLF_R_FAMZ,i)  = famz - rmass_add*
+     >                                       ppiclf_ydot(PPICLF_JVZ,i)
+           ppiclf_rprop5(PPICLF_R_FAMBX,i) = FamBinary(1)
+           ppiclf_rprop5(PPICLF_R_FAMBY,i) = FamBinary(2)
+           ppiclf_rprop5(PPICLF_R_FAMBZ,i) = FamBinary(3)
+           ppiclf_rprop5(PPICLF_R_FCX,i)   = fcx
+           ppiclf_rprop5(PPICLF_R_FCY,i)   = fcy
+           ppiclf_rprop5(PPICLF_R_FCZ,i)   = fcz
+           ppiclf_rprop5(PPICLF_R_FVUX,i)  = fvux
+           ppiclf_rprop5(PPICLF_R_FVUY,i)  = fvuy
+           ppiclf_rprop5(PPICLF_R_FVUZ,i)  = fvuz
+           ppiclf_rprop5(PPICLF_R_QQ,i)    = qq
+           ppiclf_rprop5(PPICLF_R_FPGX,i)  = fdpdx
+           ppiclf_rprop5(PPICLF_R_FPGY,i)  = fdpdy
+           ppiclf_rprop5(PPICLF_R_FPGZ,i)  = fdpdz
+         END IF
 !
 ! Step 14: If debug mode is ON, calculate and print the max values.
 !          The user should not have this ON for production runs.
@@ -927,6 +931,7 @@
          endif
          endif
          endif
+
 
 
       enddo ! do i=1,ppiclf_npart

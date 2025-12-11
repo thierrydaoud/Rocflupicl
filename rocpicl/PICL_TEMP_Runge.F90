@@ -724,10 +724,15 @@ pGc => pRegion%mixt%gradCell
                          +DOT_PRODUCT(ug,pGc(:,4,i))
 
        CALL ppiclf_solve_GetProFld(i,PPICLF_P_JPHIP,vfP(i))
-       PhiP(i) = vfP(i)/pRegion%grid%vol(i)
+       vfP(i) = vfP(i)/pRegion%grid%vol(i)
+       PhiP(i) = vfP(i)
+       !VOL Frac cap
+       IF(PhiP(i) .GT. 0.62) PhiP(i) = 0.62
+       vfp(i) = PhiP(i)      
 
        ! TLJ - 02/07/2025 scaled conserved density by gas-phase volume fraction
-       vFrac = 1.0_RFREAL - pRegion%mixt%piclVF(i)
+       vFrac = 1.0_RFREAL - PhiP(i)!pRegion%mixt%piclVF(i)
+
        rhoF(i) = pRegion%mixt%cv(CV_MIXT_DENS,i) / vFrac
        uxF(i) =  pRegion%mixt%cv(CV_MIXT_XMOM,i) &
                 /pRegion%mixt%cv(CV_MIXT_DENS,i)
@@ -835,13 +840,8 @@ pGc => pRegion%mixt%gradCell
        dpvxF(i) = pRegion%mixt%diss(CV_MIXT_XMOM,i)/pRegion%grid%vol(i)
        dpvyF(i) = pRegion%mixt%diss(CV_MIXT_YMOM,i)/pRegion%grid%vol(i)
        dpvzF(i) = pRegion%mixt%diss(CV_MIXT_ZMOM,i)/pRegion%grid%vol(i)
+     END DO
 
-       
-       !Dump back VolFrac
-       !VOL Frac cap
-       IF(PhiP(i) .GT. 0.62) PhiP(i) = 0.62
-       vfp(i) = PhiP(i)      
-       END DO
 ! Interp field calls
 ! TLJ - interpolates various fluid quantities onto the 
 !       the ppiclf particle locations
@@ -883,10 +883,10 @@ pGc => pRegion%mixt%gradCell
       CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOX,SDOX)  
       CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOY,SDOY)  
       CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOZ,SDOZ)  
-CALL MPI_BARRIER (global%mpiComm,global%mpierr )
 
  ! Solve RK stage of time stepping particle solution
      CALL ppiclf_solve_IntegrateParticle(1,piclIO,piclDtMin,piclCurrentTime)
+
 !FEED BACK TERMS
      JFXCell = 0.0_RFREAL
      JFYCell = 0.0_RFREAL
@@ -1209,7 +1209,6 @@ END DO
     IF(global%error /= ERR_NONE ) THEN
       CALL ErrorStop(global,ERR_DEALLOCATE,__LINE__,'PPICLF:xGrid')
     END IF ! global%error
-
 
     DEALLOCATE(uxF,STAT=errorFlag)
     global%error = errorFlag
@@ -1557,7 +1556,6 @@ END DO
 !PPICLF Integration END
 
 ! finalize --------------------------------------------------------------------
-
   CALL DeregisterFunction(global )
 END SUBROUTINE PICL_TEMP_Runge
 

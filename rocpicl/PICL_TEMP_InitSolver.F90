@@ -121,8 +121,8 @@ INTEGER :: errorFlag,icg
    REAL(RFREAL) :: dp_min,dp_max,rhop,tester,ratio,total_vol,xMinCurt,&
                    xMaxCurt,yMinCurt,yMaxCurt,xMinCell,xMaxCell,yMinCell,&
                    yMaxCell,zMinCell,zMaxCell,x,vFrac,volpclsum,xLoc,yLoc,zLoc,yL, &
-                   zpf_factor,xpf_factor,dp,neighborWidth,dp_max_l,xp_min,xp_max, &
-                   xp_min_l,xp_max_l, MinFluidCells
+                   zpf_factor,xpf_factor,dp,neighborWidth,xp_min,xp_max, &
+                   yp_min, yp_max, zp_min, zp_max, MinFluidCells
    REAL(RFREAL) :: y(PPICLF_LRS, PPICLF_LPART), &
                    rprop(PPICLF_LRP, PPICLF_LPART)
    REAL(RFREAL), DIMENSION(:,:), ALLOCATABLE :: rocGrid 
@@ -337,15 +337,23 @@ IF(global%restartFromScratch) THEN
 
    rprop(1:PPICLF_LRP,1:PPICLF_LPART) = 0.0D0
    dp_max = 0.0D0
-   xp_min_l = +17400000.0
-   xp_max_l = -17400000.0
+   xp_min =  17400000.0
+   yp_min =  17400000.0
+   zp_min =  17400000.0
+   xp_max = -17400000.0
+   yp_max = -17400000.0
+   zp_max = -17400000.0
    DO i_global=1,npart
       READ(iFile,*) matName, (y(ii,i),ii=PPICLF_JX,PPICLF_JZ),dp !points.dat not formated
 
       ! These are global max/min's since in 1:npart loop
       dp_max = max(dp_max,dp)
-      xp_min_l = min(xp_min_l,y(1,i)-dp/2.0)
-      xp_max_l = max(xp_max_l,y(1,i)+dp/2.0)
+      xp_min = min(xp_min,y(1,i)-dp/2.0)
+      xp_max = max(xp_max,y(1,i)+dp/2.0)
+      yp_min = min(yp_min,y(2,i)-dp/2.0)
+      yp_max = max(yp_max,y(2,i)+dp/2.0)
+      zp_min = min(zp_min,y(3,i)-dp/2.0)
+      zp_max = max(zp_max,y(3,i)+dp/2.0)
   
       ! if in range for this processor set all the other properties and increment i
       IF((i_global .GT. i_global_min) .AND. (i_global .LE. i_global_max)) THEN
@@ -412,17 +420,30 @@ IF(global%restartFromScratch) THEN
    END DO
    npart_local = i - 1
 
-   CALL MPI_ALLREDUCE(xp_min_l,xp_min,1,MPI_RFREAL,MPI_MIN, &
+   CALL MPI_ALLREDUCE(xp_min,xp_min,1,MPI_RFREAL,MPI_MIN, &
         global%mpiComm,global%mpierr)
 
-   CALL MPI_ALLREDUCE(xp_max_l,xp_max,1,MPI_RFREAL,MPI_MAX, &
+   CALL MPI_ALLREDUCE(xp_max,xp_max,1,MPI_RFREAL,MPI_MAX, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(yp_min,yp_min,1,MPI_RFREAL,MPI_MIN, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(yp_max,yp_max,1,MPI_RFREAL,MPI_MAX, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(zp_min,zp_min,1,MPI_RFREAL,MPI_MIN, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(zp_max,zp_max,1,MPI_RFREAL,MPI_MAX, &
         global%mpiComm,global%mpierr)
 
    IF(global%myProcid == MASTERPROC) THEN
       print*
-      print*,'TLJ starting location of particle bed (xp_min) = ',xp_min
-      print*,'TLJ ending   location of particle bed (xp_max) = ',xp_max
-      print*,'TLJ particle bed thickness (xp_max-xp_min)*1e3 = ',(xp_max-xp_min)*1e3
+      print*,'Particle domain boundaries at t=0'
+      print*,'x - min, max, dx', xp_min, xp_max, xp_max - xp_min
+      print*,'y - min, max, dx', yp_min, yp_max, yp_max - yp_min
+      print*,'z - min, max, dx', zp_min, zp_max, zp_max - zp_min
       print*
    END IF
 
@@ -458,10 +479,10 @@ ELSE
 
    npart = -1
    dp_max = -1.0
-   CALL ppiclf_io_ReadParticleVTU(trim(vtuFile), ii, npart, dp_max_l)
-   CALL MPI_Allreduce(dp_max_l,dp_max,1,MPI_RFREAL,MPI_MAX, &
+   CALL ppiclf_io_ReadParticleVTU(trim(vtuFile), ii, npart, dp_max)
+   CALL MPI_Allreduce(dp_max,dp_max,1,MPI_RFREAL,MPI_MAX, &
       global%mpiComm,global%mpierr )
-   print*,global%myProcid,npart,dp_max_l,dp_max
+   print*,global%myProcid,npart,dp_max,dp_max
    IF( global%myProcid == MASTERPROC) THEN
       print*, " "
       WRITE(*,*) 'Finished PPICLF Restart'
@@ -496,6 +517,8 @@ ALLOCATE(rocGrid(7,nCells),STAT=errorFlag)
 IF ( global%error /= ERR_NONE ) THEN
   CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:rocGrid')
 END IF ! global%error
+
+
 
 DO i = 1, nCells 
   IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
@@ -540,7 +563,7 @@ DO i = 1,nCells
     MaxPoint(l) = -1.0D10 
     MinPoint(l) =  1.0D10 
     CellLen(l)   =  0.0D0   
-    Max_CellLen(l)  =  1.23456789D-10
+    Max_CellLen(l)  = 0.0D0
   END DO !l
   ! Add all x,y,z cell corners for centroid and find extremes
   DO k = 1,CellVertices
@@ -560,20 +583,28 @@ DO i = 1,nCells
   DO l = 1,3
     ! Find element length in all dimensions
     CellLen(l) = ABS(MaxPoint(l)-MinPoint(l))
-    ! Find max lengths for all grid cells on this processor
-    IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
-    IF(CellLen(l) > 1D-2 .OR. CellLen(l) < 1D-7) THEN
-      WRITE(*,*) 'Likely error in calculating max element size'
-      WRITE(*,*) 'Max & Min points:', MaxPoint(l), MinPoint(l), 'Dimension:',l
-      CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:CellLen')
+    ! Find max lengths for grid cells in particle domain on this processor
+    IF( (pRegion%grid%cofg(1,i) >= xp_min) .AND. (pRegion%grid%cofg(1,i) <= xp_max) .AND. & 
+        (pRegion%grid%cofg(2,i) >= yp_min) .AND. (pRegion%grid%cofg(2,i) <= yp_max) .AND. & 
+        (pRegion%grid%cofg(3,i) >= zp_min) .AND. (pRegion%grid%cofg(3,i) <= zp_max)) THEN 
+      IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
+      ! For tets, make a rectangular box around it with maxCellLength equal in all dimensions
+      IF(pGrid%cellGlob2Loc(1,i) == 1) Max_CellLen(l) = MAXVAL(Max_CellLen(:))
+!      IF(CellLen(l) > 1.0D-3 .OR. CellLen(l) < 1D-7) THEN
+!        WRITE(*,*) 'Likely error in calculating max element size'
+!        WRITE(*,*) 'Max & Min points:', MaxPoint(l), MinPoint(l), 'Dimension:',l
+!        WRITE(*,*) 'Centroid:', pRegion%grid%cofg(1,i), pRegion%grid%cofg(2,i), pRegion%grid%cofg(3,i)
+!        WRITE(*,*) 'Type (1==Tet,2==Hex)', pGrid%cellGlob2Loc(1,i)
+!        WRITE(*,*) 'Vertex locations'
+!        CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:CellLen')
+!      END IF
     END IF
   END DO !l
   IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
-    ! Make max cell length same in all dimensions for tetrahedral
+    ! Make cell length same in all dimensions for tetrahedral
     ! This is due to their shape not being rectangular
     DO l = 1,3
       CellLen(l) = MAX(CellLen(1),CellLen(2),CellLen(3))
-      IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
     END DO !l
   END IF
 
@@ -638,6 +669,7 @@ END IF
 
 ! Creates OverlapGrid and Calls Init Solve
 CALL ppiclf_comm_InitOverlapGrid(nCells,rocGrid)
+CALL ppiclf_solve_InitSolve
 
 INQUIRE(FILE='filein.vtk', EXIST=wall_exists)
 IF(wall_exists) THEN
@@ -702,7 +734,7 @@ DO i = 1, nCells
 !*** VOL FRAC CAP
 !*** I THINK WE SHOULD DELETE THIS CAP - AVERY ***
        IF(volp(i) .GT. 0.62) THEN
-           volp(i) = 0.62 
+           volp(i) = 0.62
        END IF
        pRegion%mixt%piclVF(i) = volp(i) 
 END DO
