@@ -1380,7 +1380,7 @@ c----------------------------------------------------------------------
       ! Local Variables
       INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
      >          CellID_nearest(28), partCount
-      REAL*8    dSQl, dSQi, dSQ(28), xp(3), dl 
+      REAL*8    dSQl, dSQi, dSQ(28), xp(3), dl, 
      >          CellCenter(3,28), w(27), binblength(3),  
      >          Max_CellLen(3), Max_CellLenSQ(3), dSQchk(3)
       LOGICAL   added, farAway, alreadyMapped
@@ -1605,7 +1605,7 @@ c----------------------------------------------------------------------
         IF(nnearest .LT. 1) remove = .TRUE.
 
         ! Remove particle outside of any cell
-        IF(nnerest .LT. 27 .AND. nnearest .GE. 1) THEN
+        IF(nnearest .LT. 27 .AND. nnearest .GE. 1) THEN
          ie = CellID_nearest(1)
          DO l = 1,3
           ! similar distance check as above, but only for the cell that is
