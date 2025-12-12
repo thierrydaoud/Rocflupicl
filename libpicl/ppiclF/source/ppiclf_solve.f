@@ -1605,7 +1605,7 @@ c----------------------------------------------------------------------
         IF(nnearest .LT. 1) remove = .TRUE.
 
         ! Remove particle outside of any cell
-        IF(nnerest .LT. 27) THEN
+        IF(nnerest .LT. 27 .AND. nnearest .GE. 1) THEN
          ie = CellID_nearest(1)
          DO l = 1,3
           ! similar distance check as above, but only for the cell that is
