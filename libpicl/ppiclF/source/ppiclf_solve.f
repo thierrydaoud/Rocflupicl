@@ -1380,7 +1380,7 @@ c----------------------------------------------------------------------
       ! Local Variables
       INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
      >          CellID_nearest(28), partCount
-      REAL*8    dSQl, dSQi, dSQ(28), xp(3),  
+      REAL*8    dSQl, dSQi, dSQ(28), xp(3), dl 
      >          CellCenter(3,28), w(27), binblength(3),  
      >          Max_CellLen(3), Max_CellLenSQ(3), dSQchk(3)
       LOGICAL   added, farAway, alreadyMapped
@@ -1405,6 +1405,7 @@ c----------------------------------------------------------------------
      >           temp_SBin, iSB, jSB, kSB, loopSB, i_count,
      >           firstSB(3), lastSB(3)  
       REAL*8    bin_Min(3), x_range(3), size_SBin(3)
+      LOGICAL   remove
       !***************************************************************
 
       IF(ppiclf_npart .LT. 1) RETURN
@@ -1601,7 +1602,31 @@ c----------------------------------------------------------------------
           END DO !jSB
         END DO !iSB
         nnearest = MIN(nnearest,27)
-        IF (nnearest .lt. 1) THEN
+        IF(nnearest .LT. 1) remove = .TRUE.
+
+        ! Remove particle outside of any cell
+        IF(nnerest .LT. 27) THEN
+         ie = CellID_nearest(1)
+         DO l = 1,3
+          ! similar distance check as above, but only for the cell that is
+          ! closest to the particle (1st index in nnearest)
+          ! used ABS since distance isn't squared.
+          ! ppiclf_interp_dchk is set to be 1.5xmax cell length per
+          ! dimension (in SUBROUTINE ppiclf_solve_InterpTupleTransfer)
+          IF(ppiclf_linperiodic(l) .AND.
+     >                            ppiclf_EqualDomain(l)) THEN
+            dl = ABS(MIN((ppiclf_picl_grid(l,ie) - xp(l)), 
+     >             (binblength(l)-ABS(ppiclf_picl_grid(l,ie)
+     >              - xp(l)))))
+          ELSE
+            dl = ABS(ppiclf_picl_grid(l,ie) - xp(l))
+          END IF
+          ! Ensure particle is within 1/2 cell distance of one cell.
+          IF(dl .GT. ppiclf_interp_dchk(l)/1.5D0*0.5D0) remove = .TRUE.
+         END DO
+        END IF
+
+        IF (remove) THEN
           ! Particle is outside of fluid domain.
           ! iprop(8,ip) set to -1 means it will be removed
           ! from ppiclf_y & ppiclf_rprop, rprop2, rprop3, rprop4, rprop5
@@ -1609,6 +1634,7 @@ c----------------------------------------------------------------------
           ppiclf_remove_particle = .TRUE.
           PRINT*, 'part # on proc # removed.', ppiclf_iprop(1,ip),
      >            ppiclf_nid
+          remove = .FALSE.
         ELSE
           partCount = partCount + 1
           ! use partCount since ip includes possible removed particles
