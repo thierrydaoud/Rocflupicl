@@ -442,15 +442,16 @@ IF(global%restartFromScratch) THEN
    END IF
 
 
-   IF(xp_min < x_per_min .OR. xp_max < x_per_max .OR. &
-      xp_min < x_per_min .OR. xp_max < x_per_max .OR. &
-      xp_min < x_per_min .OR. xp_max < x_per_max) THEN
+   IF(xp_min < x_per_min .OR. xp_max > x_per_max .OR. &
+      yp_min < y_per_min .OR. yp_max > y_per_max .OR. &
+      zp_min < z_per_min .OR. zp_max > z_per_max) THEN
      IF(global%myProcid == MASTERPROC) THEN
        WRITE(*,*) 'WARNING - Particles initalized outside of fluid domain'
-       WRITE(*,*) 'Particle domain boundaries at t=0'
-       WRITE(*,*) 'x - min, max, dx', xp_min, xp_max, xp_max - xp_min
-       WRITE(*,*) 'y - min, max, dx', yp_min, yp_max, yp_max - yp_min
-       WRITE(*,*) 'z - min, max, dx', zp_min, zp_max, zp_max - zp_min
+       WRITE(*,*) 'Particle domain boundaries at t=0:'
+       WRITE(*,*) 'x - min, max', xp_min, xp_max, xp_max - xp_min
+       WRITE(*,*) 'y - min, max', yp_min, yp_max, yp_max - yp_min
+       WRITE(*,*) 'z - min, max', zp_min, zp_max, zp_max - zp_min
+       WRITE(*,*) 'Fluid domain boundaries:'
        WRITE(*,*) 'x fluid min/max', x_per_min, x_per_max
        WRITE(*,*) 'y fluid min/max', y_per_min, y_per_max
        WRITE(*,*) 'z fluid min/max', z_per_min, z_per_max
