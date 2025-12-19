@@ -1,5 +1,4 @@
-#include "../../ppiclF/source/PPICLF_USER.h"
-#include "../../ppiclF/source/PPICLF_STD.h"
+#include "PPICLF_STD.h"
 !----------------------------------------------------------------------
       PROGRAM main
 

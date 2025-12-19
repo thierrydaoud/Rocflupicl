@@ -93,22 +93,5 @@
 !
 ! For ppiclf_solve_InitAngularPeriodic
 !
-      integer*4 x_per_flag, y_per_flag, z_per_flag, ang_per_flag,
-     >          ang_case 
-      real*8 ang_per_angle, ang_per_xangle,
-     >       ang_per_rin, ang_per_rout,
-     >       xrot(3) , vrot(3)
-      real*8 x_per_min, x_per_max,
-     >  y_per_min, y_per_max, z_per_min, z_per_max
-
-      common /solve_InitAngularPeriodic01/ x_per_flag, y_per_flag, 
-     >                                z_per_flag, ang_per_flag,
-     >                                ang_case
-      common /solve_InitAngularPeriodic02/ ang_per_angle, 
-     >                                ang_per_xangle,
-     >                                ang_per_rin, 
-     >                                ang_per_rout,
-     >                                xrot, vrot
-      common /solve_InitAngularPeriodic03/ x_per_min, x_per_max,
-     >  y_per_min, y_per_max, z_per_min, z_per_max
-     
+      
+! MOVED TO ppiclf_data.f90
