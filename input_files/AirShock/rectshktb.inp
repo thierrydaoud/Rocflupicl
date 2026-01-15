@@ -94,32 +94,41 @@ SPHT     840.0              ! Specific heat
 # PICL
 USED             1      ! 0 = not used; 1 = used
 STATIONARY       0      ! 1 = particles do not move; negative = unit test cases
+TEMP             296.40 ! temperature; must be consistent with Ambient air conditions
+!-------- Quasi-Steady Models
 QSFORCE 	       2      ! 0 = none; 1 = Parmar; 2 = Osnes
-AMFORCE 	       2      ! 0 = none; 1 = Parmar; 2 = Briney
-PGFORCE 	       1      ! 0 = none; 1 = on
-COLLISIONS 	     4      ! 0 = none; 1 = Fn; 2: +(Ft+Tc); 3: +(Th+Tr); 4: +(Fl+Tu)
-VISCOUSUNSTEADY  1      ! 0 = none; 1 = Rocflu Method
-HEATTRANSFER 	   0      ! 0 = none; 1 = Stokes; 2 = RM; 3 = Gunn; 4 = Fox
-FEEDBACK         1      ! 0 = none; 1 = particles affecting fluid
 QSFLUCT 	       2      ! 0 = none; 1 = Lattanzi; 2 = Osnes  
+PSEUDOTURB       0      ! 0 = none; 1 = Osnes (needs QSFLUCT=2)
 QSFLUCTFILT      0      ! 0 = box filter; 1 = gaussian. For fluctuation QS force only.
 QSFLUCTFILTADAPT 0      ! 0 = not adaptive; 1 = adaptive
-TEMP             296.40 ! temperature; must be consistent with Ambient air conditions
-FILTERWIDTH      0.002  ! meters
-NEIGHBORWIDTH    0.0    ! Actual neighbor width = max(4*dp_max, neighborwidth)
+!-------- Unsteady Models: Added-mass, Pressure gradient, and Viscous-Unsteady
+AMFORCE 	       2      ! 0 = none; 1 = Parmar; 2 = Briney
+PGFORCE 	       1      ! 0 = none; 1 = on
+VISCOUSUNSTEADY  4      ! 0 = none; 1 = Trapezoid (const dt); 2 = Trapezoid (varying dt); 3 = Modified Trapzeoid (varying dt); 4 = Hinsberg (recommended)
+!-------- Collisional Models, Subbin speeds up particle search and interaction
+COLLISIONS 	     4      ! 0 = none; 1 = Fn; 2: +(Ft+Tc+Tr); 3: +(Th+Tu); 4: +(Fl)
+SUBBIN           1      ! 0 = Zwick subbin; 1 = Avery subbin
 KSP              10     ! Number of collisional time steps 
 EREST            0.7    ! Coefficient of restitution
-PICLDEBUG        0      ! 0 = turn off ppiclf-specific print statements
+!-------- Heat Transfer Models
+HEATTRANSFER 	   5      ! 0 = none; 1 = Stokes; 2 = RM; 3 = Gunn; 4 = Fox; 5 = Sun
+DU HEATTRANSFER  1      ! Diffusive Unsteady HT, 0 = none; 1 = ON (preferable with ViscousUnsteady ON)
+!-------- Feedback and Filter values
+FEEDBACK         1      ! 0 = none; 1 = particles affecting fluid
+FILTERWIDTH      0.002  ! meters (this is automated now)
+NEIGHBORWIDTH    0.0    ! Actual neighbor width = max(4*dp_max, neighborwidth)
+!-------- Linear Periodicity
 PERIODICX        0      ! 0 = turn off ; 1 = turn on
 PERIODICY        1      ! 0 = turn off ; 1 = turn on
 PERIODICZ        1      ! 0 = turn off ; 1 = turn on
+!-------- Angular Periodicity
 ANGULARPERIODIC  0      ! 0=turn off ; 1=Z-Axis
 ANGLE            90.0   ! angle between the two wedge faces, degrees
 XANGLE           0.0    ! angle between x-axis and lower wedge face, CCW +ve, degrees
-RIN              0.0    ! inner wedge radius
-ROUT             0.075  ! outer wedge radius
-SUBBIN           1      ! 0 = Zwick subbin; 1 = Avery subbin
+!-------- Reactive particle, (still not working)
 REACTIVE         0      ! 0 = inert; 1 = reactive particle
+!-------- Debug mode for ppiclF, extensive printing and max value checks
+PICLDEBUG        0      ! 0 = turn off ppiclf-specific print statements
 #
 
 # POST 
