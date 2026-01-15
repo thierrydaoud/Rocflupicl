@@ -735,17 +735,32 @@
 
             else ! Pseudo Turbulence is OFF
             ! 09/19/2025 - Thierry - Added Lift force
-            ! Still need to add Torue \cdot angular velocity
+!            ppiclf_ydotc(PPICLF_JT,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
+!     >         ( (fqsx+fvux+liftx)*ppiclf_y(PPICLF_JVX,i) + 
+!     >           (fqsy+fvuy+lifty)*ppiclf_y(PPICLF_JVY,i) + 
+!     >           (fqsz+fvuz+liftz)*ppiclf_y(PPICLF_JVZ,i) +
+!     >                  famx*ppiclf_rprop(PPICLF_R_JUX,i) +
+!     >                  famy*ppiclf_rprop(PPICLF_R_JUY,i) +
+!     >                  famz*ppiclf_rprop(PPICLF_R_JUZ,i) +
+!     >                  taux_hydro*ppiclf_y(PPICLF_JOX,i) +
+!     >                  tauy_hydro*ppiclf_y(PPICLF_JOY,i) +
+!     >                  tauz_hydro*ppiclf_y(PPICLF_JOZ,i) +
+!     >           qq )
+
+            ! Testing Equation 19 of the projection notes
+            ! F'_j . u_g + F'_qs . (u_p - u_g)
+!            ppiclf_ydotc(PPICLF_JT,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
+!     >         ( (fqsx+famx+fvux+liftx)*ppiclf_rprop(PPICLF_R_JUX,i) + 
+!     >           (fqsy+famy+fvuy+lifty)*ppiclf_rprop(PPICLF_R_JUY,i) + 
+!     >           (fqsz+famz+fvuz+liftz)*ppiclf_rprop(PPICLF_R_JUZ,i) +
+!     >           (fqsx*(-vx) + fqsy*(-vy) + fqsz*(-vz))              +
+!     >           qq )
+
+            ! Work projection without dissipative term for Case-12
             ppiclf_ydotc(PPICLF_JT,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
-     >         ( (fqsx+fvux+liftx)*ppiclf_y(PPICLF_JVX,i) + 
-     >           (fqsy+fvuy+lifty)*ppiclf_y(PPICLF_JVY,i) + 
-     >           (fqsz+fvuz+liftz)*ppiclf_y(PPICLF_JVZ,i) +
-     >                  famx*ppiclf_rprop(PPICLF_R_JUX,i) +
-     >                  famy*ppiclf_rprop(PPICLF_R_JUY,i) +
-     >                  famz*ppiclf_rprop(PPICLF_R_JUZ,i) +
-     >                  taux_hydro*ppiclf_y(PPICLF_JOX,i) +
-     >                  tauy_hydro*ppiclf_y(PPICLF_JOY,i) +
-     >                  tauz_hydro*ppiclf_y(PPICLF_JOZ,i) +
+     >         ( (fqsx+famx+fvux+liftx)*ppiclf_rprop(PPICLF_R_JUX,i) + 
+     >           (fqsy+famy+fvuy+lifty)*ppiclf_rprop(PPICLF_R_JUY,i) + 
+     >           (fqsz+famz+fvuz+liftz)*ppiclf_rprop(PPICLF_R_JUZ,i) +
      >           qq )
 
             !ppiclf_ydotc(PPICLF_JT,i) = -1.0d0*ppiclf_ydotc(PPICLF_JT,i)
