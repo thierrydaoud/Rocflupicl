@@ -737,33 +737,26 @@
 
             else ! Pseudo Turbulence is OFF
             ! 09/19/2025 - Thierry - Added Lift force
-!            ppiclf_ydotc(PPICLF_JT,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
-!     >         ( (fqsx+fvux+liftx)*ppiclf_y(PPICLF_JVX,i) + 
-!     >           (fqsy+fvuy+lifty)*ppiclf_y(PPICLF_JVY,i) + 
-!     >           (fqsz+fvuz+liftz)*ppiclf_y(PPICLF_JVZ,i) +
-!     >                  famx*ppiclf_rprop(PPICLF_R_JUX,i) +
-!     >                  famy*ppiclf_rprop(PPICLF_R_JUY,i) +
-!     >                  famz*ppiclf_rprop(PPICLF_R_JUZ,i) +
-!     >                  taux_hydro*ppiclf_y(PPICLF_JOX,i) +
-!     >                  tauy_hydro*ppiclf_y(PPICLF_JOY,i) +
-!     >                  tauz_hydro*ppiclf_y(PPICLF_JOZ,i) +
-!     >           qq )
+            ppiclf_ydotc(PPICLF_JT,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
+     >         ( (fqsx+fvux+liftx)*ppiclf_y(PPICLF_JVX,i) + 
+     >           (fqsy+fvuy+lifty)*ppiclf_y(PPICLF_JVY,i) + 
+     >           (fqsz+fvuz+liftz)*ppiclf_y(PPICLF_JVZ,i) +
+     >                  famx*ppiclf_rprop(PPICLF_R_JUX,i) +
+     >                  famy*ppiclf_rprop(PPICLF_R_JUY,i) +
+     >                  famz*ppiclf_rprop(PPICLF_R_JUZ,i) +
+     >                  taux_hydro*ppiclf_y(PPICLF_JOX,i) +
+     >                  tauy_hydro*ppiclf_y(PPICLF_JOY,i) +
+     >                  tauz_hydro*ppiclf_y(PPICLF_JOZ,i) +
+     >           qq )
 
-            ! Testing Equation 19 of the projection notes
-            ! F'_j . u_g + F'_qs . (u_p - u_g)
+            ! Testing Equation 20 of the projection notes
+            ! W'_j = F'_j . u_g + F'_qs . (u_p - u_g)
 !            ppiclf_ydotc(PPICLF_JT,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
 !     >         ( (fqsx+famx+fvux+liftx)*ppiclf_rprop(PPICLF_R_JUX,i) + 
 !     >           (fqsy+famy+fvuy+lifty)*ppiclf_rprop(PPICLF_R_JUY,i) + 
 !     >           (fqsz+famz+fvuz+liftz)*ppiclf_rprop(PPICLF_R_JUZ,i) +
 !     >           (fqsx*(-vx) + fqsy*(-vy) + fqsz*(-vz))              +
 !     >           qq )
-
-            ! Work projection without dissipative term for Case-12
-            ppiclf_ydotc(PPICLF_JT,i) = ppiclf_rprop(PPICLF_R_JSPL,i) *
-     >         ( (fqsx+famx+fvux+liftx)*ppiclf_rprop(PPICLF_R_JUX,i) + 
-     >           (fqsy+famy+fvuy+lifty)*ppiclf_rprop(PPICLF_R_JUY,i) + 
-     >           (fqsz+famz+fvuz+liftz)*ppiclf_rprop(PPICLF_R_JUZ,i) +
-     >           qq )
 
             !ppiclf_ydotc(PPICLF_JT,i) = -1.0d0*ppiclf_ydotc(PPICLF_JT,i)
             endif ! pseudoTurb_flag
@@ -4162,10 +4155,6 @@ c--  then add mean PTKE
       real*8 time,fH,factor,A,B,kernelVU
       real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid
       real*8 dti, theta_sangani
-      integer*4 i1,i2
-
-      i1 = 2
-      i2 = 78
 
 !
 ! Code:
@@ -4221,23 +4210,6 @@ c--  then add mean PTKE
             qq_du = qq_du + dti * factor_du*kernel_du*
      >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-
-!           if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >         ppiclf_iprop(7,i) .eq. 1724) then
-!              !open(unit=66,file='fort.66',position='append')   
-
-!              write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!              flush(66)
-!           endif
          enddo
 
          iT = ppiclf_nTimeBH
@@ -4263,36 +4235,10 @@ c--  then add mean PTKE
          qq_du = qq_du + dti * factor_du*kernel_du*
      >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-
-!        if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >      ppiclf_iprop(7,i) .eq. 1724) then
-!           !open(unit=66,file='fort.66',position='append')   
-
-!           write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!           flush(66)
-!        endif
-      endif
-
-      if (ppiclf_iprop(5,i) .eq. i1 .and.
-     >    ppiclf_iprop(7,i) .eq. i2) then
-          if (istage == 3) then
-             write(66,*) ppiclf_time,qq_du,fvux,fvuy,fvuz
-          endif
       endif
 
       return
       end
-!
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 !     Trapezoidal Method with non-uniform time steps
@@ -4386,27 +4332,6 @@ c--  then add mean PTKE
             qq_du = qq_du + dti * factor_du*kernel_du*
      >                (ppiclf_dTdtMixt(iT-1,i) -ppiclf_dTdtPlag(iT-1,i))
 
-
-!           if(ppiclf_iprop(5,i) .eq. i1 .and.
-!    >         ppiclf_iprop(7,i) .eq. i2) then
-!           if (iStage==3) then
-!             !stop
-!              !open(unit=66,file='fort.66',position='append')   
-!
-!              time = ppiclf_timeBH(iT)
-!              write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-!
-!              flush(66)
-!           endif
-!           endif
          enddo
 
          iT = 2
@@ -4431,27 +4356,6 @@ c--  then add mean PTKE
          qq_du = qq_du + dti * factor_du*kernel_du*
      >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-
-!        if(ppiclf_iprop(5,i) .eq. i1 .and.
-!    >      ppiclf_iprop(7,i) .eq. i2) then
-!        if (istage == 3) then
-!           !open(unit=66,file='fort.66',position='append')   
-
-!           iT = 2
-!           time = ppiclf_timeBH(2)
-!           write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!           flush(66)
-!        endif
-!        endif
       endif
 
       if (ppiclf_iprop(5,i) .eq. i1 .and.
@@ -4464,7 +4368,6 @@ c--  then add mean PTKE
 
       return
       end
-!
 !-----------------------------------------------------------------------
 !
 !     Modified Trapezodial Method with non-uniform time steps
@@ -4572,24 +4475,6 @@ c--  then add mean PTKE
 
             qq_du = qq_du + (g1+g2)*dsi
 
-
-!           if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >           ppiclf_iprop(7,i) .eq. 1724) then
-!              !open(unit=66,file='fort.66',position='append')   
-
-!              time = ppiclf_timeBH(iT)
-!              write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!              flush(66)
-!           endif
          enddo
 
       endif
@@ -4603,7 +4488,6 @@ c--  then add mean PTKE
 
       return
       end
-!
 !-----------------------------------------------------------------------
 !
 !     Hinsberg Method with non-uniform time steps
@@ -4717,22 +4601,6 @@ c--  then add mean PTKE
             g = 2.0d0*(g1*dsi2-g2*dsi1)+TwoThirds*(g2-g1)*dsi3
             qq_du = qq_du + g
 
-!           if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >         ppiclf_iprop(7,i) .eq. 1724) then
-!              !open(unit=66,file='fort.66',position='append')   
-
-!              write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!              flush(66)
-!           endif
          enddo
 
          ! Do interval [t_{N-1},t_{N-1}+dnk(iStage)]  
@@ -4795,25 +4663,6 @@ c--  then add mean PTKE
          g = (g2+g1)*dsi4
          qq_du = qq_du + g
 
-
-!        if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >      ppiclf_iprop(7,i) .eq. 1724) then
-!           !open(unit=66,file='fort.66',position='append')   
-
-!           iT = 2
-!           time = ppiclf_timeBH(iT)
-!           write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!           flush(66)
-!        endif
       endif
 
       if (ppiclf_iprop(5,i) .eq. i1 .and.
@@ -4825,9 +4674,6 @@ c--  then add mean PTKE
 
       return
       end
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024
@@ -4892,10 +4738,6 @@ c--  then add mean PTKE
 
       return
       end
-!
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024
@@ -4996,27 +4838,8 @@ c--  then add mean PTKE
         ppiclf_dTdtMixt(1,i) = (ppiclf_TMixt(1,i)-ppiclf_TMixt(2,i))/dt
         ppiclf_dTdtPlag(1,i) = (ppiclf_TPlag(1,i)-ppiclf_TPlag(2,i))/dt
 
-        if(ppiclf_iprop(5,i) .eq. 7 .and.
-     >     ppiclf_iprop(7,i) .eq. 1724) then
-          !open(unit=67,file='fort.67',position='append')   
-          write(67,*) ppiclf_time, time_plot, dt, ppiclf_dt,
-     >                ppiclf_dTdtMixt(1,i),     
-     >                ppiclf_TMixt(1,i),
-     >                ppiclf_TMixt(2,i),
-     >                ppiclf_dTdtPlag(1,i),
-     >                ppiclf_ydot(PPICLF_JT,i),
-     >                ppiclf_TPlag(1,i),
-     >                ppiclf_TPlag(2,i)
-          flush(67)
-      endif
-!----------------------------------------------------------      
-
       return
       end
-!
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024
@@ -5073,10 +4896,6 @@ c--  then add mean PTKE
 
       return
       end
-!
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024

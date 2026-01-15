@@ -46,10 +46,6 @@
       real*8 time,fH,factor,A,B,kernelVU
       real*8 factor_du,b_du,Pe,kernel_du,qq_du,alpha_fluid
       real*8 dti, theta_sangani
-      integer*4 i1,i2
-
-      i1 = 2
-      i2 = 78
 
 !
 ! Code:
@@ -105,23 +101,6 @@
             qq_du = qq_du + dti * factor_du*kernel_du*
      >                (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-
-!           if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >         ppiclf_iprop(7,i) .eq. 1724) then
-!              !open(unit=66,file='fort.66',position='append')   
-
-!              write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!              flush(66)
-!           endif
          enddo
 
          iT = ppiclf_nTimeBH
@@ -147,36 +126,10 @@
          qq_du = qq_du + dti * factor_du*kernel_du*
      >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-
-!        if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >      ppiclf_iprop(7,i) .eq. 1724) then
-!           !open(unit=66,file='fort.66',position='append')   
-
-!           write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!           flush(66)
-!        endif
-      endif
-
-      if (ppiclf_iprop(5,i) .eq. i1 .and.
-     >    ppiclf_iprop(7,i) .eq. i2) then
-          if (istage == 3) then
-             write(66,*) ppiclf_time,qq_du,fvux,fvuy,fvuz
-          endif
       endif
 
       return
       end
-!
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 !     Trapezoidal Method with non-uniform time steps
@@ -270,27 +223,6 @@
             qq_du = qq_du + dti * factor_du*kernel_du*
      >                (ppiclf_dTdtMixt(iT-1,i) -ppiclf_dTdtPlag(iT-1,i))
 
-
-!           if(ppiclf_iprop(5,i) .eq. i1 .and.
-!    >         ppiclf_iprop(7,i) .eq. i2) then
-!           if (iStage==3) then
-!             !stop
-!              !open(unit=66,file='fort.66',position='append')   
-!
-!              time = ppiclf_timeBH(iT)
-!              write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-!
-!              flush(66)
-!           endif
-!           endif
          enddo
 
          iT = 2
@@ -315,27 +247,6 @@
          qq_du = qq_du + dti * factor_du*kernel_du*
      >             (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i))
 
-
-!        if(ppiclf_iprop(5,i) .eq. i1 .and.
-!    >      ppiclf_iprop(7,i) .eq. i2) then
-!        if (istage == 3) then
-!           !open(unit=66,file='fort.66',position='append')   
-
-!           iT = 2
-!           time = ppiclf_timeBH(2)
-!           write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!           flush(66)
-!        endif
-!        endif
       endif
 
       if (ppiclf_iprop(5,i) .eq. i1 .and.
@@ -348,7 +259,6 @@
 
       return
       end
-!
 !-----------------------------------------------------------------------
 !
 !     Modified Trapezodial Method with non-uniform time steps
@@ -456,24 +366,6 @@
 
             qq_du = qq_du + (g1+g2)*dsi
 
-
-!           if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >           ppiclf_iprop(7,i) .eq. 1724) then
-!              !open(unit=66,file='fort.66',position='append')   
-
-!              time = ppiclf_timeBH(iT)
-!              write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!              flush(66)
-!           endif
          enddo
 
       endif
@@ -487,7 +379,6 @@
 
       return
       end
-!
 !-----------------------------------------------------------------------
 !
 !     Hinsberg Method with non-uniform time steps
@@ -601,22 +492,6 @@
             g = 2.0d0*(g1*dsi2-g2*dsi1)+TwoThirds*(g2-g1)*dsi3
             qq_du = qq_du + g
 
-!           if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >         ppiclf_iprop(7,i) .eq. 1724) then
-!              !open(unit=66,file='fort.66',position='append')   
-
-!              write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!              flush(66)
-!           endif
          enddo
 
          ! Do interval [t_{N-1},t_{N-1}+dnk(iStage)]  
@@ -679,25 +554,6 @@
          g = (g2+g1)*dsi4
          qq_du = qq_du + g
 
-
-!        if(ppiclf_iprop(5,i) .eq. 7 .and.
-!    >      ppiclf_iprop(7,i) .eq. 1724) then
-!           !open(unit=66,file='fort.66',position='append')   
-
-!           iT = 2
-!           time = ppiclf_timeBH(iT)
-!           write(66,*) ppiclf_time, iT, time,
-!    >            factor_du, kernel_du,
-!    >            ppiclf_dTdtMixt(iT,i),
-!    >            ppiclf_dTdtPlag(iT,i),
-!    >            (ppiclf_dTdtMixt(iT,i) - ppiclf_dTdtPlag(iT,i)),
-!    >            factor_du*kernel_du*
-!    >            (ppiclf_dTdtMixt(iT,i) -ppiclf_dTdtPlag(iT,i)),
-!    >            qq_du,fvux,fvuy,fvuz,
-!    >            kernelVU, A, B, factor 
-
-!           flush(66)
-!        endif
       endif
 
       if (ppiclf_iprop(5,i) .eq. i1 .and.
@@ -709,9 +565,6 @@
 
       return
       end
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024
@@ -776,10 +629,6 @@
 
       return
       end
-!
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024
@@ -880,27 +729,8 @@
         ppiclf_dTdtMixt(1,i) = (ppiclf_TMixt(1,i)-ppiclf_TMixt(2,i))/dt
         ppiclf_dTdtPlag(1,i) = (ppiclf_TPlag(1,i)-ppiclf_TPlag(2,i))/dt
 
-        if(ppiclf_iprop(5,i) .eq. 7 .and.
-     >     ppiclf_iprop(7,i) .eq. 1724) then
-          !open(unit=67,file='fort.67',position='append')   
-          write(67,*) ppiclf_time, time_plot, dt, ppiclf_dt,
-     >                ppiclf_dTdtMixt(1,i),     
-     >                ppiclf_TMixt(1,i),
-     >                ppiclf_TMixt(2,i),
-     >                ppiclf_dTdtPlag(1,i),
-     >                ppiclf_ydot(PPICLF_JT,i),
-     >                ppiclf_TPlag(1,i),
-     >                ppiclf_TPlag(2,i)
-          flush(67)
-      endif
-!----------------------------------------------------------      
-
       return
       end
-!
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024
@@ -957,10 +787,6 @@
 
       return
       end
-!
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 !
 ! Created Feb. 1, 2024

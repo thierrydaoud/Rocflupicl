@@ -354,7 +354,7 @@ end if
 
  ! Initialization for viscous unsteady term
  ppiclf_nTimeBH = 1
- ppiclf_nUnsteadyData = 150
+ ppiclf_nUnsteadyData = 50
 
  CALL MPI_Barrier(global%mpiComm,errorFlag)
 
@@ -941,14 +941,14 @@ DEALLOCATE(volp,STAT=errorFlag)
      print*, 'qs_fluct_flag        = ',global%piclQsFluctFlag
      print*, 'ppiclf_debug         = ',global%piclDebug
      print*, 'ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData
-     print*, 'ppiclf_VU            = ',150
+     print*, 'ppiclf_VU            = ',50
      print*, 'sbNearest_flag       = ',global%piclSBNearFlag
      print*, 'burnrate_flag        = ',global%piclBurnRateFlag
 
      IF (global%piclViscousUnsteady >=1) THEN
         print*,'  Using Viscous unsteady history term'
         print*,'    ppiclf_nTimeBH       = ',ppiclf_nTimeBH
-        print*,'    ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData,150
+        print*,'    ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData,50
      ENDIF
 
      print*, ' '
