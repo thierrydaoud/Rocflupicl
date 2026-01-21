@@ -11,6 +11,3 @@ build_lib/*.o
 libpicl/ppiclf/source/*.swp
 libpicl/user_files/*.swp
 libpicl/ppiclF/3rd_party/gslib/gslib/src/*.swp
-libpicl/ppiclF/build/*
-# leftover files from F90 migration
-libpicl/ppiclF/sourceF77/*
