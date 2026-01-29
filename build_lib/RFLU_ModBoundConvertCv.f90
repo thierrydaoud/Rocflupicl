@@ -140,6 +140,7 @@ SUBROUTINE RFLU_BXV_ConvertCvCons2Prim(pRegion,pPatch,cvStateFuture)
 
    USE ModInterfacesSpecies, ONLY: SPEC_GetSpeciesIndex
    USE ModSpecies,           ONLY: t_spec_input
+  USE ModMixture, ONLY: t_mixt
 
 ! ******************************************************************************
 ! Definitions and declarations
@@ -167,6 +168,8 @@ SUBROUTINE RFLU_BXV_ConvertCvCons2Prim(pRegion,pPatch,cvStateFuture)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCvSpec
   TYPE(t_spec_input), POINTER :: pSpecInput
   !FRED - Added JWL EOS Capability 9/15/15
+  REAL(RFREAL) :: ksg
+
 
 ! ******************************************************************************
 ! Start
@@ -311,16 +314,18 @@ SUBROUTINE RFLU_BXV_ConvertCvCons2Prim(pRegion,pPatch,cvStateFuture)
                   pCv(CV_MIXT_YVEL,ifl) = ir*pCv(CV_MIXT_YMOM,ifl)
                   pCv(CV_MIXT_ZVEL,ifl) = ir*pCv(CV_MIXT_ZMOM,ifl)
 
+                  ksg = pRegion%mixt%piclKsg(ifl)
+
                   u = pCv(CV_MIXT_XVEL,ifl)
                   v = pCv(CV_MIXT_YVEL,ifl)
                   w = pCv(CV_MIXT_ZVEL,ifl)
 
-                  e = (ir*pCv(CV_MIXT_ENER,ifl))-0.5_RFREAL*(u*u+v*v+w*w)
+                  e = (ir*pCv(CV_MIXT_ENER,ifl))-0.5_RFREAL*(u*u+v*v+w*w) - ksg
 
                   IF (e .LE. 1.0E+04_RFREAL) THEN
                     ! reset e and put new value back in pCv(CV_MIXT_ENER,ifl)
                     e = 1.0E+04_RFREAL 
-                    pCv(CV_MIXT_ENER,ifl) = r*(e+0.5_RFREAL*(u*u+v*v+w*w))
+                    pCv(CV_MIXT_ENER,ifl) = r*(e+0.5_RFREAL*(u*u+v*v+w*w)+ksg)
                   END IF !e le 1e4
 
            iCvSpecProducts = SPEC_GetSpeciesIndex(global,pspecInput,'PRODUCTS')
@@ -348,14 +353,14 @@ SUBROUTINE RFLU_BXV_ConvertCvCons2Prim(pRegion,pPatch,cvStateFuture)
          END IF
                 CASE DEFAULT
 
-                  CALL ErrorStop(global,ERR_REACHED_DEFAULT,350)
+                  CALL ErrorStop(global,ERR_REACHED_DEFAULT,355)
               END SELECT ! pRegion%mixtInput%gasModel
 
 ! --------- Default ----------------------------------------------------------
 
             CASE DEFAULT
 
-              CALL ErrorStop(global,ERR_REACHED_DEFAULT,357)
+              CALL ErrorStop(global,ERR_REACHED_DEFAULT,362)
           END SELECT ! pRegion%mixtInput%fluidModel
 
 ! ------------------------------------------------------------------------------
@@ -363,7 +368,7 @@ SUBROUTINE RFLU_BXV_ConvertCvCons2Prim(pRegion,pPatch,cvStateFuture)
 ! ------------------------------------------------------------------------------
 
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,365)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,370)
       END SELECT ! cvStateFuture
 
 ! ==============================================================================
@@ -373,7 +378,7 @@ SUBROUTINE RFLU_BXV_ConvertCvCons2Prim(pRegion,pPatch,cvStateFuture)
     ! TLJ - 12/27/2024
     ! removed errorstop, does not work for NS and JWL
     !CASE DEFAULT
-    !  CALL ErrorStop(global,ERR_REACHED_DEFAULT,375)
+    !  CALL ErrorStop(global,ERR_REACHED_DEFAULT,380)
   END SELECT ! pPatch%mixt%cvStateFuture
 
 ! ******************************************************************************
@@ -421,6 +426,7 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
 
    USE ModInterfacesSpecies, ONLY: SPEC_GetSpeciesIndex
    USE ModSpecies,           ONLY: t_spec_input
+  USE ModMixture, ONLY: t_mixt
 
 ! ******************************************************************************
 ! Definitions and declarations
@@ -449,6 +455,7 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCvSpec
   TYPE(t_spec_input), POINTER :: pSpecInput
   !FRED - Added JWL EOS capabilities  9/15/15
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -516,7 +523,9 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
               gc = MixtPerf_R_M(mw)
               g  = MixtPerf_G_CpR(cp,gc)
 
-              pCv(CV_MIXT_ENER,ifl) = r*MixtPerf_Eo_DGPUVW(r,g,p,u,v,w)
+              ksg = pRegion%mixt%piclKsg(ifl)
+
+              pCv(CV_MIXT_ENER,ifl) = r*MixtPerf_Eo_DGPUVW(r,g,p,u,v,w,ksg)
             END DO ! icg
 
 !------------------Mixture of detonation products and perfect gas--------------
@@ -546,6 +555,8 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
               v = pCv(CV_MIXT_YVEL,ifl)
               w = pCv(CV_MIXT_ZVEL,ifl)
               p = pDv(DV_MIXT_PRES,ifl)
+              
+              ksg = pRegion%mixt%piclKsg(ifl)
 
               pCv(CV_MIXT_XMOM,ifl) = r*u !ifl was icg
               pCv(CV_MIXT_YMOM,ifl) = r*v !ifl was icg
@@ -560,7 +571,7 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
               IF (e .LE. 1.0E+04_RFREAL) THEN
                 e = 1.0E+04_RFREAL 
               END IF !e le 0
-              pCv(CV_MIXT_ENER,ifl) = r *(e + 0.5_RFREAL*(u*u+v*v+w*w))
+              pCv(CV_MIXT_ENER,ifl) = r *(e + 0.5_RFREAL*(u*u+v*v+w*w) + ksg)
 
             END DO
 
@@ -575,7 +586,7 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
 ! ------------------------------------------------------------------------------
 
           CASE ( GAS_MODEL_MIXT_GASLIQ )
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,588, &
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,599, &
                            'Can only be used with species module.')
 
 ! ------------------------------------------------------------------------------
@@ -583,13 +594,13 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
 ! ------------------------------------------------------------------------------
 
           CASE DEFAULT
-            CALL ErrorStop(global,ERR_REACHED_DEFAULT,596)
+            CALL ErrorStop(global,ERR_REACHED_DEFAULT,607)
         END SELECT ! pRegion%mixtInput
 
       ! TLJ - 12/27/2024
       ! removed errorstop, does not work for NS and JWL
       !CASE DEFAULT
-      !  CALL ErrorStop(global,ERR_REACHED_DEFAULT,602)
+      !  CALL ErrorStop(global,ERR_REACHED_DEFAULT,613)
     END SELECT ! cvStateFuture
 
 ! ==============================================================================
@@ -597,7 +608,7 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
 ! ==============================================================================
 
   ELSE
-  !  CALL ErrorStop(global,ERR_REACHED_DEFAULT,610)
+  !  CALL ErrorStop(global,ERR_REACHED_DEFAULT,621)
   END IF ! pPatch%mixt%cvState
 
 ! ******************************************************************************

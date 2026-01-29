@@ -85,7 +85,7 @@ MODULE RFLU_ModBoundXvUtils
   USE ModGrid, ONLY: t_grid
   USE ModBndPatch, ONLY: t_patch  
   USE ModDataStruct, ONLY: t_region
-  USE ModMixture, ONLY: t_mixt_input
+  USE ModMixture, ONLY: t_mixt, t_mixt_input
   USE ModError
   USE ModMPI
 
@@ -306,6 +306,7 @@ SUBROUTINE RFLU_BXV_CompEnergyPatch(pRegion,pPatch)
   INTEGER :: iCvSpecProducts
   TYPE(t_spec_input), POINTER :: pSpecInput
 !FRED - Added JWL EOS capability - 9/11/15
+  REAL(RFREAL) :: ksg
 
 
 ! ******************************************************************************
@@ -344,6 +345,8 @@ SUBROUTINE RFLU_BXV_CompEnergyPatch(pRegion,pPatch)
     rw = pCv(CV_MIXT_ZMOM,ifl)
     p  = pDv(DV_MIXT_PRES,ifl)
 
+    ksg = pRegion%mixt%piclKsg(ifl)
+
     u = ru/r
     v = rv/r
     w = rw/r
@@ -374,7 +377,7 @@ SUBROUTINE RFLU_BXV_CompEnergyPatch(pRegion,pPatch)
     END IF !specUsed
     ELSE
 
-    Eo = MixtPerf_Eo_DGPUVW(r,g,p,u,v,w)
+    Eo = MixtPerf_Eo_DGPUVW(r,g,p,u,v,w,ksg)
     END IF
 
     pCv(CV_MIXT_ENER,ifl) = r*Eo
@@ -440,6 +443,7 @@ SUBROUTINE RFLU_BXV_CompMomEnergyPatch(pRegion,pPatch)
   LOGICAL :: scalarConvFlag
   INTEGER :: iCvSpecProducts
   TYPE(t_spec_input), POINTER :: pSpecInput
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -471,6 +475,8 @@ SUBROUTINE RFLU_BXV_CompMomEnergyPatch(pRegion,pPatch)
 
     r  = pCv(CV_MIXT_DENS,ifl)
 
+    ksg = pRegion%mixt%piclKsg(ifl)
+
     u = vals(BCDAT_INFLOW_U,distrib*ifl) 
     v = vals(BCDAT_INFLOW_V,distrib*ifl)
     w = vals(BCDAT_INFLOW_W,distrib*ifl)
@@ -498,14 +504,14 @@ SUBROUTINE RFLU_BXV_CompMomEnergyPatch(pRegion,pPatch)
     p = pRegion%mixt%dv(DV_MIXT_PRES,icg) !For Jacob's Case...2/13/20
 
     CALL RFLU_JWL_ComputeEnergyMixt(pRegion,icg,g,gc,p,r,Yproducts,a,Eo,td)
-    Eo = Eo + 0.5_RFREAL*(u*u+v*v+w*w)    
+    Eo = Eo + 0.5_RFREAL*(u*u+v*v+w*w) + ksg
 
     IF (scalarConvFlag .EQV. .TRUE.) THEN
   CALL RFLU_ScalarConvertcvPrim2Cons(pRegion,pRegion%spec%cv,pRegion%spec%cvState)
     END IF
     END IF !specUsed
     ELSE
-    Eo = MixtPerf_Eo_GRTUVW(g,gc,T,u,v,w)
+    Eo = MixtPerf_Eo_GRTUVW(g,gc,T,u,v,w,ksg)
     END IF
 
     pCv(CV_MIXT_XMOM,ifl) = r*u
@@ -586,7 +592,7 @@ SUBROUTINE RFLU_BXV_CreateVarsCv(pRegion)
                STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_ALLOCATE,590,'pPatch%mixt%cv')
+        CALL ErrorStop(global,ERR_ALLOCATE,596,'pPatch%mixt%cv')
       END IF ! global%error
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -662,7 +668,7 @@ SUBROUTINE RFLU_BXV_CreateVarsDv(pRegion)
                STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_ALLOCATE,666,'pPatch%mixt%dv')
+        CALL ErrorStop(global,ERR_ALLOCATE,672,'pPatch%mixt%dv')
       END IF ! global%error
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -736,21 +742,21 @@ SUBROUTINE RFLU_BXV_CreateVarsTStep(pRegion)
                STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_ALLOCATE,740,'pPatch%mixt%cvOld')
+        CALL ErrorStop(global,ERR_ALLOCATE,746,'pPatch%mixt%cvOld')
       END IF ! global%error
 
       ALLOCATE(pPatch%mixt%rhs(pRegion%mixtInput%nCv,pPatch%nBFaces), &
                STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_ALLOCATE,747,'pPatch%mixt%rhs')
+        CALL ErrorStop(global,ERR_ALLOCATE,753,'pPatch%mixt%rhs')
       END IF ! global%error
 
       ALLOCATE(pPatch%mixt%rhsSum(pRegion%mixtInput%nCv,pPatch%nBFaces), &
                STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_ALLOCATE,754,'pPatch%mixt%rhsSum')
+        CALL ErrorStop(global,ERR_ALLOCATE,760,'pPatch%mixt%rhsSum')
       END IF ! global%error
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -824,7 +830,7 @@ SUBROUTINE RFLU_BXV_DestroyVarsCv(pRegion)
       DEALLOCATE(pPatch%mixt%cv,STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_DEALLOCATE,828,'pPatch%mixt%cv')
+        CALL ErrorStop(global,ERR_DEALLOCATE,834,'pPatch%mixt%cv')
       END IF ! global%error
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -900,7 +906,7 @@ SUBROUTINE RFLU_BXV_DestroyVarsDv(pRegion)
       DEALLOCATE(pPatch%mixt%dv,STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_DEALLOCATE,904,'pPatch%mixt%dv')
+        CALL ErrorStop(global,ERR_DEALLOCATE,910,'pPatch%mixt%dv')
       END IF ! global%error
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -975,13 +981,13 @@ SUBROUTINE RFLU_BXV_DestroyVarsTStep(pRegion)
       DEALLOCATE(pPatch%mixt%rhs,STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_DEALLOCATE,979,'pPatch%mixt%rhs')
+        CALL ErrorStop(global,ERR_DEALLOCATE,985,'pPatch%mixt%rhs')
       END IF ! global%error
 
       DEALLOCATE(pPatch%mixt%rhsSum,STAT=errorFlag)
       global%error = errorFlag
       IF (global%error /= ERR_NONE) THEN
-        CALL ErrorStop(global,ERR_DEALLOCATE,985,'pPatch%mixt%rhs')
+        CALL ErrorStop(global,ERR_DEALLOCATE,991,'pPatch%mixt%rhs')
       END IF ! global%error
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -1074,7 +1080,7 @@ SUBROUTINE RFLU_BXV_InitVars(pRegion)
         CASE (BC_INJECTION)
           CALL RFLU_NSCBC_InitIJ(pRegion,pPatch)
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,1078)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,1084)
       END SELECT ! pPatch%bcType
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -1396,7 +1402,7 @@ SUBROUTINE RFLU_BXV_ReadVarsASCII(pRegion)
   OPEN(iFile,FILE=iFileName,FORM='FORMATTED',STATUS='OLD',IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_FILE_OPEN,1400,'File: '//TRIM(iFileName))
+    CALL ErrorStop(global,ERR_FILE_OPEN,1406,'File: '//TRIM(iFileName))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -1405,7 +1411,7 @@ SUBROUTINE RFLU_BXV_ReadVarsASCII(pRegion)
 
   READ(iFile,'(A)') sectionString
   IF ( TRIM(sectionString) /= '# ROCFLU boundary-condition variable file' ) THEN
-    CALL ErrorStop(global,ERR_INVALID_MARKER,1409,sectionString)
+    CALL ErrorStop(global,ERR_INVALID_MARKER,1415,sectionString)
   END IF ! TRIM
 
 ! ******************************************************************************
@@ -1439,7 +1445,7 @@ SUBROUTINE RFLU_BXV_ReadVarsASCII(pRegion)
 
         IF ( iPatch > pGrid%nPatches ) THEN
           WRITE(errorString,'(A,1X,I3)') 'Patch index invalid:',iPatch
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1443, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1449, &
                          TRIM(errorString))
         END IF ! iPatch
 
@@ -1452,27 +1458,27 @@ SUBROUTINE RFLU_BXV_ReadVarsASCII(pRegion)
         IF ( pPatch%bcKind /= BC_KIND_NSCBC ) THEN
           WRITE(errorString,'(A,1X,I3)') 'Error in writing NSCBC variables for patch :', &
                                          iPatchGlobal
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1456, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1462, &
                          TRIM(errorString))
         END IF ! pPatch%bcKind
 
         IF ( nBFaces /= pPatch%nBFaces ) THEN
           WRITE(errorString,'(A,1X,I6)') 'Number of faces invalid:',nBFaces
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1462, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1468, &
                            TRIM(errorString))
         END IF ! nBFaces
 
         IF ( iPatchGlobal /= pPatch%iPatchGlobal ) THEN
           WRITE(errorString,'(A,1X,I3)') 'Global patch index invalid:', &
                                          iPatchGlobal
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1469, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1475, &
                          TRIM(errorString))
         END IF ! iPatchGlobal
 
         IF ( nData /= pRegion%mixtInput%nCv ) THEN
           WRITE(errorString,'(A,1X,I3)') &
               'Number of pieces of data invalid:',nData
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1476, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1482, &
                          TRIM(errorString))
         END IF ! iPatchGlobal
 
@@ -1510,7 +1516,7 @@ SUBROUTINE RFLU_BXV_ReadVarsASCII(pRegion)
           WRITE(STDOUT,'(A,3X,A)') SOLVER_NAME,sectionString
         END IF ! verbosityLevel
 
-        CALL ErrorStop(global,ERR_INVALID_MARKER,1514,sectionString)
+        CALL ErrorStop(global,ERR_INVALID_MARKER,1520,sectionString)
     END SELECT ! TRIM
 
 ! ==============================================================================
@@ -1518,7 +1524,7 @@ SUBROUTINE RFLU_BXV_ReadVarsASCII(pRegion)
 ! ==============================================================================
 
     IF ( loopCounter >= LIMIT_INFINITE_LOOP ) THEN
-      CALL ErrorStop(global,ERR_INFINITE_LOOP,1522)
+      CALL ErrorStop(global,ERR_INFINITE_LOOP,1528)
     END IF ! loopCounter
   END DO ! <empty>
 
@@ -1529,7 +1535,7 @@ SUBROUTINE RFLU_BXV_ReadVarsASCII(pRegion)
   CLOSE(iFile,IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_FILE_CLOSE,1533,'File: '//TRIM(iFileName))
+    CALL ErrorStop(global,ERR_FILE_CLOSE,1539,'File: '//TRIM(iFileName))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -1646,7 +1652,7 @@ SUBROUTINE RFLU_BXV_ReadVarsBinary(pRegion)
 ! BBR - end 
 
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_FILE_OPEN,1650,'File: '//TRIM(iFileName))
+    CALL ErrorStop(global,ERR_FILE_OPEN,1656,'File: '//TRIM(iFileName))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -1655,7 +1661,7 @@ SUBROUTINE RFLU_BXV_ReadVarsBinary(pRegion)
 
   READ(iFile) sectionString
   IF ( TRIM(sectionString) /= '# ROCFLU boundary-condition variable file' ) THEN
-    CALL ErrorStop(global,ERR_INVALID_MARKER,1659,sectionString)
+    CALL ErrorStop(global,ERR_INVALID_MARKER,1665,sectionString)
   END IF ! TRIM
 
 ! ******************************************************************************
@@ -1689,7 +1695,7 @@ SUBROUTINE RFLU_BXV_ReadVarsBinary(pRegion)
 
         IF ( iPatch > pGrid%nPatches ) THEN
           WRITE(errorString,'(A,1X,I3)') 'Patch index invalid:',iPatch
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1693, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1699, &
                          TRIM(errorString))
         END IF ! iPatch
 
@@ -1702,27 +1708,27 @@ SUBROUTINE RFLU_BXV_ReadVarsBinary(pRegion)
         IF ( pPatch%bcKind /= BC_KIND_NSCBC ) THEN
           WRITE(errorString,'(A,1X,I3)') 'Error in writing NSCBC variables for patch :', &
                                          iPatchGlobal
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1706, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1712, &
                          TRIM(errorString))
         END IF ! pPatch%bcKind
 
         IF ( nBFaces /= pPatch%nBFaces ) THEN
           WRITE(errorString,'(A,1X,I6)') 'Number of faces invalid:',nBFaces
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1712, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1718, &
                            TRIM(errorString))
         END IF ! nBFaces
 
         IF ( iPatchGlobal /= pPatch%iPatchGlobal ) THEN
           WRITE(errorString,'(A,1X,I3)') 'Global patch index invalid:', &
                                          iPatchGlobal
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1719, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1725, &
                          TRIM(errorString))
         END IF ! iPatchGlobal
 
         IF ( nData /= pRegion%mixtInput%nCv ) THEN
           WRITE(errorString,'(A,1X,I3)') &
               'Number of pieces of data invalid:',nData
-          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1726, &
+          CALL ErrorStop(global,ERR_BCDATA_VALUE_INVALID,1732, &
                          TRIM(errorString))
         END IF ! iPatchGlobal
 
@@ -1759,7 +1765,7 @@ SUBROUTINE RFLU_BXV_ReadVarsBinary(pRegion)
           WRITE(STDOUT,'(A,3X,A)') SOLVER_NAME,sectionString
         END IF ! verbosityLevel
 
-        CALL ErrorStop(global,ERR_INVALID_MARKER,1763,sectionString)
+        CALL ErrorStop(global,ERR_INVALID_MARKER,1769,sectionString)
     END SELECT ! TRIM
 
 ! ==============================================================================
@@ -1767,7 +1773,7 @@ SUBROUTINE RFLU_BXV_ReadVarsBinary(pRegion)
 ! ==============================================================================
 
     IF ( loopCounter >= LIMIT_INFINITE_LOOP ) THEN
-      CALL ErrorStop(global,ERR_INFINITE_LOOP,1771)
+      CALL ErrorStop(global,ERR_INFINITE_LOOP,1777)
     END IF ! loopCounter
   END DO ! <empty>
 
@@ -1778,7 +1784,7 @@ SUBROUTINE RFLU_BXV_ReadVarsBinary(pRegion)
   CLOSE(iFile,IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_FILE_CLOSE,1782,'File: '//TRIM(iFileName))
+    CALL ErrorStop(global,ERR_FILE_CLOSE,1788,'File: '//TRIM(iFileName))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -1860,7 +1866,7 @@ SUBROUTINE RFLU_BXV_ReadVarsWrapper(pRegion)
 ! BBR - end 
       CALL RFLU_BXV_ReadVarsBinary(pRegion)
     ELSE
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,1864)
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,1870)
     END IF ! global%solutFormat
   END IF ! RFLU_NSCBC_DecideHaveNSCBC(pRegion)
 
@@ -1991,6 +1997,7 @@ SUBROUTINE RFLU_BXV_SetDependentVarsPatch(pRegion,pPatch)
   LOGICAL :: scalarConvFlag
   INTEGER :: iCvSpecProducts,iCvSpecAir
   TYPE(t_spec_input), POINTER :: pSpecInput
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -2040,7 +2047,7 @@ SUBROUTINE RFLU_BXV_SetDependentVarsPatch(pRegion,pPatch)
 
         CASE ( GAS_MODEL_TCPERF )
           IF ( pPatch%mixt%cvState /= CV_MIXT_STATE_CONS ) THEN
-            CALL ErrorStop(global,ERR_CV_STATE_INVALID,2048)
+            CALL ErrorStop(global,ERR_CV_STATE_INVALID,2055)
           END IF ! pPatch%mixt%cvState
 
           DO ifl = 1,pPatch%nBFaces
@@ -2061,7 +2068,9 @@ SUBROUTINE RFLU_BXV_SetDependentVarsPatch(pRegion,pPatch)
             
             Vm2 = u*u + v*v + w*w
 
-            p = MixtPerf_P_DEoGVm2(r,Eo,gGas,Vm2)
+            ksg = pRegion%mixt%piclKsg(ifl)
+
+            p = MixtPerf_P_DEoGVm2(r,Eo,gGas,Vm2,ksg)
 
             pDv(DV_MIXT_PRES,ifl) = p 
             pDv(DV_MIXT_TEMP,ifl) = MixtPerf_T_DPR(r,pDv(DV_MIXT_PRES,ifl),rGas)
@@ -2071,7 +2080,7 @@ SUBROUTINE RFLU_BXV_SetDependentVarsPatch(pRegion,pPatch)
 
          CASE ( GAS_MODEL_MIXT_JWL )
           IF ( pPatch%mixt%cvState /= CV_MIXT_STATE_CONS ) THEN
-            CALL ErrorStop(global,ERR_CV_STATE_INVALID,2079)
+            CALL ErrorStop(global,ERR_CV_STATE_INVALID,2088)
           END IF ! pPatch%mixt%cvState
         IF (global%specUsed .EQV. .TRUE.) THEN
          IF (pRegion%spec%cvState == CV_MIXT_STATE_PRIM) THEN
@@ -2106,7 +2115,7 @@ end if
 
             Vm2 = u*u + v*v + w*w
 
-            e = Eo - 0.5_RFREAL*Vm2
+            e = Eo - 0.5_RFREAL*Vm2 - ksg
 
             iCvSpecProducts = SPEC_GetSpeciesIndex(global,pSpecInput,'PRODUCTS')
             Y = pRegion%spec%cv(iCvSpecProducts,icg)
@@ -2128,7 +2137,7 @@ IF ( (e .LE. 1.E04_RFREAL) .OR. (isNan(e) .EQV. .TRUE.) ) THEN
 
             Vm2 = u*u + v*v + w*w
 
-            e = Eo - 0.5_RFREAL*Vm2
+            e = Eo - 0.5_RFREAL*Vm2 - ksg
 
                 
             pCv(CV_MIXT_DENS,ifl) = r
@@ -2159,7 +2168,7 @@ END IF !e le 0
 ! ------------------------------------------------------------------------------
 
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2169)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2178)
       END SELECT ! pRegion%mixtInput%gasModel
 
 ! ==============================================================================
@@ -2167,7 +2176,7 @@ END IF !e le 0
 ! ==============================================================================
 
     CASE DEFAULT
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,2177)
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,2186)
   END SELECT ! pRegion%mixtInput%fluidModel
 
 ! ******************************************************************************
@@ -2267,7 +2276,7 @@ SUBROUTINE RFLU_BXV_WriteVarsASCII(pRegion)
        IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_FILE_OPEN,2277,'File: '//TRIM(iFileName))
+    CALL ErrorStop(global,ERR_FILE_OPEN,2286,'File: '//TRIM(iFileName))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -2317,7 +2326,7 @@ SUBROUTINE RFLU_BXV_WriteVarsASCII(pRegion)
   CLOSE(iFile,IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_FILE_CLOSE,2327,'File: '//TRIM(iFileName))
+    CALL ErrorStop(global,ERR_FILE_CLOSE,2336,'File: '//TRIM(iFileName))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -2435,7 +2444,7 @@ SUBROUTINE RFLU_BXV_WriteVarsBinary(pRegion)
 
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_FILE_OPEN,2445,'File: '//TRIM(iFileName))
+    CALL ErrorStop(global,ERR_FILE_OPEN,2454,'File: '//TRIM(iFileName))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -2484,7 +2493,7 @@ SUBROUTINE RFLU_BXV_WriteVarsBinary(pRegion)
   CLOSE(iFile,IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_FILE_CLOSE,2494,'File: '//TRIM(iFileName))
+    CALL ErrorStop(global,ERR_FILE_CLOSE,2503,'File: '//TRIM(iFileName))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -2565,7 +2574,7 @@ SUBROUTINE RFLU_BXV_WriteVarsWrapper(pRegion)
 ! BBR - end 
       CALL RFLU_BXV_WriteVarsBinary(pRegion)
     ELSE
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,2575)
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,2584)
     END IF ! global%solutFormat
   END IF ! RFLU_NSCBC_DecideHaveNSCBC(pRegion)
 

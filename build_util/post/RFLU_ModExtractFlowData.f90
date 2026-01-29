@@ -4387,6 +4387,7 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
   REAL(RFREAL), DIMENSION(:), ALLOCATABLE :: keRadii,momRadii,peRadii,radii
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_global), POINTER :: global
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start, Set pointers and variables
@@ -4415,25 +4416,25 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
   ALLOCATE(radii(nRadii),STAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_ALLOCATE,5194,'radii')
+    CALL ErrorStop(global,ERR_ALLOCATE,5195,'radii')
   END IF ! global%error 
 
   ALLOCATE(keRadii(nRadii),STAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_ALLOCATE,5200,'keRadii')
+    CALL ErrorStop(global,ERR_ALLOCATE,5201,'keRadii')
   END IF ! global%error 
 
   ALLOCATE(momRadii(nRadii),STAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_ALLOCATE,5206,'momRadii')
+    CALL ErrorStop(global,ERR_ALLOCATE,5207,'momRadii')
   END IF ! global%error 
 
   ALLOCATE(peRadii(nRadii),STAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN
-    CALL ErrorStop(global,ERR_ALLOCATE,5212,'peRadii')
+    CALL ErrorStop(global,ERR_ALLOCATE,5213,'peRadii')
   END IF ! global%error 
 
   radius = 1.0_RFREAL !TEMPORARY - Subbu: radius = 1.0 - By Default radius = 0.5_RFREAL
@@ -4526,8 +4527,10 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
       Eo = pRegion%mixt%cv(CV_MIXT_ENER,icg)/r
 
       Vm2 = (ru*ru + rv*rv + rw*rw)/(r*r)
+      
+      ksg = pRegion%mixt%piclKsg(icg)
 
-      p = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2)
+      p = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2,ksg)
 
       dp = p - global%refPressure
       dh = (g/(g-1.0_RFREAL))*p/r - refH
@@ -4588,7 +4591,7 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
        IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= 0 ) THEN
-    CALL ErrorStop(global,ERR_FILE_OPEN,5367,'File: '//TRIM(iFileName1))
+    CALL ErrorStop(global,ERR_FILE_OPEN,5370,'File: '//TRIM(iFileName1))
   END IF ! global%error
 
   IF ( global%verbLevel > VERBOSE_NONE ) THEN
@@ -4634,7 +4637,7 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
        xTransformed = x
        yTransformed = y+4
        radialDistTransformed = SQRT(xTransformed*xTransformed +yTransformed*yTransformed)
-       p = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2)
+       p = MixtPerf_P_DEoGVm2(r,Eo,g,Vm2,ksg)
        !IF( radialDistTransformedi == refL/2)THEN
           PressCE = (p-refP)/(0.5_RFREAL * refD * refU * refU * refA)
           WRITE(IF_EXTR_DATA1,'(4(1X,E23.16))') xTransformed,yTransformed,radialDistTransformed,& 
@@ -4657,7 +4660,7 @@ SUBROUTINE RFLU_ExtractFlowDataVolumeCylds(pRegion)
   CLOSE(IF_EXTR_DATA1,IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= 0 ) THEN
-    CALL ErrorStop(global,ERR_FILE_CLOSE,5436,'File: '//TRIM(iFileName1))
+    CALL ErrorStop(global,ERR_FILE_CLOSE,5439,'File: '//TRIM(iFileName1))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -4767,7 +4770,7 @@ SUBROUTINE RFLU_ExtractFlowDataSurfSphds(pRegion)
        IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= 0 ) THEN
-    CALL ErrorStop(global,ERR_FILE_OPEN,5546,'File: '//TRIM(iFileName1))
+    CALL ErrorStop(global,ERR_FILE_OPEN,5549,'File: '//TRIM(iFileName1))
   END IF ! global%error
 
   IF ( global%verbLevel > VERBOSE_NONE ) THEN
@@ -4828,7 +4831,7 @@ SUBROUTINE RFLU_ExtractFlowDataSurfSphds(pRegion)
   CLOSE(IF_EXTR_DATA1,IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= 0 ) THEN
-    CALL ErrorStop(global,ERR_FILE_CLOSE,5607,'File: '//TRIM(iFileName1))
+    CALL ErrorStop(global,ERR_FILE_CLOSE,5610,'File: '//TRIM(iFileName1))
   END IF ! global%error
 
 ! ******************************************************************************
@@ -4918,7 +4921,7 @@ SUBROUTINE RFLU_WriteMeshBump(pRegion)
        IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= 0 ) THEN
-    CALL ErrorStop(global,ERR_FILE_OPEN,5697,'File: '//TRIM(iFileName1))
+    CALL ErrorStop(global,ERR_FILE_OPEN,5700,'File: '//TRIM(iFileName1))
   END IF ! global%error
 
   IF ( global%verbLevel > VERBOSE_NONE ) THEN
@@ -4978,7 +4981,7 @@ SUBROUTINE RFLU_WriteMeshBump(pRegion)
   CLOSE(IF_EXTR_DATA1,IOSTAT=errorFlag)
   global%error = errorFlag
   IF ( global%error /= 0 ) THEN
-    CALL ErrorStop(global,ERR_FILE_CLOSE,5757,'File: '//TRIM(iFileName1))
+    CALL ErrorStop(global,ERR_FILE_CLOSE,5760,'File: '//TRIM(iFileName1))
   END IF ! global%error
 
 ! ******************************************************************************

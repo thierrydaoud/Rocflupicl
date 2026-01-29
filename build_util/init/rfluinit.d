@@ -4,6 +4,7 @@ rfluinit.o: \
  ModError.o \
  ModGlobal.o \
  ModInterfaces.o \
+ ModMixture.o \
  ModMPI.o \
  ModParameters.o \
  RFLU_ModAllocateMemory.o \

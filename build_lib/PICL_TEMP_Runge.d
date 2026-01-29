@@ -6,6 +6,7 @@ PICL_TEMP_Runge.o: \
  ModGrid.o \
  ModInterfaces.o \
  ModMixture.o \
+ ModMPI.o \
  ModParameters.o \
  RFLU_ModConvertCv.o \
  RFLU_ModDifferentiationCells.o \

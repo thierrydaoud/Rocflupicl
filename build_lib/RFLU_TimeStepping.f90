@@ -157,13 +157,29 @@ SUBROUTINE RFLU_TimeStepping(dTimeSystem,dIterSystem,regions)
 !DEC$ NOFREEFORM
 
 ! number of timesteps kept in history kernels
+
+!Change here when viscous unsteady on
+!#define PPICLF_VU 0
+!#define PPICLF_LRP3 6*PPICLF_VU
+
 ! maximum number of triangular patch boundaries
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 64
+! rprop: 48
 
-! map: 10
+! rprop5: 0 - Storing Force Models
+
+! map: 22
+!--- Particle Volume Fraction Feedback
+!--- x,y,z Forces Feedback
+!---Energy Feedback
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+!--- Reynolds Subgrid Stress Tensor
+!--- Pseudo Turbulent Kinetic Energy
+
+
+
 
 
 
@@ -485,7 +501,7 @@ SUBROUTINE RFLU_TimeStepping(dTimeSystem,dIterSystem,regions)
     END IF ! solverType
 
     ! TLJ - Use below to set for a fixed dt
-    !!global%dtMin = 1.d-6
+    !global%dtMin = 4.d-8
     ! TLJ: Set dt fixed for unit test problems
     if (global%piclStationaryFlag<0) global%dtMin = 5.d-8
 

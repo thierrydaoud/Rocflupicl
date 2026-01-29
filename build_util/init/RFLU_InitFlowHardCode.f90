@@ -77,6 +77,68 @@
 !
 ! ******************************************************************************
 !
+!!  Current cases:
+!     barrelExp
+!     cylds, rectshktb
+!     wedge
+!!  Legacy  cases:
+!     acoustic
+!     channelacoust
+!     cyldet
+!     ctint
+!     shktb
+!     cylpotential
+!     cylwall
+!     sphdet, detwav3D
+!     ds (series)
+!     vortexNSCBC
+!     gcgc
+!     gaussianpulse
+!     gmpjet
+!     gtlin
+!     gttri
+!     jet
+!     kjet (series)
+!     MShock_H2O_Air001
+!     MShock_H2O_Air002
+!     MShock_Air_Air_He001
+!     mvsh
+!     farf
+!     nscbc1
+!     nscbc2
+!     nscbc3
+!     nscbc4
+!     nscbc5
+!     nscbc6
+!     nscbc7
+!     nscbc8
+!     ncavity
+!     onera_c0, onera_c0_2d_100x50
+!     onera_c0_3d
+!     pipeacoust
+!     radialpulse
+!     rayleighproblem
+!     ringleb
+!     ShockBubble
+!     skews_ms2p0, skews_ms3p0, skews_ms4p0
+!     somm_spi
+!     sphds
+!     sphpotential
+!     stg1d, stg2d
+!     st_sod1, st_sod1_mp2
+!     st_sod2, st_sod2_mp2
+!     ssvorth (series)
+!     taylorvortex
+!     Two_Rarefaction
+!     volcmod2dv3
+!     vort
+!     vortex_part
+!     wcramp, wcrampsc, wcrampsm
+!     2DShock001
+!
+!
+! ******************************************************************************
+!
 ! $Id: RFLU_InitFlowHardCode.F90,v 1.7 2016/02/05 20:01:55 fred Exp $
 !
 ! Copyright: (c) 2003-2006 by the University of Illinois
@@ -136,7 +198,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                   mInj,Mo,muo,mw,nx,ny,nz,omega,p,perturb,pg,pi,pl,pMin,po,pOffs, &
                   psi,pTot,pv,r,r1,r2,Rc,Rc_l,radius,refD,refL,refNu,refP,refU,rg, &
                   rGas,ri,rl,ro,rv,rVap,t,temp,tTot,the,theta,u,uo,uo_c,um,ur,ut,uz, &
-                  v,vInj,Vm2,w,x,xMin,xo,xx,y,yp,yMin,yo,z,zMin,zz,eAir,ux,vy,wz, ra, pa, ea
+                  v,vInj,Vm2,w,x,xMin,xo,xx,y,yp,yMin,yo,z,zMin,zz,eAir,ux,vy,wz
   REAL(RFREAL),ALLOCATABLE,DIMENSION(:) :: randNum
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCv,pCvOld,pGv,pDv
   TYPE(t_global), POINTER :: global
@@ -149,6 +211,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
   ! TLJ - 05/14/2024 - begin  
   REAL(RFREAL) :: xs,ys,zs,rs
   REAL(RFREAL) :: emin, emax
+  REAL(RFREAL) :: ea, pa, ra
   ! TLJ - 05/14/2024 - end  
 
 ! Rahul - Read RBA Input file
@@ -166,13 +229,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
 
 ! Rahul - End
 
-! Avery - Read in External Flow File Jan 17 2025
-  CHARACTER(CHRLEN) :: iFileName2
-  REAL(RFREAL), ALLOCATABLE, DIMENSION(:) :: E_ext,P_ext,T_ext,Mx_ext,My_ext,Mz_ext
-  REAL(RFREAL), ALLOCATABLE, DIMENSION(:) :: rho_ext,x_ext,y_ext,z_ext,a_ext,x_Diff
-  REAL(RFREAL) :: z_shocked
-  INTEGER :: match
-! Avery - End
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -230,7 +287,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
       pRegion%mixt%cvState = CV_MIXT_STATE_PRIM
       
 ! TEMPORARY, to be replaced by proper code
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,222) 
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,279) 
 ! END TEMPORARY
 
 ! ==============================================================================
@@ -246,65 +303,6 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
 
         SELECT CASE ( global%casename )
 
-! ------------------------------------------------------------------------------
-!       Acoustic flow
-! ------------------------------------------------------------------------------
-
-        CASE ( "acoustic" ) 
-          A1 = pMixtInput%prepRealVal1
-          A2 = pMixtInput%prepRealVal2
-          Mo = pMixtInput%prepRealVal3
-          ro = pMixtInput%prepRealVal4
-          po = pMixtInput%prepRealVal5
-
-          DO icg = 1,pGrid%nCellsTot
-            x = pGrid%cofg(XCOORD,icg)
-
-            IF ( global%solverType == SOLV_IMPLICIT_HM ) THEN
-              g  = global%refGamma
-            ELSE           
-              mw = pGv(GV_MIXT_MOL,indMol*icg)
-              cp = pGv(GV_MIXT_CP ,indCp *icg)
-
-              gc = MixtPerf_R_M(mw)
-              g  = MixtPerf_G_CpR(cp,gc)
-            END IF ! solverType
-
-            IF ( global%solverType == SOLV_IMPLICIT_HM ) THEN
-              t = global%currentTime
-              CALL RFLU_ComputeExactFlowAcoustic(global,x,t,ro,po,Mo,g, &
-                                                 A1,A2,d,u,v,w,p)
-
-              pCv(CV_MIXT_XVEL,icg) = u
-              pCv(CV_MIXT_YVEL,icg) = v
-              pCv(CV_MIXT_ZVEL,icg) = w
-
-              t = global%currentTime + global%dtImposed/2.0_RFREAL
-              CALL RFLU_ComputeExactFlowAcoustic(global,x,t,ro,po,Mo,g, &
-                                                 A1,A2,d,u,v,w,p)
-
-              pCv(CV_MIXT_DENS,icg) = d
-              pCv(CV_MIXT_PRES,icg) = p
-
-              t = global%currentTime - global%dtImposed/2.0_RFREAL
-              CALL RFLU_ComputeExactFlowAcoustic(global,x,t,ro,po,Mo,g, &
-                                                 A1,A2,d,u,v,w,p)
-
-              pCvOld(CV_MIXT_DENS,icg) = d
-              pCvOld(CV_MIXT_PRES,icg) = p
-            ELSE
-              t = global%currentTime
-              CALL RFLU_ComputeExactFlowAcoustic(global,x,t,ro,po,Mo,g, &
-                                                 A1,A2,d,u,v,w,p)
-
-              pCv(CV_MIXT_DENS,icg) = d
-              pCv(CV_MIXT_XMOM,icg) = d*u
-              pCv(CV_MIXT_YMOM,icg) = d*v
-              pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
-            END IF ! solverType
-          END DO ! icg
-
 !-------------------------------------------------------------------------------
 !       Couture: Barrel with Explosive: Barrel Length = 40 mm, Diameter = 12mm 
 !       Explosive region is located from:  z = 0mm:33.5mm
@@ -313,10 +311,12 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
 !-------------------------------------------------------------------------------
         CASE ("barrelExp")
 
-           print*,'TLJ INIT specUsed: ',global%specUsed
-           print*,'TLJ : ',pMixtInput%prepRealVal26
-           print*,'TLJ : ',TRIM(pMixtInput%rBurnFile)
-           print*,'TLJ : ',pRegion%mixtInput%gasModel
+           print*,'TLJ RFLU_InitFlowHardCode : ',TRIM(global%casename)
+           print*,'TLJ specUsed       : ',global%specUsed
+           print*,'TLJ nSpecies       : ',global%nSpecies 
+           print*,'TLJ Gas Model      : ',pRegion%mixtInput%gasModel
+           print*,'TLJ RB value       : ',pMixtInput%prepRealVal26
+           print*,'TLJ RB File        : ',TRIM(pMixtInput%rBurnFile)
 
            !***************
            IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_JWL ) THEN ! Normal Case
@@ -325,6 +325,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  x = pGrid%cofg(XCOORD,icg)
                  y = pGrid%cofg(YCOORD,icg)
                  z = pGrid%cofg(ZCOORD,icg)
+
                  radius = SQRT(x**2 + y**2)
                  IF ( radius < pMixtInput%prepRealVal1 .AND. &
                        (z < pMixtInput%prepRealVal2) ) THEN
@@ -332,26 +333,30 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     d = pMixtInput%prepRealVal5
                     u = 0.0_RFREAL
                     v = 0.0_RFREAL
-                    w = 0.0_RFREAL
+                    !w = 0.0_RFREAL
+                    w = pMixtInput%prepRealVal7
                     p = pMixtInput%prepRealVal6
                  ELSE
                     ! Ambient Region
                     d = pMixtInput%prepRealVal3
                     u = 0.0_RFREAL
                     v = 0.0_RFREAL
-                    w = 0.0_RFREAL !pMixtInput%prepRealVal7
+                    w = 0.0_RFREAL
                     p = pMixtInput%prepRealVal4
+                    global%ppiclf_p0 = pMixtInput%prepRealVal4
                  END IF
                  mw = pGv(GV_MIXT_MOL,indMol*icg)
                  cp = pGv(GV_MIXT_CP ,indCp *icg)
                  gc = MixtPerf_R_M(mw)
                  g  = MixtPerf_G_CpR(cp,gc)
+                 
+                 ksg = 0.0_RFREAL
    
                  pCv(CV_MIXT_DENS,icg) = d
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
-                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
     
               END DO ! icg
            ENDIF ! non-JWL case
@@ -360,8 +365,8 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
            !+++++++++++++++
            IF ( pRegion%mixtInput%gasModel == GAS_MODEL_MIXT_JWL ) THEN ! JWL Case
 
-             IF ( pMixtInput%prepRealVal26 /= 1.0000 ) THEN ! JWL with Constant values
-               DO icg = 1,pGrid%nCellsTot
+           IF ( pMixtInput%prepRealVal26 /= 1.0000 ) THEN ! JWL with Constant values
+              DO icg = 1,pGrid%nCellsTot
                  x = pGrid%cofg(XCOORD,icg)  !Extract x coordinate of cellcentroid
                  y = pGrid%cofg(YCOORD,icg)  !Extract y coordinate of cellcentroid
                  z = pGrid%cofg(ZCOORD,icg)  !Extract z coordinate of cellcentroid
@@ -374,7 +379,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     d = pMixtInput%prepRealVal24
                     u = 0.0_RFREAL
                     v = 0.0_RFREAL
-                    w = 0.0_RFREAL !pMixtInput%prepRealVal5
+                    w = pMixtInput%prepRealVal5
                     e = pMixtInput%prepRealVal13/d
                  ELSE
                     ! Unshocked Air
@@ -383,6 +388,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     v = 0.0_RFREAL
                     w = 0.0_RFREAL
                     p = pMixtInput%prepRealVal2
+                    global%ppiclf_p0 = pMixtInput%prepRealVal2
                  END IF
 
                  mw = pGv(GV_MIXT_MOL,indMol*icg)
@@ -394,11 +400,13 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
+                 
+                 ksg = 0.0_RFREAL
 
                  ! Compute or read e - jgarno
                  IF (d == pMixtInput%prepRealVal3) THEN
                     ! Ideal gas law for Air
-                    pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+                    pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
                  ELSE
                     ! JWL for Products
                     ! Note e2 should be read in from onedx_hmx_mgeos.dat
@@ -413,15 +421,15 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     ! w = 0.0_RFREAL
                     e2 = 189.86636969074604_RFREAL
                     p = RFLU_JWL_P_ER(pRegion,e2,d,1.00_RFREAL)
-                    IF( e2 .LT. 2.00E+05_RFREAL ) THEN
+                    if ( e2 .lt. 2.00E+05_RFREAL ) then
                        e2 = 2.00E+05_RFREAL
-                    END IF
-                    pCv(CV_MIXT_ENER,icg) = d*(e2 + 0.5_RFREAL*w*w)
+                    endif
+                    pCv(CV_MIXT_ENER,icg) = d*(e2 + 0.5_RFREAL*w*w + ksg)
                     !pCv(CV_MIXT_ENER,icg) = d*e
-                 END IF
-               END DO ! icg
+                 ENDIF
+              END DO ! icg
 
-             END IF ! Constant values case
+           ENDIF ! Constant values case
 
   
            IF ( pMixtInput%prepRealVal26 == 1.0000 ) THEN ! JWL with Reactive Burn
@@ -437,7 +445,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_FILE_OPEN,429,iFileName1)
+              CALL ErrorStop(global,ERR_FILE_OPEN,437,iFileName1)
            END IF ! global%error
 
            n = 0
@@ -450,7 +458,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               END IF ! name
               IF ( n >= LIMIT_INFINITE_LOOP ) THEN
                  ! Guard against infinite loop
-                 CALL ErrorStop(global,ERR_INFINITE_LOOP,442)
+                 CALL ErrorStop(global,ERR_INFINITE_LOOP,450)
               END IF ! n
            END DO ! Infinite DO
            n = n-1
@@ -467,14 +475,14 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                      YRdata(n),STAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_ALLOCATE,459,'radData')
+              CALL ErrorStop(global,ERR_ALLOCATE,467,'radData')
            END IF ! global%error
    
            OPEN(unit=1990,FILE=iFileName1,FORM='FORMATTED', &
                     IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-                  CALL ErrorStop(global,ERR_FILE_OPEN,466,iFileName1)
+                  CALL ErrorStop(global,ERR_FILE_OPEN,474,iFileName1)
            END IF ! global%error
            READ(1990,*) (xData(icg),rData(icg),uData(icg), &
               eData(icg),Ydata(icg),eData2(icg),YRdata(icg), icg=1,n)
@@ -559,65 +567,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               print*,xQ,' <= x <= ',pMixtInput%prepRealVal1
               print*
            ENDIF
-           !*****************************************************************
-           ! Avery added - read external flow initial condition
-           ! Read in post-shock external flow solution from Paraview printout
-           ! Filename: ExternalFlow.dat
-           ! File Format: Gas Density; X Momentum; Y Momentum, Z Momentum, 
-           ! Energy, Pressure, Temperature, Speed of Sound, x coordinate,
-           ! y coordinate, z coordinate (no header, fortran format)
-           ! It assumes shocked flow is from z = 0 to largest z value in file.
-           ! All other flow is initiated with input file.
-           z_shocked = 0.0
-           IF (pMixtInput%prepRealVal5 < -10.0) THEN ! external flow used                 
-             iFileName2 = 'ExternalFlow.dat'
-             OPEN(unit=2025, FILE=iFileName2, FORM='FORMATTED', &
-                 IOSTAT=errorFlag)
-             global%error = errorFlag
-             IF ( global%error /= ERR_NONE ) THEN
-                CALL ErrorStop(global,ERR_FILE_OPEN,567,iFileName2)
-             END IF ! global%error
 
-             m = 0
-             DO
-                m = m+1
-                READ(2025,'(A)') endString
-                IF ( endString == TRIM('# END') ) THEN
-                   CLOSE(2025)
-                   EXIT
-                END IF ! name
-                IF ( m >= LIMIT_INFINITE_LOOP*100 ) THEN
-                   ! Guard against infinite loop
-                   CALL ErrorStop(global,ERR_INFINITE_LOOP,580)
-                END IF ! m
-             END DO ! Infinite DO
-             m = m-1
-             WRITE(*,*) 'ATC: Number of ExternalFLow.DAT rows read: ', m
-             
-             ! Allocate arrays to store column data from file
-             ALLOCATE (rho_ext(m),Mx_ext(m),My_ext(m),Mz_ext(m),E_ext(m),P_ext(m),&
-                      T_ext(m),a_ext(m),x_ext(m), y_ext(m), z_ext(m),&
-                      x_Diff(m), STAT=errorFlag)
-             global%error = errorFlag
-             IF ( global%error /= ERR_NONE ) THEN
-                CALL ErrorStop(global,ERR_ALLOCATE,592,'externalFlowData')
-             END IF ! global%error
-   
-             OPEN(unit=2025,FILE=iFileName2,FORM='FORMATTED', &
-                      IOSTAT=errorFlag)
-             global%error = errorFlag
-             IF ( global%error /= ERR_NONE ) THEN
-                    CALL ErrorStop(global,ERR_FILE_OPEN,599,iFileName1)
-             END IF ! global%error
-             READ(2025,'(11E23.16)') (rho_ext(icg),Mx_ext(icg),My_ext(icg), &
-                Mz_ext(icg),E_ext(icg),P_ext(icg),T_ext(icg),a_ext(icg),x_ext(icg), &
-                y_ext(icg),z_ext(icg), icg=1,m)
-             CLOSE(2025)
-          
-             ! Find largest z value.  This defines the region downstream of the bow shock
-             z_shocked = MAXVAL(z_ext)
-             WRITE(*,*) 'ATC: z_shocked starting value: ', z_shocked
-           END IF !read externalflow
 
            DO icg = 1,pGrid%nCellsTot
               x = pGrid%cofg(XCOORD,icg)  !Extract x coordinate of cellcentroid
@@ -629,6 +579,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               IF ( (radius < pMixtInput%prepRealVal6) .AND. &
                  ((xQ <= z) .AND. (z < pMixtInput%prepRealVal1) )) THEN
                  ! Explosive Region
+
                  ! Translate x->z, u->w
                  inearx = minloc(abs(xData(:)-z),1)
                  nearx  = z-xData(inearx)
@@ -711,16 +662,18 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                       & max(xData(:)),r Data(inearx-1:inearx+1)',&
                       & d,icg,inearx,wLow,z,xData(inearx-1),xData(inearx),xData(inearx+1), &
                       & maxval(xData(:)),rData(inearx-1),rData(inearx),rData(inearx+1)
-                    CALL ErrorStop(global,ERR_INVALID_VALUE,703,'Invalid den InitFlow')
+                    CALL ErrorStop(global,ERR_INVALID_VALUE,654,'Invalid den InitFlow')
                  ENDIF
 
                  IF (Y  .LE. 1.0E-20_RFREAL) Y  = 0.0_RFREAL
                  IF (YR .LE. 1.0E-20_RFREAL) YR = 0.0_RFREAL
+                 
+                 ksg = 0.0_RFREAL
 
                  ! We reset the minimum internal energy to the ambient
                  ! values because RocSDT assumes the strong shock approximation
                  if (e2 .lt. TLJ_eamb) e2 = TLJ_eamb
-                 etotal = d*(e2+0.5_RFREAL*(u*u+v*v+w*w))
+                 etotal = d*(e2+0.5_RFREAL*(u*u+v*v+w*w) + ksg)
                  p = e
 
                  ! TLJ - treatment for open or closed barrel
@@ -734,7 +687,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
-                 pCv(CV_MIXT_ENER,icg) = d*(e2 + 0.5_RFREAL*(u*u+v*v+w*w))
+                 pCv(CV_MIXT_ENER,icg) = d*(e2 + 0.5_RFREAL*(u*u+v*v+w*w) + ksg)
    
                  ! We need these for plotting solutions
                  !pDv(DV_MIXT_PRES,icg) = p
@@ -742,47 +695,15 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  !pDv(DV_MIXT_SOUN,icg) = RFLU_JWL_C_ER(pRegion,e2,d,1.0_RFREAL)
                  T = RFLU_JWL_T_PR(pRegion,p,d,e2,1.0_RFREAL)
                  a = RFLU_JWL_C_ER(pRegion,e2,d,1.0_RFREAL)
-                  
-              ELSE IF (z <= z_shocked .AND. pMixtInput%prepRealVal5 < -10.0) THEN ! Avery added Jan 17 2025
-                DO i = 1,m
-                  x_Diff(i) = SQRT((x-x_ext(i))**2+(y-y_ext(i))**2+(z-z_ext(i))**2)
-                END DO
-                match = MINLOC(x_Diff,1)
-                d = rho_ext(match)
-                u = Mx_ext(match)/d
-                v = My_ext(match)/d
-                w = Mz_ext(match)/d
-                p = P_ext(match)
-                T = T_ext(match)
-
-                mw = pGv(GV_MIXT_MOL,indMol*icg)
-                cp = pGv(GV_MIXT_CP ,indCp *icg)
-                gc = MixtPerf_R_M(mw)
-                g  = MixtPerf_G_CpR(cp,gc)
    
-                !p = T/(d*287.00000000)
-                !e2 = p/(d*0.4_RFREAL)  ! e = p/(\rho*(gamma-1))
-   
-                pCv(CV_MIXT_DENS,icg) = d
-                pCv(CV_MIXT_XMOM,icg) = Mx_ext(match)
-                pCv(CV_MIXT_YMOM,icg) = My_ext(match)
-                pCv(CV_MIXT_ZMOM,icg) = Mz_ext(match)
-                pCv(CV_MIXT_ENER,icg) = E_ext(match)
-   
-                ! We need these for plotting solutions
-                pDv(DV_MIXT_PRES,icg) = p
-                pDv(DV_MIXT_TEMP,icg) = T
-                pDv(DV_MIXT_SOUN,icg) = a_ext(match)
-                a = a_ext(match)
-                Y = 0.0_RFREAL
-                YR = 0.0_RFREAL
               ELSE
                  ! Ambient Region
-                 d = pMixtInput%prepRealVal3 
+                 d = pMixtInput%prepRealVal3
                  u = 0.0_RFREAL
                  v = 0.0_RFREAL
-                 w = pMixtInput%prepRealVal5                 
-                 p = pMixtInput%prepRealVal2 
+                 w = 0.0_RFREAL
+                 p = pMixtInput%prepRealVal2
+                 global%ppiclf_p0 = pMixtInput%prepRealVal2
    
                  mw = pGv(GV_MIXT_MOL,indMol*icg)
                  cp = pGv(GV_MIXT_CP ,indCp *icg)
@@ -790,32 +711,35 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  g  = MixtPerf_G_CpR(cp,gc)
    
                  e2 = p/(d*0.4_RFREAL)  ! e = p/(\rho*(gamma-1))
+                 
+                 ksg = 0.0_RFREAL
    
                  pCv(CV_MIXT_DENS,icg) = d
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
-                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
    
                  ! We need these for plotting solutions
-                 pDv(DV_MIXT_PRES,icg) = p
-                 pDv(DV_MIXT_TEMP,icg) = p/(gc*d)
-                 pDv(DV_MIXT_SOUN,icg) = MixtPerf_C_DGP(d,g,p)
+                 !pDv(DV_MIXT_PRES,icg) = p
+                 !pDv(DV_MIXT_TEMP,icg) = 300.0_RFREAL
+                 !pDv(DV_MIXT_SOUN,icg) = MixtPerf_C_DGP(d,g,p)
                  T = p/(gc*d)           ! T = p/(\rho*Rgas)
                  a = MixtPerf_C_DGP(d,g,p)
                  Y = 0.0_RFREAL
                  YR = 0.0_RFREAL
+
               END IF
 
               IF (IsNaN(pCv(CV_MIXT_ENER,icg)) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    e,d',pCv(CV_MIXT_ENER,icg),d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,802,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,726,'Invalid val InitFlow')
               ENDIF
               IF (IsNaN(p) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    p,d',p,d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,807,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,731,'Invalid val InitFlow')
               ENDIF
 
               ! Josh Garno - WRITE INIT Check File
@@ -832,10 +756,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
            END DO ! icg
 
            DEALLOCATE(xData,rData,eData,uData,Ydata,eData2,YRdata)
-           IF(pMixtInput%prepRealVal5 < -10.0) THEN
-             DEALLOCATE(rho_ext,Mx_ext,My_ext,Mz_ext,x_ext,y_ext,z_ext,P_ext,T_ext,x_Diff)
-             DEALLOCATE(E_ext,a_ext) 
-           END IF !externalFlow
+   
            ENDIF ! RB case
            ENDIF ! JWL case
            !+++++++++++++++
@@ -897,12 +818,14 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  cp = pGv(GV_MIXT_CP ,indCp *icg)
                  gc = MixtPerf_R_M(mw)
                  g  = MixtPerf_G_CpR(cp,gc)
+                 
+                 ksg = 0.0_RFREAL
 
                  pCv(CV_MIXT_DENS,icg) = d
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
-                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
 
               END DO ! icg
 
@@ -955,11 +878,13 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
+                 
+                 ksg = 0.0_RFREAL
 
                  ! Compute or read e - jgarno
                  IF (d == pMixtInput%prepRealVal3) THEN
                     ! Ideal gas law for Air
-                    pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+                    pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
                  ELSE
                     ! JWL for Products
                     ! Note e2 should be read in from onedx_hmx_mgeos.dat
@@ -982,7 +907,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                        e2 = ea
                        p  = pa
                     endif
-                    pCv(CV_MIXT_ENER,icg) = d*(e2 + 0.5_RFREAL*(u*u+v*v+w*w))
+                    pCv(CV_MIXT_ENER,icg) = d*(e2 + 0.5_RFREAL*(u*u+v*v+w*w) + ksg)
                  ENDIF
               END DO ! icg
 
@@ -1008,7 +933,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_FILE_OPEN,1000,iFileName1)
+              CALL ErrorStop(global,ERR_FILE_OPEN,925,iFileName1)
            END IF ! global%error
    
            n = 0
@@ -1021,7 +946,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               END IF ! name
               IF ( n >= LIMIT_INFINITE_LOOP ) THEN
                  ! Guard against infinite loop
-                 CALL ErrorStop(global,ERR_INFINITE_LOOP,1013)
+                 CALL ErrorStop(global,ERR_INFINITE_LOOP,938)
               END IF ! n
            END DO ! Infinite DO
            n = n-1
@@ -1041,7 +966,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-                  CALL ErrorStop(global,ERR_FILE_OPEN,1033,iFileName1)
+                  CALL ErrorStop(global,ERR_FILE_OPEN,958,iFileName1)
            END IF ! global%error
            READ(1990,*) (xData(icg),rData(icg),uData(icg), &
               eData(icg),Ydata(icg),eData2(icg),YRdata(icg), icg=1,n)
@@ -1212,11 +1137,13 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  ux = u*cos(theta)
                  vy = u*sin(theta)
                  wz = w
+                 
+                 ksg = 0.0_RFREAL
 
                  ! We reset the minimum internal energy to the ambient
                  ! values because RocSDT assumes the strong shock approximation
                  if (e2 .lt. TLJ_eamb) e2 = TLJ_eamb
-                 etotal = d*(e2+0.5_RFREAL*(ux*ux + vy*vy + wz*wz))
+                 etotal = d*(e2+0.5_RFREAL*(ux*ux + vy*vy + wz*wz) + ksg)
                  p = e
 
                  pCv(CV_MIXT_DENS,icg) = d
@@ -1245,14 +1172,16 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  cp = pGv(GV_MIXT_CP ,indCp *icg)
                  gc = MixtPerf_R_M(mw)
                  g  = MixtPerf_G_CpR(cp,gc)
+                 
+                 ksg = 0.0_RFREAL
    
                  e2 = p/(d*0.4_RFREAL)
-   
+
                  pCv(CV_MIXT_DENS,icg) = d
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
-                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
    
                  ! We need these for plotting solutions
                  !pDv(DV_MIXT_PRES,icg) = p
@@ -1268,12 +1197,12 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               IF (IsNaN(pCv(CV_MIXT_ENER,icg)) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    e,d',pCv(CV_MIXT_ENER,icg),d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,1260,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,1189,'Invalid val InitFlow')
               ENDIF
               IF (IsNaN(p) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    p,d',p,d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,1265,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,1194,'Invalid val InitFlow')
               ENDIF
    
               ! Josh Garno - WRITE INIT Check File
@@ -1294,17 +1223,18 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
            !+++++++++++++++
 
 
-
-
 ! ------------------------------------------------------------------------------
 !       Wedge case - Josh Gillis
 ! ------------------------------------------------------------------------------
 
         CASE ( "wedge" )
 
-          print*,'TLJ INIT specUsed: ',global%specUsed
-          print*,'TLJ : ',pMixtInput%prepRealVal26
-          print*,'TLJ : ',TRIM(pMixtInput%rBurnFile)
+          print*,'TLJ RFLU_InitFlowHardCode : ',TRIM(global%casename)
+          print*,'TLJ specUsed       : ',global%specUsed
+          print*,'TLJ nSpecies       : ',global%nSpecies 
+          print*,'TLJ Gas Model      : ',pRegion%mixtInput%gasModel
+          print*,'TLJ RB value       : ',pMixtInput%prepRealVal26
+          print*,'TLJ RB File        : ',TRIM(pMixtInput%rBurnFile)
 
           !***************
           !***************
@@ -1331,17 +1261,20 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                 v = 0.0_RFREAL
                 w = 0.0_RFREAL
                 p = pMixtInput%prepRealVal6
+                global%ppiclf_p0 = pMixtInput%prepRealVal2
              END IF ! x
              mw = pGv(GV_MIXT_MOL,indMol*icg)
              cp = pGv(GV_MIXT_CP ,indCp *icg)
              gc = MixtPerf_R_M(mw)
              g  = MixtPerf_G_CpR(cp,gc)
+             
+             ksg = 0.0_RFREAL
  
              pCv(CV_MIXT_DENS,icg) = d
              pCv(CV_MIXT_XMOM,icg) = d*u
              pCv(CV_MIXT_YMOM,icg) = d*v
              pCv(CV_MIXT_ZMOM,icg) = d*w
-             pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+             pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
 
           END DO ! icg
 
@@ -1374,7 +1307,8 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     v = 0.0_RFREAL
                     w = 0.0_RFREAL
                     p = pMixtInput%prepRealVal2
-                    END IF
+                    global%ppiclf_p0 = pMixtInput%prepRealVal2
+                 END IF
 
                  mw = pGv(GV_MIXT_MOL,indMol*icg)
                  cp = pGv(GV_MIXT_CP ,indCp *icg)
@@ -1385,11 +1319,13 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
+                 
+                 ksg = 0.0_RFREAL
 
                  ! Compute or read e - jgarno
                  IF (d == pMixtInput%prepRealVal3) THEN
                     ! Ideal gas law for Air
-                    pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+                    pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
                  ELSE
                     ! JWL for Products
                     ! Note e2 should be read in from onedx_hmx_mgeos.dat
@@ -1408,7 +1344,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     if ( e2 .lt. 2.00E+05_RFREAL ) then
                        e2 = 2.00E+05_RFREAL
                     endif
-                    pCv(CV_MIXT_ENER,icg) = d*(e2 + 0.5_RFREAL*w*w)
+                    pCv(CV_MIXT_ENER,icg) = d*(e2 + 0.5_RFREAL*w*w + ksg)
                     !pCv(CV_MIXT_ENER,icg) = d*e
                  ENDIF
               END DO ! icg
@@ -1435,7 +1371,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_FILE_OPEN,1427,iFileName1)
+              CALL ErrorStop(global,ERR_FILE_OPEN,1363,iFileName1)
            END IF ! global%error
    
            n = 0
@@ -1448,7 +1384,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               END IF ! name
               IF ( n >= LIMIT_INFINITE_LOOP ) THEN
                  ! Guard against infinite loop
-                 CALL ErrorStop(global,ERR_INFINITE_LOOP,1440)
+                 CALL ErrorStop(global,ERR_INFINITE_LOOP,1376)
            END IF ! n
            END DO ! Infinite DO
            n = n-1
@@ -1465,14 +1401,14 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                      YRdata(n),STAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_ALLOCATE,1457,'radData')
+              CALL ErrorStop(global,ERR_ALLOCATE,1393,'radData')
            END IF ! global%error
 
            OPEN(unit=1990,FILE=iFileName1,FORM='FORMATTED', &
                     IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-                  CALL ErrorStop(global,ERR_FILE_OPEN,1464,iFileName1)
+                  CALL ErrorStop(global,ERR_FILE_OPEN,1400,iFileName1)
            END IF ! global%error
            READ(1990,*) (xData(icg),rData(icg),uData(icg), &
               eData(icg),Ydata(icg),eData2(icg),YRdata(icg), icg=1,n)
@@ -1555,6 +1491,8 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               x = pGrid%cofg(XCOORD,icg)  !Extract x coordinate of cellcentroid
               y = pGrid%cofg(YCOORD,icg)  !Extract y coordinate of cellcentroid
               z = pGrid%cofg(ZCOORD,icg)  !Extract z coordinate of cellcentroid
+              
+              ksg = 0.0_RFREAL
 
               radius = SQRT(x**2 + y**2)
               theta = DATAN2(y,x)
@@ -1646,7 +1584,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  ! We reset the minimum internal energy to the ambient
                  ! values because RocSDT assumes the strong shock approximation
                  if (e2 .lt. TLJ_eamb) e2 = TLJ_eamb
-                 etotal = d*(e2+0.5_RFREAL*(ux*ux + vy*vy + wz*wz))
+                 etotal = d*(e2+0.5_RFREAL*(ux*ux + vy*vy + wz*wz) + ksg)
                  p = e
 
                  pCv(CV_MIXT_DENS,icg) = d
@@ -1669,6 +1607,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  v = 0.0_RFREAL
                  w = 0.0_RFREAL
                  p = pMixtInput%prepRealVal2
+                 global%ppiclf_p0 = pMixtInput%prepRealVal2
 
                  mw = pGv(GV_MIXT_MOL,indMol*icg)
                  cp = pGv(GV_MIXT_CP ,indCp *icg)
@@ -1676,12 +1615,14 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  g  = MixtPerf_G_CpR(cp,gc)
 
                  e2 = p/(d*0.4_RFREAL)
+                 
+                 ksg = 0.0_RFREAL
 
                  pCv(CV_MIXT_DENS,icg) = d
                  pCv(CV_MIXT_XMOM,icg) = d*u
                  pCv(CV_MIXT_YMOM,icg) = d*v
                  pCv(CV_MIXT_ZMOM,icg) = d*w
-                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+                 pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
 
                  ! We need these for plotting solutions
                  !pDv(DV_MIXT_PRES,icg) = p
@@ -1697,12 +1638,12 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               IF (IsNaN(pCv(CV_MIXT_ENER,icg)) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    e,d',pCv(CV_MIXT_ENER,icg),d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,1689,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,1630,'Invalid val InitFlow')
               ENDIF
               IF (IsNaN(p) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    p,d',p,d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,1694,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,1635,'Invalid val InitFlow')
               ENDIF
 
               ! Josh Garno - WRITE INIT Check File
@@ -1722,6 +1663,67 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
            ENDIF ! JWL case
            !+++++++++++++++
    
+
+! ------------------------------------------------------------------------------
+!       Acoustic flow
+! ------------------------------------------------------------------------------
+
+        CASE ( "acoustic" ) 
+          A1 = pMixtInput%prepRealVal1
+          A2 = pMixtInput%prepRealVal2
+          Mo = pMixtInput%prepRealVal3
+          ro = pMixtInput%prepRealVal4
+          po = pMixtInput%prepRealVal5
+
+          DO icg = 1,pGrid%nCellsTot
+            x = pGrid%cofg(XCOORD,icg)
+
+            IF ( global%solverType == SOLV_IMPLICIT_HM ) THEN
+              g  = global%refGamma
+            ELSE           
+              mw = pGv(GV_MIXT_MOL,indMol*icg)
+              cp = pGv(GV_MIXT_CP ,indCp *icg)
+
+              gc = MixtPerf_R_M(mw)
+              g  = MixtPerf_G_CpR(cp,gc)
+            END IF ! solverType
+
+            IF ( global%solverType == SOLV_IMPLICIT_HM ) THEN
+              t = global%currentTime
+              CALL RFLU_ComputeExactFlowAcoustic(global,x,t,ro,po,Mo,g, &
+                                                 A1,A2,d,u,v,w,p)
+
+              pCv(CV_MIXT_XVEL,icg) = u
+              pCv(CV_MIXT_YVEL,icg) = v
+              pCv(CV_MIXT_ZVEL,icg) = w
+
+              t = global%currentTime + global%dtImposed/2.0_RFREAL
+              CALL RFLU_ComputeExactFlowAcoustic(global,x,t,ro,po,Mo,g, &
+                                                 A1,A2,d,u,v,w,p)
+
+              pCv(CV_MIXT_DENS,icg) = d
+              pCv(CV_MIXT_PRES,icg) = p
+
+              t = global%currentTime - global%dtImposed/2.0_RFREAL
+              CALL RFLU_ComputeExactFlowAcoustic(global,x,t,ro,po,Mo,g, &
+                                                 A1,A2,d,u,v,w,p)
+
+              pCvOld(CV_MIXT_DENS,icg) = d
+              pCvOld(CV_MIXT_PRES,icg) = p
+            ELSE
+              t = global%currentTime
+              CALL RFLU_ComputeExactFlowAcoustic(global,x,t,ro,po,Mo,g, &
+                                                 A1,A2,d,u,v,w,p)
+              
+              ksg = 0.0_RFREAL
+
+              pCv(CV_MIXT_DENS,icg) = d
+              pCv(CV_MIXT_XMOM,icg) = d*u
+              pCv(CV_MIXT_YMOM,icg) = d*v
+              pCv(CV_MIXT_ZMOM,icg) = d*w
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
+            END IF ! solverType
+          END DO ! icg
 
 
 !
@@ -1811,11 +1813,13 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                                                 Lx,Ly,Lz,n1,n2,n3,omega, &
                                                 dTot,pTot,aTot,const,d,u,v,w,p) 
                                     
+              ksg = 0.0_RFREAL
+
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,gRef,p,u,v,w)               
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,gRef,p,u,v,w,ksg)               
             END DO ! icg    
           END IF ! solverType
  
@@ -1834,7 +1838,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  IOSTAT=errorFlag)
             global%error = errorFlag
             IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_FILE_OPEN,1826,iFileName1)
+              CALL ErrorStop(global,ERR_FILE_OPEN,1830,iFileName1)
             END IF ! global%error
                 
 ! Infinite DO
@@ -1848,7 +1852,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               END IF ! name
 ! Guard against infinite loop 
               IF ( n >= LIMIT_INFINITE_LOOP ) THEN 
-                CALL ErrorStop(global,ERR_INFINITE_LOOP,1840)
+                CALL ErrorStop(global,ERR_INFINITE_LOOP,1844)
               END IF ! n
             END DO ! Infinite DO
   
@@ -1860,7 +1864,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                       STAT=errorFlag)
             global%error = errorFlag
             IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_ALLOCATE,1852,'radData')
+              CALL ErrorStop(global,ERR_ALLOCATE,1856,'radData')
             END IF ! global%error
   
 ! Begin - Read data file and store data in arrays
@@ -1869,7 +1873,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  IOSTAT=errorFlag)
             global%error = errorFlag
             IF ( global%error /= ERR_NONE ) THEN
-               CALL ErrorStop(global,ERR_FILE_OPEN,1861,iFileName1)
+               CALL ErrorStop(global,ERR_FILE_OPEN,1865,iFileName1)
             END IF ! global%error
             READ(IF_READRB,*) (radData(icg),rData(icg),uData(icg), &
                                       eData(icg), icg=1,n-1)
@@ -1887,6 +1891,8 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
             x = pGrid%cofg(XCOORD,icg)
             y = pGrid%cofg(YCOORD,icg)
             z = pGrid%cofg(ZCOORD,icg)
+            
+            ksg = 0.0_RFREAL
 
             IF (ABS(pMixtInput%prepIntVal1) == 0) THEN  !n=0 ; 2D(r-z)
              radius  = y
@@ -1907,12 +1913,13 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               u = 0.0_RFREAL
               v = 0.0_RFREAL
               w = 0.0_RFREAL
+              ksg = 0.0_RFREAL
               mw = pGv(GV_MIXT_MOL,indMol*icg)
               cp = pGv(GV_MIXT_CP ,indCp *icg)
               gc = MixtPerf_R_M(mw)
               g  = MixtPerf_G_CpR(cp,gc)
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
-              e  = MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
+              e  = MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             ELSE
               d = pMixtInput%prepRealVal4*pMixtInput%prepRealVal3
               u = 0.0_RFREAL
@@ -1988,7 +1995,7 @@ loop:           DO b=1,n-1
                     w = 0.0_RFREAL
                     e = ( wLow *eData(iLow ) + &
                           wHigh*eData(iHigh) )*wInv
-                pCv(CV_MIXT_ENER,icg) = d*Mixt_Eo_eUVW(e,u,v,w)
+                pCv(CV_MIXT_ENER,icg) = d*Mixt_Eo_eUVW(e,u,v,w,ksg)
               END IF ! global%ifReadFromFile  
 
             END IF ! radius
@@ -2068,7 +2075,7 @@ loop:           DO b=1,n-1
             DEALLOCATE (radData,rData,uData,eData,STAT=errorFlag)
             global%error = errorFlag
             IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_DEALLOCATE,2060,'rBurnData')
+              CALL ErrorStop(global,ERR_DEALLOCATE,2067,'rBurnData')
             END IF ! global%error
           END IF ! global%ifReadFromFile
 
@@ -2102,12 +2109,14 @@ loop:           DO b=1,n-1
 
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -2203,12 +2212,14 @@ loop:           DO b=1,n-1
 
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
 
           END DO ! icg
 
@@ -2286,11 +2297,12 @@ loop:           DO b=1,n-1
               pCvOld(CV_MIXT_DENS,icg) = d
               pCvOld(CV_MIXT_PRES,icg) = p
             ELSE
+              ksg = 0.0_RFREAL
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! solverType
           END DO ! icg
 
@@ -2341,11 +2353,12 @@ loop:           DO b=1,n-1
               pCvOld(CV_MIXT_DENS,icg) = d
               pCvOld(CV_MIXT_PRES,icg) = p
             ELSE
+              ksg = 0.0_RFREAL
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! solverType
           END DO ! icg
 
@@ -2385,11 +2398,12 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
 
+            ksg = 0.0_RFREAL
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! End Subbu - Sep 2011
@@ -2401,10 +2415,10 @@ loop:           DO b=1,n-1
 ! ----- Without backchamber ----------------------------------------------------
 
         CASE ( "ds_7p25"   , "ds_20p0"   , "ds_50p0"   , "ds_125p0"   , & 
-	       "ds_7p25_v2", "ds_20p0_v2", "ds_50p0_v2", "ds_125p0_v2", &
-	       "ds_7p25_v3", "ds_20p0_v3", "ds_50p0_v3", "ds_125p0_v3", &
-	       "ds_7p25_v4", "ds_20p0_v4", "ds_50p0_v4", "ds_125p0_v4", &
-	       "ds_7p25_v5", "ds_20p0_v5", "ds_50p0_v5", "ds_125p0_v5" )
+               "ds_7p25_v2", "ds_20p0_v2", "ds_50p0_v2", "ds_125p0_v2", &
+               "ds_7p25_v3", "ds_20p0_v3", "ds_50p0_v3", "ds_125p0_v3", &
+               "ds_7p25_v4", "ds_20p0_v4", "ds_50p0_v4", "ds_125p0_v4", &
+               "ds_7p25_v5", "ds_20p0_v5", "ds_50p0_v5", "ds_125p0_v5" )
           DO icg = 1,pGrid%nCellsTot
             x = pGrid%cofg(XCOORD,icg)
 
@@ -2428,22 +2442,23 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
 
+            ksg = 0.0_RFREAL
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
-	  
+  
 ! ----- With backchamber -----------------------------------------------------	  
-	  	  
+
         CASE ( "ds_7p25_v6", "ds_20p0_v6", "ds_50p0_v6", "ds_125p0_v6" )
           DO icg = 1,pGrid%nCellsTot
             x =     pGrid%cofg(XCOORD,icg)
-	    y = ABS(pGrid%cofg(YCOORD,icg))
+            y = ABS(pGrid%cofg(YCOORD,icg))
 
             IF ( (x < pMixtInput%prepRealVal1) .AND. & 
-	         (y < pMixtInput%prepRealVal2) ) THEN
+                 (y < pMixtInput%prepRealVal2) ) THEN
               d = pMixtInput%prepRealVal3
               u = pMixtInput%prepRealVal4
               v = 0.0_RFREAL
@@ -2462,12 +2477,14 @@ loop:           DO b=1,n-1
         
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg	  
 
 ! ------------------------------------------------------------------------------
@@ -2508,12 +2525,14 @@ loop:           DO b=1,n-1
         
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
+            
+            ksg = 0.0_RFREAL
                                
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -2546,13 +2565,15 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)            
             
+            ksg = 0.0_RFREAL
+            
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
           END DO ! icg     
-	
+
   
 ! ------------------------------------------------------------------------------
 !       Gaussian pulse
@@ -2635,12 +2656,14 @@ loop:           DO b=1,n-1
                                                         c,g,L,A,d,u,v,w,p)
                 x = x - L/2.0_RFREAL
               END IF ! x
+              
+              ksg = 0.0_RFREAL
 
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! solverType
           END DO ! icg
 
@@ -2652,11 +2675,11 @@ loop:           DO b=1,n-1
           DO icg = 1,pGrid%nCellsTot
             x = pGrid%cofg(XCOORD,icg)
             y = pGrid%cofg(YCOORD,icg)
-	    z = pGrid%cofg(ZCOORD,icg)
+            z = pGrid%cofg(ZCOORD,icg)
 
             IF ( (    x  < 0.00_RFREAL) .AND. & 
                  (ABS(y) < 0.55_RFREAL) .AND. & 
-		 (ABS(z) < 0.55_RFREAL) ) THEN 
+                 (ABS(z) < 0.55_RFREAL) ) THEN 
               d = 34.7418238572_RFREAL
               u = 0.0_RFREAL
               v = 0.0_RFREAL
@@ -2676,11 +2699,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)            
             
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
           END DO ! icg     	  
 
 ! ------------------------------------------------------------------------------
@@ -2728,12 +2753,14 @@ loop:           DO b=1,n-1
                                                                            
             d = d + dOffs 
             p = p + pOffs                  
+            
+            ksg = 0.0_RFREAL
                                
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ----- Trigonometric function -------------------------------------------------
@@ -2765,12 +2792,14 @@ loop:           DO b=1,n-1
                                                                             
             d = d + dOffs 
             p = p + pOffs                  
+            
+            ksg = 0.0_RFREAL
                                
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -2779,14 +2808,14 @@ loop:           DO b=1,n-1
 
         CASE ( "jet" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,2771, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,2800, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,2778, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,2807, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -2842,12 +2871,14 @@ loop:           DO b=1,n-1
          
             Cvm = (rl*pl*cvl + rg*pg*cvg + rv*pv*cvv)/d
             Vm2 = u*u+v*v+w*w
+
+            ksg = 0.0_RFREAL
  
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2)
+            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -2879,11 +2910,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)             
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)             
           END DO ! icg
 
         CASE ( "kjet2","kjet2v3","kjet2v4","kjet2v5" ) 
@@ -2910,11 +2943,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)             
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)             
           END DO ! icg
 
         CASE ( "kjet2v3mp","kjet2v4mp","kjet2v5mp" )
@@ -2941,11 +2976,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -2954,14 +2991,14 @@ loop:           DO b=1,n-1
 
         CASE ( "MShock_H2O_Air001" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,2946, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,2983, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,2953, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,2990, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -3006,24 +3043,26 @@ loop:           DO b=1,n-1
 
             Cvm = (rl*pl*cvl + rg*pg*cvg + rv*pv*cvv)/d 
             Vm2 = u*u+v*v+w*w
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2)
+            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2,ksg)
           END DO ! icg
 
         CASE ( "MShock_H2O_Air002" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3008, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3047, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3015, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3054, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -3068,12 +3107,14 @@ loop:           DO b=1,n-1
 
             Cvm = (rl*pl*cvl + rg*pg*cvg + rv*pv*cvv)/d
             Vm2 = u*u+v*v+w*w
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2)
+            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -3082,14 +3123,14 @@ loop:           DO b=1,n-1
 
         CASE ( "MShock_Air_Air_He001" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3074, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3115, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3081, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3122, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -3147,12 +3188,14 @@ loop:           DO b=1,n-1
 
             Cvm = (rl*pl*cvl + rg*pg*cvg + rv*pv*cvv)/d
             Vm2 = u*u+v*v+w*w
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2)
+            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -3183,11 +3226,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)            
             
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
           END DO ! icg     
 
 ! ------------------------------------------------------------------------------
@@ -3230,12 +3275,14 @@ loop:           DO b=1,n-1
             d = ro*(p/po)**(1.0_RFREAL/g)
             v = um*SIN(ATAN2(y,x))
             w = 0.0_RFREAL
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -3269,12 +3316,14 @@ loop:           DO b=1,n-1
             d = ro*(p/po)**(1.0_RFREAL/g)
             v = 0.0_RFREAL
             w = 0.0_RFREAL
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
         CASE ( "nscbc2" ) 
@@ -3304,12 +3353,14 @@ loop:           DO b=1,n-1
             d = ro*(p/po)**(1.0_RFREAL/g)
             v = 0.0_RFREAL
             w = 0.0_RFREAL
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
         CASE ( "nscbc3" ) 
@@ -3339,12 +3390,14 @@ loop:           DO b=1,n-1
             d = ro*(p/po)**(1.0_RFREAL/g)
             u = 0.0_RFREAL
             w = 0.0_RFREAL
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
         CASE ( "nscbc4" ) 
@@ -3375,11 +3428,13 @@ loop:           DO b=1,n-1
             v = uo
             w = 0.0_RFREAL
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
         CASE ( "nscbc5" ) 
@@ -3414,12 +3469,14 @@ loop:           DO b=1,n-1
             d = ro*(p/po)**(1.0_RFREAL/g)
             v = um*SIN(global%pi/4.0_RFREAL)
             w = 0.0_RFREAL
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
         CASE ( "nscbc6" ) 
@@ -3455,11 +3512,13 @@ loop:           DO b=1,n-1
             v = uo*SIN(global%pi/4.0_RFREAL)
             w = 0.0_RFREAL
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
         CASE ( "nscbc7" ) 
@@ -3500,12 +3559,14 @@ loop:           DO b=1,n-1
               v = 0.0_RFREAL
               w = 0.0_RFREAL
             END IF ! x
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -3536,11 +3597,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
                                
+           ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------          
@@ -3549,14 +3612,14 @@ loop:           DO b=1,n-1
 
         CASE ( "ncavity" )   
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3541, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3604, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3548, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3611, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -3601,12 +3664,14 @@ loop:           DO b=1,n-1
 
             Cvm = (rl*pl*cvl + rg*pg*cvg + rv*pv*cvv)/d
             Vm2 = u*u+v*v+w*w
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2)
+            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -3647,11 +3712,12 @@ loop:           DO b=1,n-1
               pCvOld(CV_MIXT_DENS,icg) = d
               pCvOld(CV_MIXT_PRES,icg) = p
             ELSE 
+              ksg = 0.0_RFREAL
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
             END IF ! global%solverType
           END DO ! icg 
           
@@ -3687,11 +3753,12 @@ loop:           DO b=1,n-1
               pCvOld(CV_MIXT_DENS,icg) = d
               pCvOld(CV_MIXT_PRES,icg) = p
             ELSE 
+              ksg = 0.0_RFREAL
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
             END IF ! global%solverType
           END DO ! icg            
 
@@ -3778,11 +3845,12 @@ loop:           DO b=1,n-1
                                                 L,ro,iBc,im,in,iq,etaqm,omega, &
                                                 dTot,pTot,aTot,const,d,u,v,w,p) 
                                     
+              ksg = 0.0_RFREAL
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,gRef,p,u,v,w)               
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,gRef,p,u,v,w,ksg)               
             END DO ! icg    
           END IF ! solverType
 
@@ -3848,11 +3916,12 @@ loop:           DO b=1,n-1
                                                       uo,po,c,g,L,A,d,u,v,w,p)
               END IF ! radius
 
+              ksg = 0.0_RFREAL
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! solverType
           END DO ! icg
 
@@ -3893,11 +3962,12 @@ loop:           DO b=1,n-1
               pCvOld(CV_MIXT_DENS,icg) = d
               pCvOld(CV_MIXT_PRES,icg) = p
             ELSE
+              ksg = 0.0_RFREAL
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! solverType
           END DO ! icg
 
@@ -3914,12 +3984,14 @@ loop:           DO b=1,n-1
             y = pGrid%cofg(YCOORD,icg)
 
             CALL RFLU_ComputeExactFlowRingleb(x,y,gcRef,pTot,tTot,d,u,v,w,p)  
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,1.4_RFREAL,p,u,v,w)               
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,1.4_RFREAL,p,u,v,w,ksg)               
           END DO ! icg    
 
 ! ------------------------------------------------------------------------------
@@ -3928,14 +4000,14 @@ loop:           DO b=1,n-1
 
         CASE ( "ShockBubble" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3920, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3992, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3927, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3999, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -3995,11 +4067,13 @@ loop:           DO b=1,n-1
             Cvm = (rl*pl*cvl + rg*pg*cvg + rv*pv*cvv)/d
             Vm2 = u*u + v*v + w*w
             
+            ksg = 0.0_RFREAL
+            
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCV(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2)
+            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2,ksg)
           END DO ! icg
 
 
@@ -4031,11 +4105,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)            
             
+            ksg = 0.0_RFREAL
+            
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
           END DO ! icg           
   
 ! ------------------------------------------------------------------------------
@@ -4065,12 +4141,14 @@ loop:           DO b=1,n-1
         
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)            
+
+            ksg = 0.0_RFREAL
             
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
           END DO ! icg           
   
 ! ------------------------------------------------------------------------------
@@ -4100,12 +4178,14 @@ loop:           DO b=1,n-1
         
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)                              
+            
+            ksg = 0.0_RFREAL
                                
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -4145,11 +4225,12 @@ loop:           DO b=1,n-1
               pCvOld(CV_MIXT_DENS,icg) = d
               pCvOld(CV_MIXT_PRES,icg) = p
             ELSE
+              ksg = 0.0_RFREAL
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! solverType
           END DO ! icg
 
@@ -4189,12 +4270,14 @@ loop:           DO b=1,n-1
 
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)	    
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg 
 
 ! ----- Sod case 1 -------------------------------------------------------------  
@@ -4222,12 +4305,14 @@ loop:           DO b=1,n-1
         
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)	    
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg                       
   
 ! ----- Sod case 2 -------------------------------------------------------------  
@@ -4256,11 +4341,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg     
   
 ! ------------------------------------------------------------------------------
@@ -4288,12 +4375,13 @@ loop:           DO b=1,n-1
 
             CALL RFLU_ComputeExactFlowSsVortex(x,y,gRef,gcRef,ri,Mi,pTot, & 
                                                tTot,d,u,v,w,p)
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,gRef,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,gRef,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -4348,11 +4436,13 @@ loop:           DO b=1,n-1
               t = global%currentTime
               CALL RFLU_ComputeExactFlowTaylorVortex(t,pi,x,y,L,refL,refNu, &
                                                      refU,refD,refP,u,v,w,p)
+              ksg = 0.0_RFREAL
+
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! solverType
           END DO ! icg
 
@@ -4362,14 +4452,14 @@ loop:           DO b=1,n-1
 
         CASE ( "Two_Rarefaction" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4354, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4444, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4361, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4451, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -4414,12 +4504,14 @@ loop:           DO b=1,n-1
 
             Cvm = (rl*pl*cvl + rg*pg*cvg + rv*pv*cvv)/d
             Vm2 = u*u+v*v+w*w
+            
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCV(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2)
+            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -4452,11 +4544,13 @@ loop:           DO b=1,n-1
 
             d = MixtPerf_D_PRT(p,gc,t)
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -4502,11 +4596,13 @@ loop:           DO b=1,n-1
             w = 0.0_RFREAL
             p = po + (d*A*psi)/(Rc*Rc)
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -4530,11 +4626,13 @@ loop:           DO b=1,n-1
             w = 0.0_RFREAL
             p = 1.0E+5_RFREAL  
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -4566,11 +4664,13 @@ loop:           DO b=1,n-1
             gc = MixtPerf_R_M(mw)
             g  = MixtPerf_G_CpR(cp,gc)
 
+            ksg = 0.0_RFREAL
+
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)                   
+            pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)                   
           END DO ! icg
           
 ! ------------------------------------------------------------------------------
@@ -4579,14 +4679,14 @@ loop:           DO b=1,n-1
 
         CASE ( "2DShock001" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4571, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4671, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4578, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4678, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -4631,12 +4731,13 @@ loop:           DO b=1,n-1
 
             Cvm = (rl*pl*cvl + rg*pg*cvg + rv*pv*cvv)/d
             Vm2 = u*u+v*v+w*w
+            ksg = 0.0_RFREAL
 
             pCv(CV_MIXT_DENS,icg) = d
             pCv(CV_MIXT_XMOM,icg) = d*u
             pCv(CV_MIXT_YMOM,icg) = d*v
             pCv(CV_MIXT_ZMOM,icg) = d*w
-            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2)
+            pCv(CV_MIXT_ENER,icg) = d*MixtGasLiq_Eo_CvmTVm2(Cvm,t,Vm2,ksg)
           END DO ! icg
 
 ! ------------------------------------------------------------------------------
@@ -4644,7 +4745,7 @@ loop:           DO b=1,n-1
 ! ------------------------------------------------------------------------------
 
         CASE DEFAULT 
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,4636)  
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,4737)  
       END SELECT ! global%casename
 
 ! ==============================================================================
@@ -4652,7 +4753,7 @@ loop:           DO b=1,n-1
 ! ==============================================================================  
     
     CASE DEFAULT 
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,4644) 
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,4745) 
   END SELECT ! pMixtInput%fluidModel
 
 ! ******************************************************************************

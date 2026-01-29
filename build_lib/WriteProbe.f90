@@ -98,13 +98,29 @@ SUBROUTINE WriteProbe( regions,iReg )
 
 
 ! number of timesteps kept in history kernels
+
+!Change here when viscous unsteady on
+!#define PPICLF_VU 0
+!#define PPICLF_LRP3 6*PPICLF_VU
+
 ! maximum number of triangular patch boundaries
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 64
+! rprop: 48
 
-! map: 10
+! rprop5: 0 - Storing Force Models
+
+! map: 22
+!--- Particle Volume Fraction Feedback
+!--- x,y,z Forces Feedback
+!---Energy Feedback
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+!--- Reynolds Subgrid Stress Tensor
+!--- Pseudo Turbulent Kinetic Energy
+
+
+
 
 
 
@@ -315,7 +331,6 @@ pRegion => regions(iReg)
        testery = 0 
        testerz = 0 
        testert = 0 
-
 ! TLJ: This needs to be checked
 !particle volume
        call ppiclf_solve_GetProFld(iCell, 1,&
@@ -335,14 +350,14 @@ pRegion => regions(iReg)
 !T-temperature
        call ppiclf_solve_GetProFld(iCell, 10,&
                         vpt(iCell))
+
        ! TLJ - modified 12/21/2024
-       ! AVERY - modified 5/16/2025
-       tester1 = (vfP(iCell))/pRegion%grid%vol(iCell)
-       tester2 = (vfD(iCell))/pRegion%grid%vol(iCell)
-       testerx = (vpx(iCell))/pRegion%grid%vol(iCell)
-       testery = (vpy(iCell))/pRegion%grid%vol(iCell)
-       testerz = (vpz(iCell))/pRegion%grid%vol(iCell)
-       testert = (vpt(iCell))/pRegion%grid%vol(iCell)
+       tester1 = vfP(iCell)*pRegion%grid%vol(iCell)
+       tester2 = vfD(iCell)*pRegion%grid%vol(iCell)
+       testerx = vpx(iCell)*pRegion%grid%vol(iCell)
+       testery = vpy(iCell)*pRegion%grid%vol(iCell)
+       testerz = vpz(iCell)*pRegion%grid%vol(iCell)
+       testert = vpt(iCell)*pRegion%grid%vol(iCell)
 
     !number of picl particles
       ! TLJ - Commented out 12/21/2024
@@ -410,7 +425,7 @@ pRegion => regions(iReg)
 
       global%error = errorFlag
       IF (global%error /= 0) THEN
-        CALL ErrorStop( global,ERR_FILE_WRITE,426,'Probe file' )
+        CALL ErrorStop( global,ERR_FILE_WRITE,425,'Probe file' )
       ENDIF
 
 ! --- close and open probe file (instead of fflush)
@@ -432,37 +447,37 @@ pRegion => regions(iReg)
 DEALLOCATE(vfP,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,454,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,453,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vfD,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,460,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,459,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vpx,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,466,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,465,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vpy,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,472,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,471,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vpz,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,478,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,477,'PPICLF:xGrid')
     END IF ! global%error
 
 DEALLOCATE(vpt,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,484,'PPICLF:xGrid')
+      CALL ErrorStop(global,ERR_ALLOCATE,483,'PPICLF:xGrid')
     END IF ! global%error
 
 

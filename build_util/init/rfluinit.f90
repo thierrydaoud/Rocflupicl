@@ -144,10 +144,11 @@ SUBROUTINE rfluinit(caseString,verbLevel)
                            ScaleRotateVector
                            
 
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
 
-
+  
 ! ******************************************************************************
 ! Definitions and declarations
 ! ******************************************************************************
@@ -483,7 +484,6 @@ SUBROUTINE rfluinit(caseString,verbLevel)
         IF ( RFLU_DecideReadWriteBcDataFile(pRegion) .EQV. .TRUE. ) THEN
           CALL RFLU_InitBcDataHardCode(pRegion)      
         END IF ! RFLU_DecideReadWriteBcDataFile      
-
         CALL RFLU_SetDependentVars(pRegion,1,pRegion%grid%nCellsTot)
 
         IF ( RFLU_NSCBC_DecideHaveNSCBC(pRegion) .EQV. .TRUE. ) THEN
@@ -595,7 +595,7 @@ SUBROUTINE rfluinit(caseString,verbLevel)
           CALL RFLU_BuildGeometry(pRegion)
                   
           CALL RFLU_InitFlowHardCodeLimWrapper(pRegion)
-
+          
 ! Modify flow field for moving reference frame attached to moving particle
           IF ( global%mvFrameFlag .EQV. .TRUE. ) THEN
             CALL RFLU_MVF_ModifyFlowField(pRegion)
@@ -770,7 +770,7 @@ SUBROUTINE rfluinit(caseString,verbLevel)
 
     END IF ! RFLU_DecideNeedGridSpeeds 
   END DO ! iReg  
-
+          
 ! ******************************************************************************
 ! Print info about warnings
 ! ******************************************************************************

@@ -122,6 +122,7 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_mixt_input), POINTER :: pMixtInput
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -169,7 +170,7 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
       pRegion%mixt%cvState = CV_MIXT_STATE_PRIM
       
 ! TEMPORARY, to be replaced by proper code
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,161) 
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,162) 
 ! END TEMPORARY
 
 ! ==============================================================================
@@ -257,7 +258,9 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
               u = pMixtInput%prepRealVal3 
               v = 0.0_RFREAL 
               w = 0.0_RFREAL 
-              p = pMixtInput%prepRealVal4 
+              p = pMixtInput%prepRealVal4
+              
+              ksg = 0.0_RFREAL
             
               mw = pGv(GV_MIXT_MOL,indMol*icg)
               cp = pGv(GV_MIXT_CP ,indCp *icg)
@@ -269,7 +272,7 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
             END IF ! x
           END DO ! icg           
   
@@ -282,6 +285,8 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
           
           DO icg = 1,pGrid%nCellsTot
               x = pGrid%cofg(XCOORD,icg) !extract cell centroid x coordinate
+              
+              ksg = 0.0_RFREAL
 
               IF ( x < pMixtInput%prepRealVal1 ) THEN
                 d = pMixtInput%prepRealVal2 !New density behind interface
@@ -297,7 +302,7 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
                 g  = MixtPerf_G_CpR(cp,gc)
 
                 p = (g-1.0_RFREAL)*(pCv(CV_MIXT_ENER,icg) - 0.5_RFREAL*pCv(CV_MIXT_DENS,icg)*(u**2+v**2+w**2))
-                Eo = p/(d*(g-1.0_RFREAL)) +0.5_RFREAL*(u**2+v**2+w**2)
+                Eo = p/(d*(g-1.0_RFREAL)) +0.5_RFREAL*(u**2+v**2+w**2) + ksg
 
                 pCv(CV_MIXT_DENS,icg) = d
                 pCv(CV_MIXT_XMOM,icg) = d*u
@@ -332,11 +337,13 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
               gc = MixtPerf_R_M(mw)
               g  = MixtPerf_G_CpR(cp,gc)  
 
+              ksg = 0.0_RFREAL
+
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
             END IF ! x
           END DO ! icg           
  
@@ -361,11 +368,13 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
               gc = MixtPerf_R_M(mw)
               g  = MixtPerf_G_CpR(cp,gc)  
 
+              ksg = 0.0_RFREAL
+
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
             END IF ! x
           END DO ! icg           
  
@@ -434,12 +443,14 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
         
               gc = MixtPerf_R_M(mw)
               g  = MixtPerf_G_CpR(cp,gc)            
+
+              ksg = 0.0_RFREAL
             
               pCv(CV_MIXT_DENS,icg) = d
               pCv(CV_MIXT_XMOM,icg) = d*u
               pCv(CV_MIXT_YMOM,icg) = d*v
               pCv(CV_MIXT_ZMOM,icg) = d*w
-              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)               
+              pCv(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)               
             END IF ! x
           END DO ! icg           
   
@@ -448,7 +459,7 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
 ! ------------------------------------------------------------------------------
 
         CASE DEFAULT 
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,440)  
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,451)  
       END SELECT ! global%casename
       
 ! ==============================================================================
@@ -456,7 +467,7 @@ SUBROUTINE RFLU_InitFlowHardCodeLim(pRegion)
 ! ==============================================================================  
     
     CASE DEFAULT 
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,448) 
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,459) 
   END SELECT ! pMixtInput%fluidModel
 
 ! ******************************************************************************

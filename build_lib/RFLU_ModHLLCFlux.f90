@@ -640,6 +640,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux1_MTCP(pRegion)
   REAL(RFREAL) :: cps,gcs,mms,Y1,Y2,Ys
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCvSpec 
   TYPE(t_spec_type), POINTER :: pSpecType
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -674,15 +675,15 @@ SUBROUTINE RFLU_HLLC_ComputeFlux1_MTCP(pRegion)
   pCvSpec => pRegion%spec%cv     
 
   IF ( pRegion%spec%cvState /= CV_MIXT_STATE_CONS ) THEN 
-    CALL ErrorStop(global,ERR_CV_STATE_INVALID,675)
+    CALL ErrorStop(global,ERR_CV_STATE_INVALID,676)
   END IF ! pRegion%spec%cvState  
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_TCPERF ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,679)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,680)  
   END IF ! pRegion%mixtInput%gasModel
 
   IF ( (indCp /= 1) .OR. (indMol /= 1) ) THEN 
-    CALL ErrorStop(global,ERR_REACHED_DEFAULT,683)  
+    CALL ErrorStop(global,ERR_REACHED_DEFAULT,684)  
   END IF ! indCp
 
 ! ******************************************************************************
@@ -725,9 +726,11 @@ SUBROUTINE RFLU_HLLC_ComputeFlux1_MTCP(pRegion)
     vl = pCv(CV_MIXT_YMOM,c1)*irl
     wl = pCv(CV_MIXT_ZMOM,c1)*irl
     pl = pDv(DV_MIXT_PRES,c1)
-    al = pDv(DV_MIXT_SOUN,c1)    
+    al = pDv(DV_MIXT_SOUN,c1)
+    
+    ksg = pRegion%mixt%piclKsg(c1) 
 
-    el  = MixtPerf_Eo_DGPUVW(rl,gl,pl,ul,vl,wl)
+    el  = MixtPerf_Eo_DGPUVW(rl,gl,pl,ul,vl,wl,ksg)
 
     Vml = ul*ul + vl*vl + wl*wl
     ql  = ul*nx + vl*ny + wl*nz - fs
@@ -751,8 +754,10 @@ SUBROUTINE RFLU_HLLC_ComputeFlux1_MTCP(pRegion)
     wr = pCv(CV_MIXT_ZMOM,c2)*irr
     pr = pDv(DV_MIXT_PRES,c2)
     ar = pDv(DV_MIXT_SOUN,c2)
+    
+    ksg = pRegion%mixt%piclKsg(c2) 
 
-    er  = MixtPerf_Eo_DGPUVW(rr,gr,pr,ur,vr,wr)
+    er  = MixtPerf_Eo_DGPUVW(rr,gr,pr,ur,vr,wr,ksg)
 
     Vmr = ur*ur + vr*vr + wr*wr
     qr  = ur*nx + vr*ny + wr*nz - fs
@@ -987,7 +992,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux1_TCP(pRegion)
   pSd  => pRegion%mixt%sd 
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_TCPERF ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,996)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,1001)  
   END IF ! pRegion%mixtInput%gasModel
 
   g = global%refGamma
@@ -1273,11 +1278,11 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_GL(pRegion)
   pSd  => pRegion%mixt%sd 
 
   IF ( pRegion%spec%cvState /= CV_MIXT_STATE_CONS ) THEN 
-    CALL ErrorStop(global,ERR_CV_STATE_INVALID,1285)
+    CALL ErrorStop(global,ERR_CV_STATE_INVALID,1290)
   END IF ! pRegion%spec%cvState  
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,1289)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,1294)  
   END IF ! pRegion%mixtInput%gasModel
   
 ! ******************************************************************************
@@ -1670,7 +1675,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_GL(pRegion)
       CASE ( 2 ) 
         CALL RFLU_CentralSecondPatch_GL(pRegion,pPatch)
       CASE DEFAULT
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,1682)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,1687)
     END SELECT ! pPatch%spaceOrder
   END DO ! iPatch
 
@@ -1752,6 +1757,8 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
   REAL(RFREAL), DIMENSION(:,:,:), POINTER :: pGcSpec 
   TYPE(t_spec_type), POINTER :: pSpecType
 
+  REAL(RFREAL) :: ksg
+
 ! ******************************************************************************
 ! Start
 ! ******************************************************************************
@@ -1787,15 +1794,15 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
   pGcSpec => pRegion%spec%gradCell    
 
   IF ( pRegion%spec%cvState /= CV_MIXT_STATE_CONS ) THEN 
-    CALL ErrorStop(global,ERR_CV_STATE_INVALID,1808)
+    CALL ErrorStop(global,ERR_CV_STATE_INVALID,1815)
   END IF ! pRegion%spec%cvState  
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_TCPERF ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,1812)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,1819)  
   END IF ! pRegion%mixtInput%gasModel
 
   IF ( (indCp /= 1) .OR. (indMol /= 1) ) THEN 
-    CALL ErrorStop(global,ERR_REACHED_DEFAULT,1816)  
+    CALL ErrorStop(global,ERR_REACHED_DEFAULT,1823)  
   END IF ! indCp
 
 ! ******************************************************************************
@@ -1858,6 +1865,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
     vl = pCv(CV_MIXT_YMOM,c1)*irl
     wl = pCv(CV_MIXT_ZMOM,c1)*irl
     pl = pDv(DV_MIXT_PRES,c1)
+    ksg = pRegion%mixt%piclKsg(c1) 
 
     rl = rl + pGc(XCOORD,GRC_MIXT_DENS,c1)*dx1 &
             + pGc(YCOORD,GRC_MIXT_DENS,c1)*dy1 &
@@ -1875,7 +1883,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c1)*dy1 &
             + pGc(ZCOORD,GRC_MIXT_PRES,c1)*dz1
 
-    el  = MixtPerf_Eo_DGPUVW(rl,gl,pl,ul,vl,wl)
+    el  = MixtPerf_Eo_DGPUVW(rl,gl,pl,ul,vl,wl,ksg)
     al  = MixtPerf_C_DGP(rl,gl,pl)
 
     Vml = ul*ul + vl*vl + wl*wl
@@ -1915,6 +1923,8 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
     vr = pCv(CV_MIXT_YMOM,c2)*irr
     wr = pCv(CV_MIXT_ZMOM,c2)*irr
     pr = pDv(DV_MIXT_PRES,c2)
+    
+    ksg = pRegion%mixt%piclKsg(c2) 
 
     rr = rr + pGc(XCOORD,GRC_MIXT_DENS,c2)*dx2 &
             + pGc(YCOORD,GRC_MIXT_DENS,c2)*dy2 &
@@ -1932,7 +1942,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c2)*dy2 &
             + pGc(ZCOORD,GRC_MIXT_PRES,c2)*dz2
 
-    er  = MixtPerf_Eo_DGPUVW(rr,gr,pr,ur,vr,wr)
+    er  = MixtPerf_Eo_DGPUVW(rr,gr,pr,ur,vr,wr,ksg)
     ar  = MixtPerf_C_DGP(rr,gr,pr)
 
     Vmr = ur*ur + vr*vr + wr*wr
@@ -2081,7 +2091,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_MTCP(pRegion)
       CASE ( 2 ) 
         CALL RFLU_CentralSecondPatch(pRegion,pPatch)
       CASE DEFAULT
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,2108)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,2118)
     END SELECT ! pPatch%spaceOrder
   END DO ! iPatch
 
@@ -2155,6 +2165,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_patch), POINTER :: pPatch
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -2185,7 +2196,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
   pSd  => pRegion%mixt%sd 
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_TCPERF ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,2218)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,2229)  
   END IF ! pRegion%mixtInput%gasModel
   
   cp = global%refCp
@@ -2230,6 +2241,8 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
     wl  = pCv(CV_MIXT_ZMOM,c1)*irl
     pl  = pDv(DV_MIXT_PRES,c1)
 
+    ksg = pRegion%mixt%piclKsg(c1) 
+
     dx  = xc - pGrid%cofg(XCOORD,c1)
     dy  = yc - pGrid%cofg(YCOORD,c1)
     dz  = zc - pGrid%cofg(ZCOORD,c1)
@@ -2250,7 +2263,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c1)*dy &
             + pGc(ZCOORD,GRC_MIXT_PRES,c1)*dz
 
-    el  = MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl)
+    el  = MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl,ksg)
     al  = MixtPerf_C_DGP(rl,g,pl)
 
     Vml = ul*ul + vl*vl + wl*wl
@@ -2268,6 +2281,8 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
     vr  = pCv(CV_MIXT_YMOM,c2)*irr
     wr  = pCv(CV_MIXT_ZMOM,c2)*irr
     pr  = pDv(DV_MIXT_PRES,c2)
+    
+    ksg = pRegion%mixt%piclKsg(c2) 
 
     dx  = xc - pGrid%cofg(XCOORD,c2)
     dy  = yc - pGrid%cofg(YCOORD,c2)
@@ -2289,7 +2304,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c2)*dy &
             + pGc(ZCOORD,GRC_MIXT_PRES,c2)*dz
 
-    er  = MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr)
+    er  = MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr,ksg)
     ar  = MixtPerf_C_DGP(rr,g,pr)
 
     Vmr = ur*ur + vr*vr + wr*wr
@@ -2411,7 +2426,7 @@ SUBROUTINE RFLU_HLLC_ComputeFlux2_TCP(pRegion)
       CASE ( 2 ) 
         CALL RFLU_CentralSecondPatch(pRegion,pPatch)
       CASE DEFAULT
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,2444)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,2459)
     END SELECT ! pPatch%spaceOrder
   END DO ! iPatch
 

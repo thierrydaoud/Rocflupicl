@@ -153,26 +153,31 @@ SUBROUTINE ConvectiveFluxesMP( region )
   IF ( global%specUsed .EQV. .TRUE. ) THEN
     pRegion => region%pRegion
 
+    print*, "loc 1"
     CALL RFLU_ScalarConvertCvCons2Prim(pRegion,pRegion%spec%cv, &
                                        pRegion%spec%cvState)
 
+    print*, "loc 2"
     CALL RFLU_ScalarInitRhs(pRegion,pRegion%specInput%nSpecies, &
                             pRegion%spec%diss,pRegion%spec%rhs)
 
     SELECT CASE ( spaceOrder ) 
       CASE ( 1 ) 
+        print*," loc 3"
         CALL RFLU_ScalarFirst(pRegion,pRegion%specInput%nSpecies, &
                               pRegion%spec%cv,pRegion%spec%rhs)
 
         DO iPatch = 1,pRegion%grid%nPatches
           pPatch => pRegion%patches(iPatch)
 
+        print*," loc 4"
           CALL RFLU_ScalarFirstPatch(pRegion,pPatch, &
                                      pRegion%specInput%nSpecies, &
                                      pRegion%spec%cv,pPatch%spec, &
                                      pRegion%spec%rhs)
         END DO ! iPatch                                     
       CASE ( 2 )     
+        print*," loc 5"
         CALL RFLU_ScalarSecond(pRegion,pRegion%specInput%nSpecies, &
                                pRegion%spec%cv,pRegion%spec%gradCell, &
                                pRegion%spec%rhs)
@@ -182,22 +187,24 @@ SUBROUTINE ConvectiveFluxesMP( region )
           
           SELECT CASE ( pPatch%spaceOrder ) 
             CASE ( 1 ) 
+              print*," loc 6"
               CALL RFLU_ScalarFirstPatch(pRegion,pPatch, &
                                          pRegion%specInput%nSpecies, &
                                          pRegion%spec%cv,pPatch%spec, &
                                          pRegion%spec%rhs)            
             CASE ( 2 )           
+            print*," loc 7"
               CALL RFLU_ScalarSecondPatch(pRegion,pPatch, &
                                           pRegion%specInput%nSpecies, &
                                           pRegion%spec%cv, &
                                           pRegion%spec%gradCell, &
                                           pPatch%spec,pRegion%spec%rhs)
             CASE DEFAULT
-              CALL ErrorStop(global,ERR_REACHED_DEFAULT,190)
+              CALL ErrorStop(global,ERR_REACHED_DEFAULT,197)
           END SELECT ! pPatch%spaceOrder
         END DO ! iPatch        
       CASE DEFAULT 
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,194)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,201)
     END SELECT ! spaceOrder
 
     CALL RFLU_ScalarConvertCvPrim2Cons(pRegion,pRegion%spec%cv, &

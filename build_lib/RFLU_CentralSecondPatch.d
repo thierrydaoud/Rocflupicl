@@ -6,6 +6,7 @@ RFLU_CentralSecondPatch.o: \
  ModGlobal.o \
  ModInterfaces.o \
  ModInterfacesSpecies.o \
+ ModMixture.o \
  ModMPI.o \
  ModParameters.o \
  ModSpecies.o \

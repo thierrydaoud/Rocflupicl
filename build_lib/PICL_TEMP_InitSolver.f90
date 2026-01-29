@@ -104,13 +104,29 @@ SUBROUTINE PICL_TEMP_InitSolver( pRegion)
 !DEC$ NOFREEFORM
 
 ! number of timesteps kept in history kernels
+
+!Change here when viscous unsteady on
+!#define PPICLF_VU 0
+!#define PPICLF_LRP3 6*PPICLF_VU
+
 ! maximum number of triangular patch boundaries
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 64
+! rprop: 48
 
-! map: 10
+! rprop5: 0 - Storing Force Models
+
+! map: 22
+!--- Particle Volume Fraction Feedback
+!--- x,y,z Forces Feedback
+!---Energy Feedback
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+!--- Reynolds Subgrid Stress Tensor
+!--- Pseudo Turbulent Kinetic Energy
+
+
+
 
 
 
@@ -151,26 +167,26 @@ INTEGER :: errorFlag,icg
    CHARACTER(CHRLEN) :: endString,iFileName,matName,comment
    CHARACTER(12) :: vtuFile,vtuFile1
    LOGICAL :: notfoundFlag, pf_restart,pf_rpInit,pf_settle,&
-              wall_exists, fexists, foundMat, CreateGhosts
+              wall_exists, fexists, foundMat
    INTEGER :: i,npart,nCells,vi,vii,ii,jj,kk,loopCounter,ipart,icl
    INTEGER :: PPC,numPclCells,npart_local,i_global,i_global_min,i_global_max,&
-              iFile,iMat, k, j, l, m, MinFluidCells
+              iFile,iMat, k, j, l, m
    REAL(RFREAL) :: dp_min,dp_max,rhop,tester,ratio,total_vol,xMinCurt,&
                    xMaxCurt,yMinCurt,yMaxCurt,xMinCell,xMaxCell,yMinCell,&
                    yMaxCell,zMinCell,zMaxCell,x,vFrac,volpclsum,xLoc,yLoc,zLoc,yL, &
-                   zpf_factor,xpf_factor,dp,neighborWidth,dp_max_l,xp_min,xp_max, &
-                   xp_min_l,xp_max_l 
-   REAL(RFREAL) :: y(12, 70000), &
-                   rprop(64, 70000)
+                   zpf_factor,xpf_factor,dp,neighborWidth,xp_min,xp_max, &
+                   yp_min, yp_max, zp_min, zp_max, MinFluidCells, maxVF
+   REAL(RFREAL) :: y(12, 80000), &
+                   rprop(48, 80000)
    REAL(RFREAL), DIMENSION(:,:), ALLOCATABLE :: rocGrid 
+   REAL(RFREAL), DIMENSION(:,:), ALLOCATABLE :: xGrid, yGrid, zGrid
    REAL(RFREAL),ALLOCATABLE,DIMENSION(:) :: xData,yData,zData,rData,dumData    
    REAL(RFREAL), DIMENSION(:), ALLOCATABLE :: volp,SPL 
    REAL(RFREAL), DIMENSION(3) :: tpw1,tpw2,tpw3         
    REAL(RFREAL) :: xin, wout, pi
    REAL(RFREAL) :: rmass
-   REAL(RFREAL), DIMENSION(:,:,:,:), ALLOCATABLE :: xGrid, yGrid, zGrid
 
-   INTEGER :: seed(33), isize
+   INTEGER :: seed(33), isize, CellVertices
 
    INTEGER :: stationary, qs_flag, am_flag, pg_flag, &
         collisional_flag, heattransfer_flag, feedback_flag, &
@@ -178,7 +194,7 @@ INTEGER :: errorFlag,icg
         rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
         qs_fluct_filter_adapt_flag, &
         ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
-        sbNearest_flag, burnrate_flag, flow_model
+        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
    REAL(RFREAL) :: rmu_ref, tref, suth, ksp, erest
    COMMON /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag, &
         collisional_flag, heattransfer_flag, feedback_flag, &
@@ -186,7 +202,7 @@ INTEGER :: errorFlag,icg
         rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
         qs_fluct_filter_adapt_flag, ksp, erest, &
         ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
-        sbNearest_flag, burnrate_flag, flow_model
+        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
    REAL(RFREAL) :: ppiclf_rcp_part
    CHARACTER(12) :: ppiclf_matname
    COMMON /RFLU_ppiclf_misc01/ ppiclf_rcp_part
@@ -306,13 +322,14 @@ END IF
  ! Initialization for viscous unsteady term
  ppiclf_nTimeBH = 1
  ppiclf_nUnsteadyData = 0
-! ************************************************************
 
-! *** I think we can delete this? Random not used -Avery
+! Needed for fluctuations
 seed = 1
 CALL RANDOM_SEED(put=seed)
 CALL RANDOM_SEED(size=isize)
-!***
+
+
+! ************************************************************
 
 ! Josh Gillis - Fixed restart probelm
 ! TLJ - we should probably use the .rin file instead
@@ -344,7 +361,7 @@ IF(global%restartFromScratch) THEN
    OPEN(iFile,FILE=iFileName,FORM="FORMATTED",STATUS="OLD",IOSTAT=errorFlag)
    global%error = errorFlag   
    IF( global%error /= ERR_NONE ) THEN 
-      CALL ErrorStop(global,ERR_FILE_OPEN,312,iFileName)
+      CALL ErrorStop(global,ERR_FILE_OPEN,313,iFileName)
    END IF
 
    ! check for comments at beginning of file
@@ -358,29 +375,37 @@ IF(global%restartFromScratch) THEN
    BACKSPACE(iFile, IOSTAT=ErrorFlag)
   
    READ(iFile,*) npart ! global number of particles
-   IF (npart .gt. 70000*global%nProcs) THEN
-      CALL ErrorStop(global,ERR_ILLEGAL_VALUE,327,'PPICLF:too &
+   IF (npart .gt. 80000*global%nProcs) THEN
+      CALL ErrorStop(global,ERR_ILLEGAL_VALUE,328,'PPICLF:too &
         many particles to initialize')
    END IF
   
-   npart_local = CEILING(npart*1.0D0/(global%nProcs*1.0D0))
+   npart_local = CEILING(REAL(npart)/(REAL(global%nProcs)))
    i = 1
    i_global = 1
    i_global_min = npart_local*global%myProcid
    i_global_max = npart_local*(global%myProcid+1)
    IF(i_global_max > npart) i_global_max = npart
 
-   rprop(1:64,1:70000) = 0.0D0
+   rprop(1:48,1:80000) = 0.0D0
    dp_max = 0.0D0
-   xp_min_l = +17400000.0
-   xp_max_l = -17400000.0
+   xp_min =  17400000.0
+   yp_min =  17400000.0
+   zp_min =  17400000.0
+   xp_max = -17400000.0
+   yp_max = -17400000.0
+   zp_max = -17400000.0
    DO i_global=1,npart
       READ(iFile,*) matName, (y(ii,i),ii=1,3),dp !points.dat not formated
 
       ! These are global max/min's since in 1:npart loop
       dp_max = max(dp_max,dp)
-      xp_min_l = min(xp_min_l,y(1,i)-dp/2.0)
-      xp_max_l = max(xp_max_l,y(1,i)+dp/2.0)
+      xp_min = min(xp_min,y(1,i)-dp/2.0)
+      xp_max = max(xp_max,y(1,i)+dp/2.0)
+      yp_min = min(yp_min,y(2,i)-dp/2.0)
+      yp_max = max(yp_max,y(2,i)+dp/2.0)
+      zp_min = min(zp_min,y(3,i)-dp/2.0)
+      zp_max = max(zp_max,y(3,i)+dp/2.0)
   
       ! if in range for this processor set all the other properties and increment i
       IF((i_global .GT. i_global_min) .AND. (i_global .LE. i_global_max)) THEN
@@ -403,7 +428,7 @@ IF(global%restartFromScratch) THEN
                   ppiclf_rcp_part = material%spht
                ELSE
                  PRINT*, 'Material Specific Heat not found in input file' 
-                 CALL ErrorStop(global,ERR_INRT_MISSPLAGMAT,371,matName)
+                 CALL ErrorStop(global,ERR_INRT_MISSPLAGMAT,380,matName)
                ENDIF
                rhop = material%dens
                foundMat = .TRUE.
@@ -413,7 +438,7 @@ IF(global%restartFromScratch) THEN
 
          IF(.NOT. foundMat) THEN
             print*,global%myProcid,'stopping foundMat = False'
-            CALL ErrorStop(global,ERR_INRT_MISSPLAGMAT,381,matName)
+            CALL ErrorStop(global,ERR_INRT_MISSPLAGMAT,390,matName)
          END IF
 
          IF ( global%myProcid == MASTERPROC) then
@@ -432,7 +457,7 @@ IF(global%restartFromScratch) THEN
          rprop(3,i)   = dp ! particle diameter
          rprop(4,i) = (4.0_RFREAL/3.0_RFREAL)*global%pi*&
                                    (0.5_RFREAL*dp)**3 ! particle volume
-         ! Super Particle Loading (Real Number of particles = JSPL * number of compuational particles)
+         ! Super Particle Loading (Real Number of particles = SPL * number of compuational particles)
          rprop(22,i) = 1.0_RFREAL
 
          ! Davin - added for burn rate model 02/22/2025
@@ -447,25 +472,56 @@ IF(global%restartFromScratch) THEN
    END DO
    npart_local = i - 1
 
-   CALL MPI_ALLREDUCE(xp_min_l,xp_min,1,MPI_RFREAL,MPI_MIN, &
+   CALL MPI_ALLREDUCE(xp_min,xp_min,1,MPI_RFREAL,MPI_MIN, &
         global%mpiComm,global%mpierr)
 
-   CALL MPI_ALLREDUCE(xp_max_l,xp_max,1,MPI_RFREAL,MPI_MAX, &
+   CALL MPI_ALLREDUCE(xp_max,xp_max,1,MPI_RFREAL,MPI_MAX, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(yp_min,yp_min,1,MPI_RFREAL,MPI_MIN, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(yp_max,yp_max,1,MPI_RFREAL,MPI_MAX, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(zp_min,zp_min,1,MPI_RFREAL,MPI_MIN, &
+        global%mpiComm,global%mpierr)
+
+   CALL MPI_ALLREDUCE(zp_max,zp_max,1,MPI_RFREAL,MPI_MAX, &
         global%mpiComm,global%mpierr)
 
    IF(global%myProcid == MASTERPROC) THEN
       print*
-      print*,'TLJ starting location of particle bed (xp_min) = ',xp_min
-      print*,'TLJ ending   location of particle bed (xp_max) = ',xp_max
-      print*,'TLJ particle bed thickness (xp_max-xp_min)*1e3 = ',(xp_max-xp_min)*1e3
+      print*,'Particle domain boundaries at t=0'
+      print*,'x - min, max, dx', xp_min, xp_max, xp_max - xp_min
+      print*,'y - min, max, dx', yp_min, yp_max, yp_max - yp_min
+      print*,'z - min, max, dx', zp_min, zp_max, zp_max - zp_min
       print*
+   END IF
+
+
+   IF(xp_min < x_per_min .OR. xp_max > x_per_max .OR. &
+      yp_min < y_per_min .OR. yp_max > y_per_max .OR. &
+      zp_min < z_per_min .OR. zp_max > z_per_max) THEN
+     IF(global%myProcid == MASTERPROC) THEN
+       WRITE(*,*) 'WARNING - Particles initalized outside of fluid domain'
+       WRITE(*,*) 'Particle domain boundaries at t=0'
+       WRITE(*,*) 'x - min, max, dx', xp_min, xp_max, xp_max - xp_min
+       WRITE(*,*) 'y - min, max, dx', yp_min, yp_max, yp_max - yp_min
+       WRITE(*,*) 'z - min, max, dx', zp_min, zp_max, zp_max - zp_min
+       WRITE(*,*) 'x fluid min/max', x_per_min, x_per_max
+       WRITE(*,*) 'y fluid min/max', y_per_min, y_per_max
+       WRITE(*,*) 'z fluid min/max', z_per_min, z_per_max
+     END IF
+     CALL MPI_Barrier(global%mpiComm,errorFlag)
+     !CALL ErrorStop(global,0,459,"rocpicl Init: Particles outside fluid domain")
    END IF
 
    ! Close points.dat file
    CLOSE(iFile, IOSTAT=errorFlag)
    global%error = errorFlag   
    IF ( global%error /= ERR_NONE ) THEN 
-      CALL ErrorStop(global,ERR_FILE_CLOSE,433,iFileName)
+      CALL ErrorStop(global,ERR_FILE_CLOSE,473,iFileName)
    END IF ! global%error  
 ELSE
 !  This is for a restart
@@ -488,15 +544,15 @@ ELSE
    ENDIF
 
    IF(ii .lt. 0) THEN
-      CALL ErrorStop(global,ERR_FILE_EXIST,456,vtuFile)
+      CALL ErrorStop(global,ERR_FILE_EXIST,496,vtuFile)
    END IF
 
    npart = -1
    dp_max = -1.0
-   CALL ppiclf_io_ReadParticleVTU(trim(vtuFile), ii, npart, dp_max_l)
-   CALL MPI_Allreduce(dp_max_l,dp_max,1,MPI_RFREAL,MPI_MAX, &
+   CALL ppiclf_io_ReadParticleVTU(trim(vtuFile), ii, npart, dp_max)
+   CALL MPI_Allreduce(dp_max,dp_max,1,MPI_RFREAL,MPI_MAX, &
       global%mpiComm,global%mpierr )
-   print*,global%myProcid,npart,dp_max_l,dp_max
+   print*,global%myProcid,npart,dp_max,dp_max
    IF( global%myProcid == MASTERPROC) THEN
       print*, " "
       WRITE(*,*) 'Finished PPICLF Restart'
@@ -506,121 +562,129 @@ ELSE
    END IF
 END IF ! global%restartFromScratch
 
-! User sets up overlap mesh:
+!CALL MPI_Barrier(global%mpiComm,errorFlag)
+
+
+! User sets up overlap grid:
 nCells = pRegion%grid%nCells
  
-ALLOCATE(xGrid(2,2,2,nCells),STAT=errorFlag)
+ALLOCATE(xGrid(8,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_ALLOCATE,480,'PPICLF:xGrid')
+  CALL ErrorStop(global,ERR_ALLOCATE,523,'PPICLF:xGrid')
 END IF ! global%error
 
-ALLOCATE(yGrid(2,2,2,nCells),STAT=errorFlag)
+ALLOCATE(yGrid(8,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_ALLOCATE,486,'PPICLF:yGrid')
+  CALL ErrorStop(global,ERR_ALLOCATE,529,'PPICLF:yGrid')
 END IF ! global%error
 
-ALLOCATE(zGrid(2,2,2,nCells),STAT=errorFlag)
+ALLOCATE(zGrid(8,nCells),STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_ALLOCATE,492,'PPICLF:zGrid')
+  CALL ErrorStop(global,ERR_ALLOCATE,535,'PPICLF:zGrid')
 END IF ! global%error
 
 ALLOCATE(rocGrid(7,nCells),STAT=errorFlag)
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_ALLOCATE,497,'PPICLF:rocGrid')
+  CALL ErrorStop(global,ERR_ALLOCATE,540,'PPICLF:rocGrid')
 END IF ! global%error
 
-! *** ppiclF requires hexahedral elements ***
+
+
 DO i = 1, nCells 
-
-   vi = pRegion%grid%hex2v(1,i) 
-            xGrid(1,1,1,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(1,1,1,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(1,1,1,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(4,i) 
-            xGrid(2,1,1,i) = pRegion%grid%xyz(XCOORD,vi)  
-            yGrid(2,1,1,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(2,1,1,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(5,i) 
-            xGrid(1,2,1,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(1,2,1,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(1,2,1,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(8,i) 
-            xGrid(2,2,1,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(2,2,1,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(2,2,1,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(2,i) 
-            xGrid(1,1,2,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(1,1,2,i) = pRegion%grid%xyz(YCOORD,vi)
-            zGrid(1,1,2,i) = pRegion%grid%xyz(ZCOORD,vi)
-   vi = pRegion%grid%hex2v(3,i) 
-            xGrid(2,1,2,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(2,1,2,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(2,1,2,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(6,i) 
-            xGrid(1,2,2,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(1,2,2,i) = pRegion%grid%xyz(YCOORD,vi) 
-            zGrid(1,2,2,i) = pRegion%grid%xyz(ZCOORD,vi) 
-   vi = pRegion%grid%hex2v(7,i) 
-            xGrid(2,2,2,i) = pRegion%grid%xyz(XCOORD,vi) 
-            yGrid(2,2,2,i) = pRegion%grid%xyz(YCOORD,vi)
-            zGrid(2,2,2,i) = pRegion%grid%xyz(ZCOORD,vi) 
-
-END DO !nCells
-
+  IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
+    ! Tetrahedral Cell
+    CellVertices = 4
+    DO k = 1, CellVertices
+      vi = pRegion%grid%tet2v(k,i) 
+             xGrid(k,i) = pRegion%grid%xyz(XCOORD,vi) 
+             yGrid(k,i) = pRegion%grid%xyz(YCOORD,vi) 
+             zGrid(k,i) = pRegion%grid%xyz(ZCOORD,vi) 
+    END DO
+  ELSE IF(pGrid%cellGlob2Loc(1,i) == 2) THEN
+    ! Hexahedral Cell
+    CellVertices = 8
+    DO k = 1, CellVertices
+      vi = pRegion%grid%hex2v(k,i) 
+             xGrid(k,i) = pRegion%grid%xyz(XCOORD,vi) 
+             yGrid(k,i) = pRegion%grid%xyz(YCOORD,vi) 
+             zGrid(k,i) = pRegion%grid%xyz(ZCOORD,vi) 
+    END DO !nCells
+  ELSE
+    CellVertices = 0
+    WRITE(*,*) 'ERROR: Rocflupicl only support tetrahedral and hexahedral cell types.'
+    CALL ErrorStop(global,ERR_ALLOCATE,567,'PPICLF:CellLen')
+  END IF
+END DO
 ! Find cell lengths
+Max_CellLen  = 0.0D0
 DO i = 1,nCells
-  ! Initialize as zero for each element
+  IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
+    ! Tetrahedral Cell
+    CellVertices = 4
+  ELSE IF(pGrid%cellGlob2Loc(1,i) == 2) THEN
+    ! Hexahedral Cell
+    CellVertices = 8
+  ELSE
+    CellVertices = 0
+    WRITE(*,*) 'ERROR: Rocflupicl only support tetrahedral and hexahedral cell types.'
+    CALL ErrorStop(global,ERR_ALLOCATE,582,'PPICLF:CellLen')
+  END IF
+  ! Initialize as zero for each cell
   DO l = 1,3
     MaxPoint(l) = -1.0D10 
     MinPoint(l) =  1.0D10 
     CellLen(l)   =  0.0D0   
-    Max_CellLen(l)  =  1.23456789D-10
   END DO !l
   ! Add all x,y,z cell corners for centroid and find extremes
-    DO k = 1,2
-      DO j = 1,2
-        DO m = 1,2
-          IF (xGrid(k,j,m,i) > MaxPoint(1)) &
-            MaxPoint(1) = xGrid(k,j,m,i)
-          IF (xGrid(k,j,m,i) < MinPoint(1)) &
-            MinPoint(1) = xGrid(k,j,m,i)
-          IF (yGrid(k,j,m,i) > MaxPoint(2)) &
-            MaxPoint(2) = yGrid(k,j,m,i)  
-          IF (yGrid(k,j,m,i) < MinPoint(2)) &
-            MinPoint(2) = yGrid(k,j,m,i)
-          IF (zGrid(k,j,m,i) > MaxPoint(3)) &
-            MaxPoint(3) = zGrid(k,j,m,i)  
-          IF (zGrid(k,j,m,i) < MinPoint(3)) &
-            MinPoint(3) = zGrid(k,j,m,i)
-        END DO !i
-      END DO !j
-    END DO !k
+  DO k = 1,CellVertices
+    IF (xGrid(k,i) > MaxPoint(1)) &
+      MaxPoint(1) = xGrid(k,i)
+    IF (xGrid(k,i) < MinPoint(1)) &
+      MinPoint(1) = xGrid(k,i)
+    IF (yGrid(k,i) > MaxPoint(2)) &
+      MaxPoint(2) = yGrid(k,i)  
+    IF (yGrid(k,i) < MinPoint(2)) &
+      MinPoint(2) = yGrid(k,i)
+    IF (zGrid(k,i) > MaxPoint(3)) &
+      MaxPoint(3) = zGrid(k,i)  
+    IF (zGrid(k,i) < MinPoint(3)) &
+      MinPoint(3) = zGrid(k,i)
+  END DO !k
   DO l = 1,3
     ! Find element length in all dimensions
     CellLen(l) = ABS(MaxPoint(l)-MinPoint(l))
-    ! Find max lengths for all grid cells on this processor
-    IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
-    IF(CellLen(l) > 1D-2 .OR. CellLen(l) < 1D-7) THEN
-      WRITE(*,*) 'Error in calculating max element size'
-      WRITE(*,*) 'Max & Min points:', MaxPoint(l), MinPoint(l), 'Dimension:',l
-      CALL ErrorStop(global,ERR_ALLOCATE,574,'PPICLF:CellLen')
+    ! Find max lengths for grid cells in particle domain on this processor
+    IF( (pRegion%grid%cofg(1,i) >= xp_min) .AND. (pRegion%grid%cofg(1,i) <= xp_max) .AND. & 
+        (pRegion%grid%cofg(2,i) >= yp_min) .AND. (pRegion%grid%cofg(2,i) <= yp_max) .AND. & 
+        (pRegion%grid%cofg(3,i) >= zp_min) .AND. (pRegion%grid%cofg(3,i) <= zp_max)) THEN 
+      IF(CellLen(l) .GT. Max_CellLen(l)) Max_CellLen(l) = CellLen(l)
+      ! For tets, make a rectangular box around it with maxCellLength equal in all dimensions
+      IF(pGrid%cellGlob2Loc(1,i) == 1) Max_CellLen(l) = MAXVAL(Max_CellLen(:))
     END IF
   END DO !l
+  IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
+    ! Make cell length same in all dimensions for tetrahedral
+    ! This is due to their shape not being rectangular
+    DO l = 1,3
+      CellLen(l) = MAX(CellLen(1),CellLen(2),CellLen(3))
+    END DO !l
+  END IF
 
   rocGrid(1,i) = pRegion%grid%cofg(1,i) !Cell Centroid x position
   rocGrid(2,i) = pRegion%grid%cofg(2,i) !Cell Centroid y position
   rocGrid(3,i) = pRegion%grid%cofg(3,i) !Cell Centroid z position
-  rocGrid(4,i) = CellLen(1) ! Cell largest dx
-  rocGrid(5,i) = CellLen(2) ! Cell largest dy
-  rocGrid(6,i) = CellLen(3) ! Cell largest dz
-  rocGrid(7,i) = pRegion%grid%vol(i) ! Cell volume
-
+  rocGrid(4,i) = CellLen(1)             !Cell largest dx
+  rocGrid(5,i) = CellLen(2)             !Cell largest dy
+  rocGrid(6,i) = CellLen(3)             !Cell largest dz
+  rocGrid(7,i) = pRegion%grid%vol(i)    !Cell volume
 END DO !i
 
-MinFluidCells = 2 !Number of fluid cells for Minimum Bin Size or ppiclf_filter(1:3)
+!     CALL MPI_Barrier(global%mpiComm,errorFlag)
+
+MinFluidCells = 2.0D0 !Number of fluid cells for Minimum Bin Size and ppiclf_filter(1:3)
 DO l = 1,3
   filter_local(l) = MinFluidCells*Max_CellLen(l) 
   ! Find max x,y,z cell lengths across all MPI ranks (entire rocflu domain)
@@ -635,6 +699,8 @@ IF((neighborWidth .GT. global%piclNeighborWidth) &
         '*** WARNING *** PICL NEIGHBORWIDTH too small, defaulting to 4*dp_max'
 END IF
 neighborWidth = MAX(neighborWidth, global%piclNeighborWidth)
+
+!CALL MPI_Barrier(global%mpiComm,errorFlag)
 
 IF(global%myProcid == MASTERPROC) THEN
    PRINT*,' '
@@ -657,8 +723,6 @@ IF(global%myProcid == MASTERPROC) THEN
   PRINT*, 'z fluid min/max', z_per_min, z_per_max
 END IF
 
-!IF(
-!  CreateGhosts,                    &
 CALL ppiclf_solve_Initialize( & 
            x_per_flag, x_per_min, x_per_max, &
            y_per_flag, y_per_min, y_per_max, &
@@ -668,19 +732,22 @@ CALL ppiclf_solve_Initialize( &
 ! *** AVERY - Update when general ang per is done ***
 IF(((ang_per_flag.eq.1) .and. (x_per_flag.eq.1 .or. y_per_flag.eq.1)) .or. & 
     (ang_per_flag .gt. 1)) THEN
-    CALL ErrorStop(global,ERR_PICL_INVALID_PERIODICITY,636,&
+    CALL ErrorStop(global,ERR_PICL_INVALID_PERIODICITY,684,&
       'Wrong periodicity choices for ppiclF')
 END IF 
-! Creates OverlapMesh and Calls Init Solve
-CALL ppiclf_comm_InitOverlapMesh(nCells,rocGrid)
+
+! Creates OverlapGrid and Calls Init Solve
+CALL ppiclf_comm_InitOverlapGrid(nCells,rocGrid)
+!CALL MPI_Barrier(global%mpiComm,errorFlag)
+CALL ppiclf_solve_InitSolve
 
 INQUIRE(FILE='filein.vtk', EXIST=wall_exists)
 IF(wall_exists) THEN
   CALL ppiclf_io_ReadWallVTK('filein.vtk')
+  WRITE(*,*) 'Particle boundary wall read-in.'
 ELSE IF (global%myProcid == MASTERPROC) THEN
-  WRITE(*,*) 'Could not find filein.vtk'
+  WRITE(*,*) '***WARNING: Could not find filein.vtk***'
 END IF
-
 
 ! 03/24/2025 - Thierry - store the RocfluMP Flow Model chosen (Euler or NS)
 !                        this is used in ppiclF for calculating the pressure gradient
@@ -691,32 +758,32 @@ END IF
 DEALLOCATE(rocGrid,STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_DEALLOCATE,659,'PPICLF:rocGrid')
+  CALL ErrorStop(global,ERR_DEALLOCATE,710,'PPICLF:rocGrid')
 END IF ! global%error
 
 
 DEALLOCATE(xGrid,STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_DEALLOCATE,666,'PPICLF:xGrid')
+  CALL ErrorStop(global,ERR_DEALLOCATE,717,'PPICLF:xGrid')
 END IF ! global%error
 
 DEALLOCATE(yGrid,STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_DEALLOCATE,672,'PPICLF:yGrid')
+  CALL ErrorStop(global,ERR_DEALLOCATE,723,'PPICLF:yGrid')
 END IF ! global%error
 
 DEALLOCATE(zGrid,STAT=errorFlag)
 global%error = errorFlag
 IF ( global%error /= ERR_NONE ) THEN
-  CALL ErrorStop(global,ERR_DEALLOCATE,678,'PPICLF:zGrid')
+  CALL ErrorStop(global,ERR_DEALLOCATE,729,'PPICLF:zGrid')
 END IF ! global%error
 
 ALLOCATE(volp(nCells),STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_ALLOCATE,684,'PPICLF:volp')
+      CALL ErrorStop(global,ERR_ALLOCATE,735,'PPICLF:volp')
     END IF ! global%error
 
 DO i=1,pGrid%nCellsTot
@@ -728,16 +795,20 @@ DO i = 1, nCells
        CALL ppiclf_solve_GetProFld(i, 1, volp(i))
        IF (pRegion%mixtInput%axiFlag) THEN
            WRITE(*,*) "Need to properly implement axi-sym for phip init."
-           CALL ErrorStop(global,ERR_OPTION_TYPE,696,'PPICLF:axi')
+           CALL ErrorStop(global,ERR_OPTION_TYPE,747,'PPICLF:axi')
        END IF
-       volp(i) = 0.0D0
        volp(i) = volp(i)/pRegion%grid%vol(i)
-!*** VOL FRAC CAP
-       IF(volp(i) .GT. 0.62) THEN
-           volp(i) = 0.62 
-       END IF
        pRegion%mixt%piclVF(i) = volp(i) 
 END DO
+
+maxVF = MAXVAL(volp)
+CALL MPI_Allreduce(maxVF,maxVF,1,MPI_RFREAL,MPI_MAX, &
+      global%mpiComm,global%mpierr )
+! Particle Volume Fraction Sanity Check
+IF(maxVF .GT. 0.65 .AND. global%myProcid == MASTERPROC) THEN
+  PRINT*, '*** WARNING*** Max particle vf: ', maxVF, & 
+         'Adjust grid for a larger minimum cell size or decrease particle diameter'
+END IF
 
 ! TLJ:
 ! This section takes as input from utilities/init/RFLU_InitFlowHardCode.F90
@@ -756,14 +827,14 @@ DO icg = 1,pGrid%nCellsTot
     IF(pRegion%mixt%cv(CV_MIXT_DENS,icg) .le. 0.0) THEN
          WRITE(*,*) "Error: negative density: ",pRegion%mixt%cv(CV_MIXT_DENS,icg)     
          PRINT*, 'From rocpicl/PICL_TEMP_InitSolver.F90' 
-         CALL ErrorStop(global,ERR_INVALID_VALUE,724,'PPICLF:init')
+         CALL ErrorStop(global,ERR_INVALID_VALUE,779,'PPICLF:init')
     END IF    
 END DO ! icg
 
 DEALLOCATE(volp,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_DEALLOCATE,731,'PPICLF:zGrid')
+      CALL ErrorStop(global,ERR_DEALLOCATE,786,'PPICLF:zGrid')
     END IF ! global%error
 
 

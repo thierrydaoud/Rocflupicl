@@ -5,6 +5,7 @@ RFLU_CentralSecondPatch_GL.o: \
  ModError.o \
  ModGlobal.o \
  ModInterfaces.o \
+ ModMixture.o \
  ModMPI.o \
  ModParameters.o \
  RFLU_ModGridSpeedUtils.o \

@@ -77,16 +77,16 @@
 !
 ! ******************************************************************************
 
-FUNCTION MixtGasLiq_Eo_CvmTVm2(Cvm,T,Vm2)
+FUNCTION MixtGasLiq_Eo_CvmTVm2(Cvm,T,Vm2,KSG)
 
    USE ModDataTypes
 
    IMPLICIT NONE
 
-   REAL(RFREAL), INTENT(IN) :: Cvm,T,Vm2                                 
+   REAL(RFREAL), INTENT(IN) :: Cvm,T,Vm2,KSG                             
    REAL(RFREAL) :: MixtGasLiq_Eo_CvmTVm2
    
-   MixtGasLiq_Eo_CvmTVm2 = Cvm*T + 0.5_RFREAL*Vm2 
+   MixtGasLiq_Eo_CvmTVm2 = Cvm*T + 0.5_RFREAL*Vm2 + KSG
 
 END FUNCTION MixtGasLiq_Eo_CvmTVm2
 

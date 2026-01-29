@@ -93,31 +93,31 @@ END FUNCTION MixtPerf_T_CGR
 
 !------------------------------------------------------------------------------
 
-FUNCTION MixtPerf_T_CpHoVm2(Cp,Ho,Vm2)
+FUNCTION MixtPerf_T_CpHoVm2(Cp,Ho,Vm2,KSG)
 
   USE ModDataTypes
 
   IMPLICIT NONE
   
-  REAL(RFREAL), INTENT(IN) :: Cp,Ho,Vm2
+  REAL(RFREAL), INTENT(IN) :: Cp,Ho,Vm2,KSG
   REAL(RFREAL) :: MixtPerf_T_CpHoVm2
    
-  MixtPerf_T_CpHoVm2 = (Ho-0.5_RFREAL*Vm2)/Cp
+  MixtPerf_T_CpHoVm2 = (Ho-0.5_RFREAL*Vm2 - KSG)/Cp
 
 END FUNCTION MixtPerf_T_CpHoVm2
 
 !------------------------------------------------------------------------------
 
-FUNCTION MixtPerf_T_CvEoVm2(Cv,Eo,Vm2)
+FUNCTION MixtPerf_T_CvEoVm2(Cv,Eo,Vm2,KSG)
 
   USE ModDataTypes
 
   IMPLICIT NONE
   
-  REAL(RFREAL), INTENT(IN) :: Cv,Eo,Vm2
+  REAL(RFREAL), INTENT(IN) :: Cv,Eo,Vm2,KSG
   REAL(RFREAL) :: MixtPerf_T_CvEoVm2
    
-  MixtPerf_T_CvEoVm2 = (Eo-0.5_RFREAL*Vm2)/Cv
+  MixtPerf_T_CvEoVm2 = (Eo-0.5_RFREAL*Vm2 - KSG)/Cv
 
 END FUNCTION MixtPerf_T_CvEoVm2
 
@@ -168,16 +168,16 @@ END FUNCTION MixtPerf_T_GMaTo
 
 ! -----------------------------------------------------------------------------
 
-FUNCTION MixtPerf_To_CpTUVW(Cp,T,U,V,W)
+FUNCTION MixtPerf_To_CpTUVW(Cp,T,U,V,W,KSG)
 
   USE ModDataTypes
 
   IMPLICIT NONE
   
-  REAL(RFREAL), INTENT(IN) :: Cp,T,U,V,W
+  REAL(RFREAL), INTENT(IN) :: Cp,T,U,V,W,KSG
   REAL(RFREAL) :: MixtPerf_To_CpTUVW
    
-  MixtPerf_To_CpTUVW = T + 0.5_RFREAL*(U*U + V*V + W*W)/Cp
+  MixtPerf_To_CpTUVW = T + 0.5_RFREAL*(U*U + V*V + W*W)/Cp + KSG/Cp
 
 END FUNCTION MixtPerf_To_CpTUVW
 

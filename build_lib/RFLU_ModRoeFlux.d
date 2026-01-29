@@ -6,6 +6,7 @@ RFLU_ModRoeFlux.o: \
  ModGlobal.o \
  ModGrid.o \
  ModInterfaces.o \
+ ModMixture.o \
  ModMPI.o \
  ModParameters.o \
  RFLU_ModEntropyFixes.o \

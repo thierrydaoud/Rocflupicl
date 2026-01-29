@@ -108,7 +108,7 @@
 SUBROUTINE BcondInflowPerf_GL(bcOptType,ro,po,to,Bp,Bt,cvl,cvv,cvg,Rg,Rv,ur,&  
                               vr,wr,vfgr,vfvr,vflr,temp,press,nx,ny,nz,rl, & 
                               rul,rvl,rwl,rel,rgpgl,rvpvl,pl,rr,rur,rvr, &
-                              rwr,rer,rgpgr,rvpvr,pr)
+                              rwr,rer,rgpgr,rvpvr,pr,ksg)
   
   USE ModDataTypes
   USE ModGlobal , ONLY : t_global
@@ -134,7 +134,7 @@ SUBROUTINE BcondInflowPerf_GL(bcOptType,ro,po,to,Bp,Bt,cvl,cvv,cvg,Rg,Rv,ur,&
   INTEGER, INTENT(IN) :: bcOptType
   REAL(RFREAL), INTENT(IN) :: Bp,Bt,cvg,cvl,cvv,nx,ny,nz,pl,po,press,rel, & 
                               Rg,rgpgl,rl,ro,rul,Rv,rvl,rvpvl,rwl,temp,to, &
-                              ur,vfgr,vflr,vfvr,vr,wr
+                              ur,vfgr,vflr,vfvr,vr,wr,ksg
   REAL(RFREAL), INTENT(OUT):: pr,rer,rgpgr,rr,rur,rvr,rvpvr,rwr
   TYPE(t_global), POINTER :: global
    
@@ -201,7 +201,7 @@ SUBROUTINE BcondInflowPerf_GL(bcOptType,ro,po,to,Bp,Bt,cvl,cvv,cvg,Rg,Rv,ur,&
     rlpll = rl - rvpvl - rgpgl
     cvml  = (rlpll*cvl + rvpvl*cvv + rgpgl*cvg)/rl          
     el    = rel/rl
-    tl    = MixtPerf_T_CvEoVm2(cvml,el,vml2)
+    tl    = MixtPerf_T_CvEoVm2(cvml,el,vml2,ksg)
 
     rholl = MixtLiq_D_DoBpPPoBtTTo(ro,Bp,Bt,pl,po,tl,to)
     rhovl = MixtPerf_D_PRT(pl,Rv,tl)

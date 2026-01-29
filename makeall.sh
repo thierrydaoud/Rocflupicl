@@ -18,5 +18,9 @@ rm build_lib/*.f90
 rm build_lib/*.d
 rm build_lib/*.o
 
+rm build_util/*/*.f90
+rm build_util/*/*.d
+rm build_util/*/*.o
+
 make RFLU=1 PICL=1 SPEC=1 FOLDER=1 -j16
 ls --color=auto

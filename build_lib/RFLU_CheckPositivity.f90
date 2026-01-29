@@ -126,6 +126,7 @@ SUBROUTINE RFLU_CheckPositivity(pRegion)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: cv,dv,gv
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -169,6 +170,7 @@ SUBROUTINE RFLU_CheckPositivity(pRegion)
     v    = rrho*cv(CV_MIXT_YMOM,icg)
     w    = rrho*cv(CV_MIXT_ZMOM,icg)        
     Eo   = rrho*cv(CV_MIXT_ENER,icg)
+    ksg  = pRegion%mixt%piclKsg(icg)
 
     ! Subbu - Correction    
     rgas  = MixtPerf_R_M(gv(GV_MIXT_MOL,icg*indMol))
@@ -195,10 +197,10 @@ SUBROUTINE RFLU_CheckPositivity(pRegion)
       
       IF (pRegion%mixtInput%gasModel == GAS_MODEL_TCPERF) THEN
        WRITE(*,'(A,I8,F10.4,F14.4,F14.4,F10.4,A)') &
-               "  ========  Ideal Gas - Before fix values:{cell,rho,e,P,T,vf}" &
-               ,icg,rho,Eo,p,t,pRegion%mixt%piclVF(icg),"  ========  "
-       Eo = 1.0e4_RFREAL + 0.5_RFREAL*Vm2 !Energy floor
-       p = MixtPerf_P_DEoGVm2(rho,Eo,gamma,Vm2)
+               "  ========  Ideal Gas - Before fix values:{cell,rho,e,P,T}" &
+               ,icg,rho,Eo,p,t,"  ========  "
+       Eo = 1.0e4_RFREAL + 0.5_RFREAL*Vm2 + ksg !Energy floor
+       p = MixtPerf_P_DEoGVm2(rho,Eo,gamma,Vm2,ksg)
        t = MixtPerf_T_DPR(rho,p,rgas) !Recompute P,T
        dv(DV_MIXT_PRES,icg) = p
        dv(DV_MIXT_TEMP,icg) = t  !Reset Dep Var Array
@@ -267,7 +269,7 @@ SUBROUTINE RFLU_CheckPositivity(pRegion)
                              LOCINFO_MODE_SILENT,OUTPUT_MODE_ANYBODY)
     END IF ! nLocs
     
-    CALL ErrorStop(global,ERR_NEGATIVE_POSDEF,268)   
+    CALL ErrorStop(global,ERR_NEGATIVE_POSDEF,270)   
   END IF ! nLocs
 
 ! ******************************************************************************

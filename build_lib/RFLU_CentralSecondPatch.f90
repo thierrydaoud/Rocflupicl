@@ -125,6 +125,7 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
                                  RFLU_ScalarConvertCvPrim2Cons
   USE RFLU_ModJWL !Fred - Allowing for JWL EOS use in subroutine - 9/17/2015
 
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
 
@@ -162,6 +163,7 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: cv,dv,gv,rhs,vals,sd
   REAL(RFREAL), DIMENSION(:,:,:), POINTER :: grad
   TYPE(t_global), POINTER :: global
+  REAL(RFREAL) :: ksg
 
   LOGICAL :: scalarConvFlag
   INTEGER :: iSpec,iCvSpecProducts,iCvSpecAir
@@ -266,6 +268,8 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
         wl  = cv(CV_MIXT_ZMOM,c1)*irl
         pl  = dv(DV_MIXT_PRES,c1)
 
+        ksg = pRegion%mixt%piclKsg(c1)
+
         dx  = xc - pRegion%grid%cofg(XCOORD,c1)
         dy  = yc - pRegion%grid%cofg(YCOORD,c1)
         dz  = zc - pRegion%grid%cofg(ZCOORD,c1)
@@ -309,13 +313,13 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
           rgas = MixtPerf_R_M(mm)
           g    = MixtPerf_G_CpR(cp,rgas)
 
-          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl)
+          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl,ksg)
 
           CALL BcondInflowPerf(bcOptType,bcOptFixed,ptot,ttot,betah,betav, &
                                mach,nx,ny,nz,cp,mm,rl,rul,rvl,rwl,rr,rur, &
-                               rvr,rwr,rer,pr)
+                               rvr,rwr,rer,pr,ksg)
         ELSE
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,316)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,320)
         END IF ! gasModel
 
         ql = (rul*nx + rvl*ny + rwl*nz)/rl - fs
@@ -491,11 +495,11 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
             pr = MixtPerf_P_DRT(rr,rgas,tr)
           END IF ! bcOptType
 
-          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl)
-          rer = rr*MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr)
+          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl,ksg)
+          rer = rr*MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr,ksg)
         ELSE IF ( gasModel == GAS_MODEL_MIXT_TCPERF ) THEN
           IF ( pRegion%spec%cvState /= CV_MIXT_STATE_CONS ) THEN
-            CALL ErrorStop(global,ERR_CV_STATE_INVALID,497)
+            CALL ErrorStop(global,ERR_CV_STATE_INVALID,501)
           END IF ! pRegion%spec%cvState  
 
           irl = 1.0_RFREAL/rl
@@ -521,10 +525,10 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
             pr = MixtPerf_P_DRT(rr,rgas,tr)
           END IF ! bcOptType
 
-          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl)
-          rer = rr*MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr)
+          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl,ksg)
+          rer = rr*MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr,ksg)
         ELSE
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,529)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,533)
         END IF ! gasModel
 
         rur = rr*ur
@@ -670,6 +674,8 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
         wl  = cv(CV_MIXT_ZMOM,c1)*irl
         pl  = dv(DV_MIXT_PRES,c1)
 
+        ksg = pRegion%mixt%piclKsg(c1)
+
 
         rl = rl + grad(XCOORD,GRC_MIXT_DENS,c1)*dx &
                 + grad(YCOORD,GRC_MIXT_DENS,c1)*dy &
@@ -703,10 +709,10 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
           rgas = MixtPerf_R_M(mm)
           g    = MixtPerf_G_CpR(cp,rgas)
 
-          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl)
+          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl,ksg)
 
           CALL BcondOutflowPerf(bcOptType,pr,nx,ny,nz,cp,mm,rl,rul,rvl,rwl, &
-                                rel,pl,rr,rur,rvr,rwr,rer)
+                                rel,pl,rr,rur,rvr,rwr,rer,ksg)
         ! Subbu -Added JWL Case, Fred - Actually placed JWL EOS in calculating
         ! rel
         ELSEIF ( gasModel == GAS_MODEL_MIXT_JWL ) THEN
@@ -737,11 +743,11 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
           END IF
          END IF
          CALL BcondOutflowPerf(bcOptType,pr,nx,ny,nz,cp,mm,rl,rul,rvl,rwl, &
-                                rel,pl,rr,rur,rvr,rwr,rer)
+                                rel,pl,rr,rur,rvr,rwr,rer,ksg)
         ! Subbu -End JWL Case
         ELSE
           print*,'TLJ - failed here in BC_OUTFLOW',bcOptType
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,748)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,754)
         END IF ! gasModel
 
         ql = (rul*nx + rvl*ny + rwl*nz)/rl - fs
@@ -980,7 +986,7 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
 !        END IF
 !#endif
           CASE DEFAULT
-            CALL ErrorStop(global,ERR_REACHED_DEFAULT,987)
+            CALL ErrorStop(global,ERR_REACHED_DEFAULT,993)
         END SELECT ! pRegion%mixtInput%gasModel
 
         flx(2) = pl*nx*nm 
@@ -1124,6 +1130,8 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
         wl  = cv(CV_MIXT_ZMOM,c1)*irl
         pl  = dv(DV_MIXT_PRES,c1)
 
+        ksg = pRegion%mixt%piclKsg(c1)
+
         dx  = xc - pRegion%grid%cofg(XCOORD,c1)
         dy  = yc - pRegion%grid%cofg(YCOORD,c1)
         dz  = zc - pRegion%grid%cofg(ZCOORD,c1)
@@ -1168,14 +1176,14 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
           rgas = MixtPerf_R_M(mm)
           g    = MixtPerf_G_CpR(cp,rgas)
 
-          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl)
+          rel = rl*MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl,ksg)
           
           CALL RFLU_SetRindStateFarfieldPerf(global,cp,mm,nx,ny,nz,mf,pf,tf, &
                                              aoa,aos,corrFlag,liftCoef,xc,yc, &
                                              zc,rl,rul,rvl,rwl,rel,rr,rur, & 
-                                             rvr,rwr,rer,pr)     
+                                             rvr,rwr,rer,pr,ksg)     
         ELSE
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,1182)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,1190)
         END IF ! gasModel
 
         ql = (rul*nx + rvl*ny + rwl*nz)/rl - fs
@@ -1306,7 +1314,7 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
             flx(5) = pl*fs*nm                                        
           END IF ! minj
         ELSE 
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,1313)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,1321)
         END IF ! gasModel
 
         mfMixt(indMf*ifl) = flx(1)
@@ -1346,7 +1354,7 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
 ! ==============================================================================
 
     CASE DEFAULT
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,1353)
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,1361)
   END SELECT ! pPatch%bcType
 
 ! ******************************************************************************

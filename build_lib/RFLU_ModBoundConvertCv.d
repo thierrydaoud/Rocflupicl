@@ -7,6 +7,7 @@ RFLU_ModBoundConvertCv.o: \
  ModGrid.o \
  ModInterfaces.o \
  ModInterfacesSpecies.o \
+ ModMixture.o \
  ModParameters.o \
  ModSpecies.o \
  RFLU_ModConvertCv.o \
