@@ -4434,6 +4434,12 @@ c--  then add mean PTKE
       real*8 r1, r2, Rstar 
       real*8 ksp1, ksp2, ksp_min
 
+      ! 01/29/2025 - Thierry - added for particle collision with conical
+      !                         wall domain
+      real*8 rp, yp, zp, vp, wp, 
+     >       rp_new, yp_new, zp_new, vp_new, wp_new,
+     >       rbound, urp, thetap
+
 !
 ! Code:
 !
@@ -4801,13 +4807,45 @@ c--  then add mean PTKE
          rnmag     = -rksp_max - rv12_mage
 
          
-         ppiclf_ydotc(PPICLF_JVX,i) = ppiclf_ydotc(PPICLF_JVX,i)
-     >                              + rnmag*rn_12x
-         ppiclf_ydotc(PPICLF_JVY,i) = ppiclf_ydotc(PPICLF_JVY,i)
-     >                              + rnmag*rn_12y
-         ppiclf_ydotc(PPICLF_JVZ,i) = ppiclf_ydotc(PPICLF_JVZ,i)
-     >                              + rnmag*rn_12z
-        
+!         ppiclf_ydotc(PPICLF_JVX,i) = ppiclf_ydotc(PPICLF_JVX,i)
+!     >                              + rnmag*rn_12x
+!         ppiclf_ydotc(PPICLF_JVY,i) = ppiclf_ydotc(PPICLF_JVY,i)
+!     >                              + rnmag*rn_12y
+!         ppiclf_ydotc(PPICLF_JVZ,i) = ppiclf_ydotc(PPICLF_JVZ,i)
+!     >                              + rnmag*rn_12z
+!
+
+
+         ! Particles leavind the domain with wall collisions
+         ! Simple fix for a conical geometry
+         yp = yi(PPICLF_JY)
+         zp = yi(PPICLF_JZ)
+         vp = yi(PPICLF_JVY)
+         wp = yi(PPICLF_JVZ)
+
+         rbound = sqrt(yj(PPICLF_JY)**2 + yj(PPICLF_JZ)**2)
+         rp = sqrt(yp**2 + zp**2)
+         urp = sqrt(vp**2 + wp**2)
+         thetap = atan2(zp, yp)
+
+         if(rp > rbound) then
+           
+           rp_new = rp - (rp - rbound)
+           yp_new = rp_new * cos(thetap)
+           zp_new = rp_new * sin(thetap)
+
+           urp = - urp
+           
+           vp_new = urp * cos(thetap)
+           wp_new = urp * sin(thetap)
+
+           ppiclf_y(PPICLF_JY,i) = yp_new
+           ppiclf_y(PPICLF_JZ,i) = zp_new
+
+           ppiclf_y(PPICLF_JVY,i) = vp_new
+           ppiclf_y(PPICLF_JVZ,i) = wp_new
+         endif
+
          !write(*,*) "Wall NEAR",i,ppiclf_ydotc(PPICLF_JVY,i)  
       endif
 

@@ -68,7 +68,7 @@
 !
 !!  Current cases:
 !     barrelExp
-!     cylds, rectshktb
+!     cylds, rectshktb, cone
 !     wedge
 !!  Legacy  cases:
 !     acoustic
@@ -757,7 +757,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
 !       Modified for quarterplane with JWL EOS 1-equation model
 ! ------------------------------------------------------------------------------
 
-        CASE ( "cylds", "rectshktb" )
+        CASE ( "cylds", "rectshktb", "cone" )
 
            ! Store ambient background pressure p0
            ! This value is assumed to be the pressure of the initial
@@ -787,6 +787,11 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     radius = x
                     ur = pMixtInput%prepRealVal3
                     ut = 0.0_RFREAL
+                 ELSEIF(TRIM(global%casename)=="cone") THEN
+                   radius = x
+                   theta = ATAN2(y,x)
+                   ur = pMixtInput%prepRealVal3 * cos(theta)
+                   ut = pMixtInput%prepRealVal3 * sin(theta)
                  ENDIF
 
                  IF ( radius < pMixtInput%prepRealVal1 ) THEN
@@ -840,6 +845,11 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     radius = x
                     ur = pMixtInput%prepRealVal5
                     ut = 0.0_RFREAL
+                 ELSEIF (TRIM(global%casename)=="cone") THEN
+                    radius = x
+                    theta = ATAN2(y,x)
+                    ur = pMixtInput%prepRealVal5 * cos(theta)
+                    ut = pMixtInput%prepRealVal5 * sin(theta)
                  ENDIF
 
                  IF ( radius < pMixtInput%prepRealVal1 ) THEN

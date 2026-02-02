@@ -79,7 +79,7 @@
 !
 !!  Current cases:
 !     barrelExp
-!     cylds, rectshktb
+!     cylds, rectshktb, cone
 !     wedge
 !!  Legacy  cases:
 !     acoustic
@@ -768,7 +768,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
 !       Modified for quarterplane with JWL EOS 1-equation model
 ! ------------------------------------------------------------------------------
 
-        CASE ( "cylds", "rectshktb" )
+        CASE ( "cylds", "rectshktb", "cone" )
 
            ! Store ambient background pressure p0
            ! This value is assumed to be the pressure of the initial
@@ -798,6 +798,11 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     radius = x
                     ur = pMixtInput%prepRealVal3
                     ut = 0.0_RFREAL
+                 ELSEIF(TRIM(global%casename)=="cone") THEN
+                   radius = x
+                   theta = ATAN2(y,x)
+                   ur = pMixtInput%prepRealVal3 * cos(theta)
+                   ut = pMixtInput%prepRealVal3 * sin(theta)
                  ENDIF
 
                  IF ( radius < pMixtInput%prepRealVal1 ) THEN
@@ -851,6 +856,11 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     radius = x
                     ur = pMixtInput%prepRealVal5
                     ut = 0.0_RFREAL
+                 ELSEIF (TRIM(global%casename)=="cone") THEN
+                    radius = x
+                    theta = ATAN2(y,x)
+                    ur = pMixtInput%prepRealVal5 * cos(theta)
+                    ut = pMixtInput%prepRealVal5 * sin(theta)
                  ENDIF
 
                  IF ( radius < pMixtInput%prepRealVal1 ) THEN
@@ -933,7 +943,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_FILE_OPEN,925,iFileName1)
+              CALL ErrorStop(global,ERR_FILE_OPEN,935,iFileName1)
            END IF ! global%error
    
            n = 0
@@ -946,7 +956,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               END IF ! name
               IF ( n >= LIMIT_INFINITE_LOOP ) THEN
                  ! Guard against infinite loop
-                 CALL ErrorStop(global,ERR_INFINITE_LOOP,938)
+                 CALL ErrorStop(global,ERR_INFINITE_LOOP,948)
               END IF ! n
            END DO ! Infinite DO
            n = n-1
@@ -966,7 +976,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                     IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-                  CALL ErrorStop(global,ERR_FILE_OPEN,958,iFileName1)
+                  CALL ErrorStop(global,ERR_FILE_OPEN,968,iFileName1)
            END IF ! global%error
            READ(1990,*) (xData(icg),rData(icg),uData(icg), &
               eData(icg),Ydata(icg),eData2(icg),YRdata(icg), icg=1,n)
@@ -1197,12 +1207,12 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               IF (IsNaN(pCv(CV_MIXT_ENER,icg)) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    e,d',pCv(CV_MIXT_ENER,icg),d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,1189,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,1199,'Invalid val InitFlow')
               ENDIF
               IF (IsNaN(p) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    p,d',p,d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,1194,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,1204,'Invalid val InitFlow')
               ENDIF
    
               ! Josh Garno - WRITE INIT Check File
@@ -1371,7 +1381,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_FILE_OPEN,1363,iFileName1)
+              CALL ErrorStop(global,ERR_FILE_OPEN,1373,iFileName1)
            END IF ! global%error
    
            n = 0
@@ -1384,7 +1394,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               END IF ! name
               IF ( n >= LIMIT_INFINITE_LOOP ) THEN
                  ! Guard against infinite loop
-                 CALL ErrorStop(global,ERR_INFINITE_LOOP,1376)
+                 CALL ErrorStop(global,ERR_INFINITE_LOOP,1386)
            END IF ! n
            END DO ! Infinite DO
            n = n-1
@@ -1401,14 +1411,14 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                      YRdata(n),STAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_ALLOCATE,1393,'radData')
+              CALL ErrorStop(global,ERR_ALLOCATE,1403,'radData')
            END IF ! global%error
 
            OPEN(unit=1990,FILE=iFileName1,FORM='FORMATTED', &
                     IOSTAT=errorFlag)
            global%error = errorFlag
            IF ( global%error /= ERR_NONE ) THEN
-                  CALL ErrorStop(global,ERR_FILE_OPEN,1400,iFileName1)
+                  CALL ErrorStop(global,ERR_FILE_OPEN,1410,iFileName1)
            END IF ! global%error
            READ(1990,*) (xData(icg),rData(icg),uData(icg), &
               eData(icg),Ydata(icg),eData2(icg),YRdata(icg), icg=1,n)
@@ -1638,12 +1648,12 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               IF (IsNaN(pCv(CV_MIXT_ENER,icg)) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    e,d',pCv(CV_MIXT_ENER,icg),d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,1630,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,1640,'Invalid val InitFlow')
               ENDIF
               IF (IsNaN(p) .EQV. .TRUE.) THEN
                  print*,'TLJ Input leads to NaN'
                  print*,'    p,d',p,d,icg
-                 CALL ErrorStop(global,ERR_INVALID_VALUE,1635,'Invalid val InitFlow')
+                 CALL ErrorStop(global,ERR_INVALID_VALUE,1645,'Invalid val InitFlow')
               ENDIF
 
               ! Josh Garno - WRITE INIT Check File
@@ -1838,7 +1848,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  IOSTAT=errorFlag)
             global%error = errorFlag
             IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_FILE_OPEN,1830,iFileName1)
+              CALL ErrorStop(global,ERR_FILE_OPEN,1840,iFileName1)
             END IF ! global%error
                 
 ! Infinite DO
@@ -1852,7 +1862,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
               END IF ! name
 ! Guard against infinite loop 
               IF ( n >= LIMIT_INFINITE_LOOP ) THEN 
-                CALL ErrorStop(global,ERR_INFINITE_LOOP,1844)
+                CALL ErrorStop(global,ERR_INFINITE_LOOP,1854)
               END IF ! n
             END DO ! Infinite DO
   
@@ -1864,7 +1874,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                       STAT=errorFlag)
             global%error = errorFlag
             IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_ALLOCATE,1856,'radData')
+              CALL ErrorStop(global,ERR_ALLOCATE,1866,'radData')
             END IF ! global%error
   
 ! Begin - Read data file and store data in arrays
@@ -1873,7 +1883,7 @@ SUBROUTINE RFLU_InitFlowHardCode(pRegion)
                  IOSTAT=errorFlag)
             global%error = errorFlag
             IF ( global%error /= ERR_NONE ) THEN
-               CALL ErrorStop(global,ERR_FILE_OPEN,1865,iFileName1)
+               CALL ErrorStop(global,ERR_FILE_OPEN,1875,iFileName1)
             END IF ! global%error
             READ(IF_READRB,*) (radData(icg),rData(icg),uData(icg), &
                                       eData(icg), icg=1,n-1)
@@ -2075,7 +2085,7 @@ loop:           DO b=1,n-1
             DEALLOCATE (radData,rData,uData,eData,STAT=errorFlag)
             global%error = errorFlag
             IF ( global%error /= ERR_NONE ) THEN
-              CALL ErrorStop(global,ERR_DEALLOCATE,2067,'rBurnData')
+              CALL ErrorStop(global,ERR_DEALLOCATE,2077,'rBurnData')
             END IF ! global%error
           END IF ! global%ifReadFromFile
 
@@ -2808,14 +2818,14 @@ loop:           DO b=1,n-1
 
         CASE ( "jet" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,2800, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,2810, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,2807, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,2817, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -2991,14 +3001,14 @@ loop:           DO b=1,n-1
 
         CASE ( "MShock_H2O_Air001" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,2983, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,2993, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,2990, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3000, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -3055,14 +3065,14 @@ loop:           DO b=1,n-1
 
         CASE ( "MShock_H2O_Air002" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3047, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3057, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3054, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3064, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -3123,14 +3133,14 @@ loop:           DO b=1,n-1
 
         CASE ( "MShock_Air_Air_He001" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3115, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3125, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3122, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3132, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -3612,14 +3622,14 @@ loop:           DO b=1,n-1
 
         CASE ( "ncavity" )   
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3604, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3614, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3611, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3621, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -4000,14 +4010,14 @@ loop:           DO b=1,n-1
 
         CASE ( "ShockBubble" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,3992, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4002, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,3999, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4009, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -4452,14 +4462,14 @@ loop:           DO b=1,n-1
 
         CASE ( "Two_Rarefaction" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4444, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4454, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4451, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4461, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -4679,14 +4689,14 @@ loop:           DO b=1,n-1
 
         CASE ( "2DShock001" )
           IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_GASLIQ ) THEN 
-            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4671, & 
+            CALL ErrorStop(global,ERR_GASMODEL_INVALID,4681, & 
                            'Case initialization only valid with gas-liq model.')
           END IF ! pRegion%mixtInput%gasModel  
           
           IF ( pRegion%specInput%nSpecies /= 2 ) THEN 
             WRITE(errorString,'(A,1X,I2)') 'Should be:', &
                                            pRegion%specInput%nSpecies
-            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4678, &
+            CALL ErrorStop(global,ERR_SPEC_NSPEC_INVALID,4688, &
                            TRIM(errorString))
           END IF ! pRegion%specInput%nSpecies        
         
@@ -4745,7 +4755,7 @@ loop:           DO b=1,n-1
 ! ------------------------------------------------------------------------------
 
         CASE DEFAULT 
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,4737)  
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,4747)  
       END SELECT ! global%casename
 
 ! ==============================================================================
@@ -4753,7 +4763,7 @@ loop:           DO b=1,n-1
 ! ==============================================================================  
     
     CASE DEFAULT 
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,4745) 
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,4755) 
   END SELECT ! pMixtInput%fluidModel
 
 ! ******************************************************************************

@@ -4250,6 +4250,7 @@ IF ( global%casename .EQ. "cyldet" .OR. &
      global%casename .EQ. "shktb"  .OR. &
      global%casename .EQ. "cylds"  .OR. &
      global%casename .EQ. "rectshktb"  .OR. &
+     global%casename .EQ. "cone"  .OR. &
      global%casename .EQ. "barrelExp"  .OR. &
      global%casename .EQ. "wedge"  .OR. &
      global%casename .EQ. "sqdet"  .OR. &
