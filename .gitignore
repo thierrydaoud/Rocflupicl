@@ -20,3 +20,4 @@ libpicl/unit_tests/Particle2Particle_UnitTest
 libpicl/unit_tests/run*
 libpicl/unit_tests/*.txt
 libpicl/unit_tests/unitTestSrc/*.o
+libpicl/unit_tests/unitTestSrc/PPICLF_UNIT_TEST
