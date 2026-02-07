@@ -1,8 +1,5 @@
 # RocfluMP build files
-build_lib/*.f90
-build_lib/*.d
-build_lib/*.o
-build_lib/*.mod
+build_lib/
 build_util/*
 
 # Vim swap files
