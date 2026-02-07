@@ -812,6 +812,7 @@ IF ( global%myProcid == MASTERPROC) then
    print*, 'heattransfer_flag    = ',global%piclHeatTransferFlag
    print*, 'feedback_flag        = ',global%piclFeedbackFlag
    print*, 'qs_fluct_flag        = ',global%piclQsFluctFlag
+   print*, 'P-P Interactions     = ',PPICLF_PPInteractions
    print*, 'ppiclf_debug         = ',global%piclDebug
    print*, 'ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData
    print*, 'ppiclf_VU            = ',PPICLF_VU

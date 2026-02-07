@@ -888,8 +888,7 @@ END IF
       CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOX,SDOX,nCells)  
       CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOY,SDOY,nCells)  
       CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOZ,SDOZ,nCells)  
-
-     CALL MPI_BARRIER(global%mpiComm,errorFlag)
+      CALL MPI_BARRIER(global%mpiComm,errorFlag)
 
  ! Solve RK stage of time stepping particle solution
      CALL ppiclf_solve_IntegrateParticle(1,piclIO,piclDtMin,piclCurrentTime)

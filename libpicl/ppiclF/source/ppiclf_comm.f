@@ -709,7 +709,7 @@
      >          iyHigh, izLow, izHigh 
       REAL*8    rxval, ryval, rzval, EleSizei(3), MaxPoint(3),
      >          MinPoint(3), ppiclf_vlmin, ppiclf_vlmax,
-     >          centeri(3), exchCellMultiplier
+     >          centeri(3), exchCellMultiplier, Max_CellLen(3)
       LOGICAL   partl, ErrorFound
       EXTERNAL  ppiclf_vlmin, ppiclf_vlmax
 !
@@ -910,6 +910,24 @@
      >        ,ppiclf_picl_grid,nrr      !Real to sort
      >        ,nkey,2)                  !sorting method
 
+      ! Find distance check for interpolation.
+      ! This is 1.5*MaxCellLength to ensure that at least
+      ! 27 neighboring cells are mapped.
+      Max_CellLen(1) = 0.0D0
+      Max_CellLen(2) = 0.0D0
+      Max_CellLen(3) = 0.0D0
+      DO ie = 1,ppiclf_nCells_FV2PICL ! Loop through cells mapped to bin
+        DO l = 1,3
+          ! Find max cell lengths in all dimensions
+          IF(ppiclf_picl_grid(3+l,ie) .GT. Max_CellLen(l))
+     >      Max_CellLen(l) = ppiclf_picl_grid(3+l,ie)
+        END DO !l
+      END DO !ie
+      DO l = 1,3
+        ! Multiply by 1.5 so particle near face will
+        ! find center one cell over in farthest direction
+        ppiclf_interp_dchk(l) = Max_CellLen(l)*1.5D0
+      END DO
 
       IF (icalld .EQ. 0) THEN 
          icalld = icalld + 1

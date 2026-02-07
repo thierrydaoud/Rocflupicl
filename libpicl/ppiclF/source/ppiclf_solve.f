@@ -853,6 +853,14 @@ c----------------------------------------------------------------------
         CALL ppiclf_exittr('Wrong RK for rocpicl',0.D0,0)
       END IF
 
+      IF(ppiclf_linperiodic(1) .OR. ppiclf_linperiodic(2) .OR.
+     >                             ppiclf_linperiodic(3)) THEN
+        CALL ppiclf_solve_PeriodicParticleShift
+      END IF
+
+
+      CALL ppiclf_solve_PostTimeStep
+
       RETURN
       END
 
@@ -913,20 +921,12 @@ c----------------------------------------------------------------------
         END DO
       END DO
       
-      IF(ppiclf_linperiodic(1) .OR. ppiclf_linperiodic(2) .OR.
-     >                             ppiclf_linperiodic(3)) THEN
-        CALL ppiclf_solve_PeriodicParticleShift
-      END IF
-
       !Store Current stage RHS for next stage's use
       DO i= 1,PPICLF_NPART
         DO j= 1,PPICLF_LRS
           ppiclf_y1(j,i) =  ppiclf_ydot(j,i)
         END DO
       END DO
-      
-!      PPICLF_READYTOSOLVE = .FALSE.
-!      CALL ppiclf_solve_PostSolve
 
       RETURN
       END
@@ -1071,16 +1071,111 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+!
+      INTEGER*4 j
 ! 
-!      IF(.NOT. PPICLF_READYTOSOLVE)
-!     >  CALL ppiclf_solve_InitSolve
-      CALL ppiclf_solve_InitSolve
+! Assumes cells have already been mapped to particles and ghost
+! particles are created.
+!
+      ! Copies Grid Cell ID for all Rocflu elements that map
+      ! to ppiclf domain for GSLIB Transfer.  This copy is from
+      ! MapOverlapGrid.
+      CALL ppiclf_solve_InitInterp
+
+      ! Makes array (ppiclf_int_fld_input) of all rprop data
+      ! for grid cellss that map to ppiclf domain.
+      DO j=1,PPICLF_INT_ICNT
+         CALL ppiclf_solve_InterpField(j)
+      END DO
+      
+      ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
+      ! cells that map to ppiclf domain.
+      CALL ppiclf_solve_InterpTupleTransfer
+
+      ! Interpolates rprop data for ppiclf domain cells in this bin
+      CALL ppiclf_solve_Interpolate
+
+      ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
+      PPICLF_INT_ICNT = 0
+
       CALL ppiclf_user_SetYdot
 
       RETURN
       END
 !----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InitSolve
+!
+      IMPLICIT NONE
+!
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+! This is called during the initialization. It forms the first bin and
+! paritcle-cell mappings.
+! 
+! Internal: 
+! 
+      INTEGER*4 :: j
+      ! ppiclf_binchanged set in CreateBin
+      ! ppiclf_binchanged .TRUE. means
+      ! bin coordinates changed
+      CALL ppiclf_comm_CreateBin
+
+      ! ppiclf_particleMoved set in FindParticle
+      ! ppiclf_particleMoved .EQ. 0 means all particles
+      ! stayed in same bin as previous RK Stage.
+      CALL ppiclf_comm_FindParticle
+
+      IF(ppiclf_particleMoved .NE. 0 .OR.
+     >              ppiclf_binchanged) THEN
+        CALL ppiclf_comm_MoveParticle
+      END IF
+
+      IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
+        CALL ppiclf_comm_MapOverlapGrid
+      END IF
+
+      ! Copies Grid Cell ID for all Rocflu elements that map
+      ! to ppiclf domain for GSLIB Transfer.  This copy is from
+      ! MapOverlapGrid.
+      CALL ppiclf_solve_InitInterp
+
+      ! Makes array (ppiclf_int_fld_input) of all rprop data
+      ! for grid cellss that map to ppiclf domain.
+      DO j=1,PPICLF_INT_ICNT
+         CALL ppiclf_solve_InterpField(j)
+      END DO
+      
+      ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
+      ! cells that map to ppiclf domain.
+      CALL ppiclf_solve_InterpTupleTransfer
+
+      IF(PPICLF_PPInteractions) THEN
+        ! Ghost particles are needed 
+        CALL ppiclf_comm_CreateGhost
+        CALL ppiclf_comm_MoveGhost
+        ! Zero collisions 
+        ppiclf_ydotc = 0.0D0
+      END IF
+
+      ! Maps up to 27 closest cell centers to particle
+      ! Includes: CellID, total dist, x dist, y dist, z dist
+      CALL ppiclf_solve_SBParticleToCellMap
+
+      ! Interpolates rprop data for ppiclf domain cells in this bin
+      CALL ppiclf_solve_Interpolate
+      ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
+      PPICLF_INT_ICNT = 0
+
+      ! Project particle feedback to fluid solver grid
+      CALL ppiclf_solve_ProjectParticleGrid
+
+
+      RETURN
+      END
+
+!----------------------------------------------------------------------
+
+      SUBROUTINE ppiclf_solve_PostTimeStep
 !
       IMPLICIT NONE
 !
@@ -1099,6 +1194,7 @@ c----------------------------------------------------------------------
       ! ppiclf_particleMoved .EQ. 0 means all particles
       ! stayed in same bin as previous RK Stage.
       CALL ppiclf_comm_FindParticle
+
       IF(ppiclf_particleMoved .NE. 0 .OR.
      >              ppiclf_binchanged) THEN
         CALL ppiclf_comm_MoveParticle
@@ -1108,98 +1204,24 @@ c----------------------------------------------------------------------
         CALL ppiclf_comm_MapOverlapGrid
       END IF
 
-      IF(ppiclf_overlap) THEN
-        ! Copies Grid Cell ID for all Rocflu elements that map
-        ! to ppiclf domain for GSLIB Transfer.  This copy is from
-        ! MapOverlapGrid.
-        CALL ppiclf_solve_InitInterp
-
-        ! Makes array (ppiclf_int_fld_input) of all rprop data
-        ! for grid cellss that map to ppiclf domain.
-        DO j=1,PPICLF_INT_ICNT
-           CALL ppiclf_solve_InterpField(j)
-        END DO
-        
-        ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
-        ! cells that map to ppiclf domain.
-        CALL ppiclf_solve_InterpTupleTransfer
-
-        ! Maps up to 27 closest cell centers to particle
-        ! Includes: CellID, total dist, x dist, y dist, z dist
-        CALL ppiclf_solve_SBParticleToCellMap
-
-        ! Interpolates rprop data for ppiclf domain cells in this bin
-        CALL ppiclf_solve_Interpolate
-
-        ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
-        PPICLF_INT_ICNT = 0
-        ! Project particle feedback to fluid solver grid
-        CALL ppiclf_solve_ProjectParticleGrid
-      END IF
-
       IF(PPICLF_PPInteractions) THEN
-      ! Ghost particles are needed 
+        ! Ghost particles are needed 
         CALL ppiclf_comm_CreateGhost
         CALL ppiclf_comm_MoveGhost
+        ! Zero collisions 
+        ppiclf_ydotc = 0.0D0
       END IF
 
-      ! Zero collisions 
-      ppiclf_ydotc = 0.0D0
+      ! Maps up to 27 closest cell centers to particle
+      ! Includes: CellID, total dist, x dist, y dist, z dist
+      CALL ppiclf_solve_SBParticleToCellMap
+
+      ! Project particle feedback to fluid solver grid
+      CALL ppiclf_solve_ProjectParticleGrid
 
       RETURN
       END
 
-!----------------------------------------------------------------------
-
-!      SUBROUTINE ppiclf_solve_PostSolve
-!!
-!      IMPLICIT NONE
-!!
-!      INCLUDE "PPICLF"
-!! 
-!! Internal: 
-!! 
-!      INTEGER*4 :: i, j, ierr
-!
-!      ! ppiclf_binchanged set in CreateBin
-!      ! ppiclf_binchanged .TRUE. means
-!      ! bin coordinates changed
-!      CALL ppiclf_comm_CreateBin
-!   
-!      CALL MPI_BARRIER(ppiclf_comm,ierr)
-!
-!      ! ppiclf_particleMoved set in FindParticle
-!      ! ppiclf_particleMoved .EQ. 0 means all particles
-!      ! stayed in same bin as previous RK Stage.
-!      CALL ppiclf_comm_FindParticle
-!
-!      IF(ppiclf_particleMoved .NE. 0 .OR.
-!     >              ppiclf_binchanged) THEN
-!        CALL ppiclf_comm_MoveParticle
-!      END IF
-!
-!      IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
-!        CALL ppiclf_comm_MapOverlapGrid
-!      END IF
-!
-!      IF(ppiclf_overlap) THEN
-!        ! Interpolate fluid solver grid to particle
-!        CALL ppiclf_solve_InterpParticleGrid
-!        ! Project particle feedback to fluid solver grid
-!        CALL ppiclf_solve_ProjectParticleGrid
-!      END IF
-!
-!!      IF(ppiclf_gprequired) THEN
-!      ! Ghost particles are needed 
-!        CALL ppiclf_comm_CreateGhost
-!        CALL ppiclf_comm_MoveGhost
-!!      END IF
-!
-!      ! Zero collisions 
-!      ppiclf_ydotc = 0.0D0
-!
-!      RETURN
-!      END
 !-----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InterpParticleGrid
 !
@@ -1319,9 +1341,8 @@ c----------------------------------------------------------------------
 !
 ! Internal: 
 !
-      REAL*8 FLD(PPICLF_LEX,PPICLF_LEY,PPICLF_LEZ,PPICLF_LEE),
-     >       Max_CellLen(3)
-      INTEGER*4 nkey(2), nl, nii, njj, nrr, ie, l 
+      REAL*8 FLD(PPICLF_LEX,PPICLF_LEY,PPICLF_LEZ,PPICLF_LEE)
+      INTEGER*4 nkey(2), nl, nii, njj, nrr  
       LOGICAL partl
 !
       ! send it all
@@ -1344,26 +1365,6 @@ c----------------------------------------------------------------------
      >      ,partl,nl                         ! Logical data
      >      ,ppiclf_int_fld,nrr               ! Real data
      >      ,nkey,2)                          ! Sorting order
-
-      ! Find distance check for interpolation.
-      ! This is 1.5*MaxCellLength to ensure that at least
-      ! 27 neighboring cells are mapped.
-      Max_CellLen(1) = 0.0D0
-      Max_CellLen(2) = 0.0D0
-      Max_CellLen(3) = 0.0D0
-      DO ie = 1,ppiclf_nCells_Interp ! Loop through cells mapped to bin
-        DO l = 1,3
-          ! Find max cell lengths in all dimensions
-          IF(ppiclf_picl_grid(3+l,ie) .GT. Max_CellLen(l))
-     >      Max_CellLen(l) = ppiclf_picl_grid(3+l,ie)
-        END DO !l
-      END DO !ie
-
-      DO l = 1,3
-        ! Multiply by 1.5 so particle near face will
-        ! find center one cell over in farthest direction
-        ppiclf_interp_dchk(l) = Max_CellLen(l)*1.5D0
-      END DO
 
       RETURN
       END
@@ -1409,7 +1410,7 @@ c----------------------------------------------------------------------
       !***************************************************************
 
       IF(ppiclf_npart .LT. 1) RETURN
-      IF(ppiclf_nCells_Interp .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
+      IF(ppiclf_nCells_FV2PICL .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
         PRINT*,'ERROR: ',ppiclf_npart, 'Particles mapped to bin:'
      >         ,ppiclf_nid
         PRINT*,'No cells mapped to bin for Interpolation/Projection.'
@@ -1518,9 +1519,10 @@ c----------------------------------------------------------------------
               temp_SBin = iTemp_SBin(1) + iTemp_SBin(2)*n_SBin(1) +
      >                    iTemp_SBin(3)*n_SBin(1)*n_SBin(2)
               SBin_Counter(temp_SBin) = SBin_Counter(temp_SBin) + 1
-              IF(SBin_Counter(temp_SBin) .GT. ppiclf_nCells_Interp)
-     >          PRINT*, 'counter more than interp cells. SB:',
-     >          temp_SBin, SBin_Counter(temp_SBin), ppiclf_nCells_Interp
+              IF(SBin_Counter(temp_SBin) .GT. ppiclf_nCells_FV2PICL)
+     >          PRINT*, 'counter more than interp cells. SB:'
+     >          ,temp_SBin, SBin_Counter(temp_SBin)
+     >          ,ppiclf_nCells_FV2PICL
               SBin_Map(temp_SBin,SBin_Counter(temp_SBin)) = ie
             END DO !k
           END DO !j 
@@ -1674,7 +1676,7 @@ c----------------------------------------------------------------------
 
       !***************************************************************
 
-      IF(ppiclf_nCells_Interp .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
+      IF(ppiclf_nCells_FV2PICL .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
         PRINT*,'No cells mapped to ppiclf bin. Num Particles/Proc ID:',
      >  ppiclf_npart, ppiclf_nid
         CALL ppiclf_exittr('Failure in particle to cell mapping',0.D0,0)
@@ -1698,7 +1700,7 @@ c----------------------------------------------------------------------
           CellID_nearest(ie) = -1 ! index of nearest elements
           dSQ(ie) = 1D20 ! distance to center of nearest element
         ENDDO !ie
-        DO ie = 1,ppiclf_nCells_Interp
+        DO ie = 1,ppiclf_nCells_FV2PICL
           ! get distance from particle to center
           dSQl     = 0.0D0
           dSQi     = 0.0D0
@@ -1939,10 +1941,10 @@ c----------------------------------------------------------------------
       ! Now send feedback information to processor that contains 
       ! the cell for the fluid solver
 
-      ppiclf_nCells_Proj = ppiclf_nCells_Interp
+      ppiclf_nCells_Proj = ppiclf_nCells_FV2PICL
       DO i = 1,ppiclf_nCells_Proj
         CALL ppiclf_icopy(ppiclf_cell_map_proj(1,i),
-     >         ppiclf_cell_map_interp(1,i),PPICLF_LRMAX)
+     >         ppiclf_cell_map(1,i),PPICLF_LRMAX)
       END DO
 
       nl = 0
