@@ -800,19 +800,31 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 ! 
 ! Input: 
 ! 
       REAL*8    time
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 ! 
 ! Internal:
 !
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
       ppiclf_time   = time
 
       CALL ppiclf_io_WriteParticleVTU('')
       CALL ppiclf_io_WriteBinVTU('')
       ! Output diagnostics
       CALL ppiclf_io_OutputDiagAll
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TWriteSolution = tfinal-tstart
+#endif
 
       RETURN
       END
@@ -827,6 +839,7 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 ! 
 ! Input: 
 ! 
@@ -838,7 +851,44 @@ c----------------------------------------------------------------------
 ! Internal:
 !
       LOGICAL iout
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
+#ifdef PERF
+!Reset timers each RK stage
+      PPICLF_Tbinning                = 0.0D0
+      PPICLF_TSendParticles          = 0.0D0
+      PPICLF_TSendGridOverlap        = 0.0D0               
+      PPICLF_TSendFluidFields        = 0.0D0             
+      PPICLF_TParticleParticleModels = 0.0D0       
+      PPICLF_TFluidPartilceModels    = 0.0D0     
+      PPICLF_TSendGhostParticles     = 0.0D0     
+      PPICLF_TMapParticlesCells      = 0.0D0    
+      PPICLF_TInterpolation          = 0.0D0    
+      PPICLF_TProjection             = 0.0D0     
+      PPICLF_TRemoveParticles        = 0.0D0           
+      PPICLF_TWriteSolution          = 0.0D0                  
+      PPICLF_TIntegration            = 0.0D0    
+      PPICLF_TPeriodicity            = 0.0D0       
+      PPICLF_TDataTransfers          = 0.0D0        
+      PPICLF_TTotal                  = 0.0D0
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       ppiclf_cycle  = istep
       ppiclf_iostep = iostep
       ppiclf_dt     = dt
@@ -876,6 +926,7 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 ! 
 ! Internal: 
 ! 
@@ -893,6 +944,9 @@ c----------------------------------------------------------------------
 ! Output:
 !
       LOGICAL iout
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
       icalld = icalld + 1
 
@@ -943,11 +997,15 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 !
 ! Internal:
 !
       INTEGER*4 i  
       REAL*8 per_alpha
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
       DO i=1,ppiclf_npart
 !!!!!!!!!!!!!!!!        Rotational Periodicity Starts Here     !!!!!!!!!!!!!!!!!!!!
@@ -1077,8 +1135,12 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 !
       INTEGER*4 j
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 ! 
 ! Assumes cells have already been mapped to particles and ghost
 ! particles are created.
@@ -1191,6 +1253,10 @@ c----------------------------------------------------------------------
 ! Internal: 
 ! 
       INTEGER*4 :: i, j
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
+!
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
       ! bin coordinates changed
@@ -1228,20 +1294,6 @@ c----------------------------------------------------------------------
       RETURN
       END
 
-!-----------------------------------------------------------------------
-      SUBROUTINE ppiclf_solve_InterpParticleGrid
-!
-      IMPLICIT NONE
-!
-      INCLUDE "PPICLF"
-!
-! Internal:
-!
-
-
-
-      RETURN
-      END
 !-----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InterpFieldUser(jp,infld)
 !
@@ -1344,12 +1396,16 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 !
 ! Internal: 
 !
       REAL*8 FLD(PPICLF_LEX,PPICLF_LEY,PPICLF_LEZ,PPICLF_LEE)
       INTEGER*4 nkey(2), nl, nii, njj, nrr  
       LOGICAL partl
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
       ! send it all
       nl   = 0
@@ -1383,6 +1439,7 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 
       ! Local Variables
       INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
@@ -1413,6 +1470,9 @@ c----------------------------------------------------------------------
      >           firstSB(3), lastSB(3)  
       REAL*8    bin_Min(3), x_range(3), size_SBin(3)
       LOGICAL   remove
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
       !***************************************************************
 
       IF(ppiclf_npart .LT. 1) RETURN
@@ -1671,6 +1731,7 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 
       ! Local Variables
       INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
@@ -1679,6 +1740,9 @@ c----------------------------------------------------------------------
      >          CellCenter(3,28), w(27),binblength(3),  
      >          Max_CellLen(3),Max_CellLenSQ(3)
       LOGICAL   added, farAway
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 
       !***************************************************************
 
@@ -1788,10 +1852,14 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 
       ! Local Variables
       INTEGER*4 i, j, k, ip, nnearest,cellID 
       REAL*8    wsum, eps, dist, a(27), w(27)  
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 
       IF(ppiclf_npart .LT. 1) RETURN
 
@@ -1833,10 +1901,15 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 
 ! Internal:
 !
       INTEGER*4 i, icount
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
+!
       icount = 0
       DO i=1,ppiclf_npart
          IF(ppiclf_iprop(9,i) .NE. -1) THEN
@@ -1892,6 +1965,7 @@ c----------------------------------------------------------------------
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 
       ! Internal:
       INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj,
@@ -1899,7 +1973,10 @@ c----------------------------------------------------------------------
       REAL*8    CellVol, GaussianConst, dist, w(27), wsum,
      >          x_norm, y_norm, z_norm, PI, eps
       LOGICAL   partl 
- 
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
+! 
       PI = 4*ATAN(1.0D0)
       GaussianConst = 2.305D0 ! Distribution over 2 cell widths
       ppiclf_pro_fld_picl = 0.0d0

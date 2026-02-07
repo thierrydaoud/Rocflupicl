@@ -5,6 +5,10 @@ CPFLAGS         += -E
 ifeq ($(TEST),1)
     FFLAGS += -DTEST
 endif
+
+ifeq ($(PERF),1)
+    FFLAGS += -DPERF
+endif
  	           
 INSTALL_LOCATION = .
 
@@ -64,12 +68,13 @@ OBJ = $(SOURCE_ROOT_USER)/ppiclf_user.o     \
       $(SOURCE_ROOT_PPICLF)/ppiclf_io.o       \
       $(SOURCE_ROOT_PPICLF)/ppiclf_solve.o    \
       $(SOURCE_ROOT_PPICLF)/ppiclf_mxm.o
-PRE = $(SOURCE_ROOT_PPICLF)/PPICLF_SOLN.h     \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_GRID.h     \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h      \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_PARALLEL.h \
+PRE = $(SOURCE_ROOT_PPICLF)/PPICLF_SOLN.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GRID.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h         \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_PARALLEL.h    \
       $(SOURCE_ROOT_PPICLF)/PPICLF_USER_COMMON.h \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_PERFORMANCE.h
 POS = $(SOURCE_ROOT_PPICLF)/PPICLF
       
 

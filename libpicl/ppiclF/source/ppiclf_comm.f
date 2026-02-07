@@ -119,6 +119,7 @@
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 !
 ! Internal:
 !
@@ -138,6 +139,9 @@
       EXTERNAL  ppiclf_iglsum, ppiclf_glmin, ppiclf_glmax, ppiclf_glsum,
      >          ppiclf_iglmax
       LOGICAL   MaxBinsAchieved(3), TwoSmallBins
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
 
       ix = 1
@@ -545,12 +549,16 @@
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 !
 ! Internal:
 !
       INTEGER*4  i, ii, jj, kk, nrank, ierr, partcheck
       EXTERNAL   ppiclf_iglmax
       INTEGER*4  ppiclf_iglmax
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
       partcheck = 0
       DO i=1,ppiclf_npart
@@ -585,6 +593,7 @@
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 !
 ! Internal:
 !
@@ -594,6 +603,9 @@
      >       + PPICLF_LRP3 + PPICLF_LRP4 + PPICLF_LRP5 + PPICLF_LRP_PRO)
       REAL*8    rtemp(rtempLim,PPICLF_LPART)
       INTEGER*4 i, icount, j0
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
       ! copy particle y, rprop, rprop2, rprop3 arrays into rtemp
       ! array for communication
@@ -712,6 +724,9 @@
      >          centeri(3), exchCellMultiplier, Max_CellLen(3)
       LOGICAL   partl, ErrorFound
       EXTERNAL  ppiclf_vlmin, ppiclf_vlmax
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
 ! Code Start:
 !
@@ -949,6 +964,7 @@
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 !
 ! Internal:
 !
@@ -956,7 +972,10 @@
      >           distSQ(3), distCheckSQ, buffer
       INTEGER*4  ip, idum, iip, jjp, kkp, iig, jjg, kkg, nrank, 
      >           j, k, l, GhostInc(3), ix, iy, iz
-
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
+!
       ! Calculate the linear periodicity shift in each dimension
       DO l = 1,3
         IF(ppiclf_linperiodic(l)) THEN
@@ -1161,11 +1180,15 @@
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 !
 ! Internal:
 !
       INTEGER*4 iprop_proc_index
       LOGICAL   partl  ! Dummy variable       
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+#endif
 !
       iprop_proc_index = 4 ! since ppiclf_iprop(4,np) contains processor
                            ! that should receive ghost particle
