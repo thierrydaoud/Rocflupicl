@@ -1,4 +1,4 @@
-      SUBROUTINE ppiclf_solve_Initialize(xi1,xpmin,xpmax,
+      SUBROUTINE ppiclf_solve_Initialize(PP, xi1,xpmin,xpmax,
      >           yi1,ypmin,ypmax,zi1,zpmin,zpmax,
      >           ai1,apa,apxa,aprin,aprout)
 !
@@ -8,6 +8,7 @@
 !
 ! Input:
 !
+      LOGICAL   PP
       INTEGER*4 xi1, yi1, zi1, ai1
       REAL*8    xpmin,xpmax,ypmin,ypmax,zpmin,zpmax,
      >          apa,apxa,aprin,aprout, pi, angled
@@ -15,6 +16,11 @@
       ! Called by rocpicl/PICL_TEMP_InitSolver.F90
       ! xdrange adjusts the bin boundaries to ensure they aren't 
       ! larger than the cartesian fluid domain extremes.
+      
+      ! Establishes if particle-particle interactions are included.
+      ! Includes collisions, Added mass, pseudo-turbulence, and qs
+      ! fluctuations
+      PPICLF_PPInteractions = PP
 
       ! Linear X-Periodicity
       ppiclf_xdrange(1,1) = xpmin

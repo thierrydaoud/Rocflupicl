@@ -114,7 +114,7 @@ INTEGER :: errorFlag,icg
    CHARACTER(CHRLEN) :: endString,iFileName,matName,comment
    CHARACTER(12) :: vtuFile,vtuFile1
    LOGICAL :: notfoundFlag, pf_restart,pf_rpInit,pf_settle,&
-              wall_exists, fexists, foundMat
+              wall_exists, fexists, foundMat, PPInteractions
    INTEGER :: i,npart,nCells,vi,vii,ii,jj,kk,loopCounter,ipart,icl
    INTEGER :: PPC,numPclCells,npart_local,i_global,i_global_min,i_global_max,&
               iFile,iMat, k, j, l, m
@@ -142,6 +142,7 @@ INTEGER :: errorFlag,icg
         qs_fluct_filter_adapt_flag, &
         ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
         sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
+
    REAL(RFREAL) :: rmu_ref, tref, suth, ksp, erest
    COMMON /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag, &
         collisional_flag, heattransfer_flag, feedback_flag, &
@@ -150,6 +151,7 @@ INTEGER :: errorFlag,icg
         qs_fluct_filter_adapt_flag, ksp, erest, &
         ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
         sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
+ 
    REAL(RFREAL) :: ppiclf_rcp_part
    CHARACTER(12) :: ppiclf_matname
    COMMON /RFLU_ppiclf_misc01/ ppiclf_rcp_part
@@ -223,6 +225,16 @@ erest = global%piclERest
 
 qs_fluct_filter_flag = global%piclQsFluctFilterFlag
 qs_fluct_filter_adapt_flag = global%piclQsFluctFilterAdaptFlag
+
+IF(     (am_flag==2)          & 
+   .OR. (collisional_flag>=1) &
+   .OR. (qs_fluct_flag>=1)    &
+   .OR. (pseudoTurb_flag==1)) THEN
+  PPInteractions = .TRUE.
+ELSE
+  PPInteractions = .FALSE.
+END IF
+
 
 x_per_flag = global%piclPeriodicXFlag 
 ! Find min/max grid coordinates across MPI ranks
@@ -672,7 +684,8 @@ IF(global%myProcid == MASTERPROC) THEN
   PRINT*, 'z fluid min/max', z_per_min, z_per_max
 END IF
 
-CALL ppiclf_solve_Initialize( & 
+CALL ppiclf_solve_Initialize( &
+           PPInteractions, & 
            x_per_flag, x_per_min, x_per_max, &
            y_per_flag, y_per_min, y_per_max, &
            z_per_flag, z_per_min, z_per_max, &
@@ -787,15 +800,6 @@ DEALLOCATE(volp,STAT=errorFlag)
     END IF ! global%error
 
 #endif
-    IF(     (am_flag==2)          & 
-       .OR. (collisional_flag>=1) &
-       .OR. (qs_fluct_flag>=1)    &
-       .OR. (pseudoTurb_flag==1)) THEN
-      PPICLF_PPInteractions = .TRUE.
-    ELSE
-      PPICLF_PPInteractions = .FALSE.
-    END IF
-
 
 IF ( global%myProcid == MASTERPROC) then
    print*, ' '
@@ -812,7 +816,7 @@ IF ( global%myProcid == MASTERPROC) then
    print*, 'heattransfer_flag    = ',global%piclHeatTransferFlag
    print*, 'feedback_flag        = ',global%piclFeedbackFlag
    print*, 'qs_fluct_flag        = ',global%piclQsFluctFlag
-   print*, 'P-P Interactions     = ',PPICLF_PPInteractions
+   print*, 'P-P Interactions     = ',PPInteractions
    print*, 'ppiclf_debug         = ',global%piclDebug
    print*, 'ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData
    print*, 'ppiclf_VU            = ',PPICLF_VU
