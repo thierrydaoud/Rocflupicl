@@ -10,6 +10,11 @@ build_util/*
 libpicl/ppiclf/source/*.swp
 libpicl/user_files/*.swp
 libpicl/ppiclF/3rd_party/gslib/gslib/src/*.swp
+libpicl/ppiclF/source/PPICLF
+libpicl/ppiclF/source/ppiclf.f
+libpicl/ppiclF/source/ppiclf.o
+libpicl/ppiclF/source/libppiclF.a
+
 
 ## ppiclf unit test output
 libpicl/unit_tests/*.txt
