@@ -384,71 +384,68 @@
 !
 ! Step 1b: Call NearestNeighbor if particles i and j interact
 !
-         if ((am_flag==2).or.(collisional_flag>=1)
-     >          .or.(qs_fluct_flag>=1)
-     >          .or.(pseudoTurb_flag==1)) then
+         IF(PPICLF_PPInteractions) THEN
+           !AVERY - we should fix vmag ~0 bug and remove conditional check
+           if ((qs_fluct_flag>=1) .and. (vmag .gt. 1.d-8)) then
+              ! Compute mean for particle i
+              !    add neighbor particle j afterward
+              ! Box filter is used if qs_fluct_filter_flag=0
+              !   The box filter used here is a simple cube centered
+              !     at particle i with half-width dist2 (see
+              !     ppiclf_user_EvalNearestNeighbor.f for definition)
+              !   We use a simple arithmetic mean
+              !   phipmean is not used
+              ! Gaussian filter is used if qs_fluct_filter_flag=1
+              !   We use the value of the Gaussian times the volume
+              !     of the particle to get the filtered particle volume
 
-         !AVERY - we should fix vmag ~0 bug and remove conditional check
-         if ((qs_fluct_flag>=1) .and. (vmag .gt. 1.d-8)) then
-            ! Compute mean for particle i
-            !    add neighbor particle j afterward
-            ! Box filter is used if qs_fluct_filter_flag=0
-            !   The box filter used here is a simple cube centered
-            !     at particle i with half-width dist2 (see
-            !     ppiclf_user_EvalNearestNeighbor.f for definition)
-            !   We use a simple arithmetic mean
-            !   phipmean is not used
-            ! Gaussian filter is used if qs_fluct_filter_flag=1
-            !   We use the value of the Gaussian times the volume
-            !     of the particle to get the filtered particle volume
+              if (qs_fluct_filter_flag==0) then
+                 ! box filter
+                 !***AVERY - I think phipmean is using wrong index ***
+                 ! Also, none of the below are means...
+                 phipmean = ppiclf_rprop(PPICLF_R_JVOLP,i)
+                 upmean   = ppiclf_y(PPICLF_JVX,i)
+                 vpmean   = ppiclf_y(PPICLF_JVY,i)
+                 wpmean   = ppiclf_y(PPICLF_JVZ,i)
+                 u2pmean  = upmean**2
+                 v2pmean  = vpmean**2
+                 w2pmean  = wpmean**2
+                 icpmean  = 1
+              else if (qs_fluct_filter_flag==1) then
+                 ! gaussian kernel
+                 ! r = 0
+                 !***AVERY - verify max filter dimension should be used***
+                 maxFilter = MAX(ppiclf_filter(1),ppiclf_filter(2),
+     >                           ppiclf_filter(3))
+                 gkern = sqrt(rpi*maxFilter**2/
+     >                  (4.0d0*log(2.0d0)))**(-ppiclf_ndim)
+                 !***AVERY - I think phipmean is using wrong index ***
+                 ! Also, none of the below are means...
+                 phipmean = gkern*ppiclf_rprop(PPICLF_R_JVOLP,i)
+                 upmean   = gkern*ppiclf_y(PPICLF_JVX,i)*
+     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
+                 vpmean   = gkern*ppiclf_y(PPICLF_JVY,i)*
+     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
+                 wpmean   = gkern*ppiclf_y(PPICLF_JVZ,i)*
+     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
+                 u2pmean  = gkern*(ppiclf_y(PPICLF_JVX,i)**2)*
+     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
+                 v2pmean  = gkern*(ppiclf_y(PPICLF_JVY,i)**2)*
+     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
+                 w2pmean  = gkern*(ppiclf_y(PPICLF_JVZ,i)**2)*
+     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
+                 icpmean = 1
+              end if
+           end if
 
-            if (qs_fluct_filter_flag==0) then
-               ! box filter
-               !***AVERY - I think phipmean is using wrong index ***
-               ! Also, none of the below are means...
-               phipmean = ppiclf_rprop(PPICLF_R_JVOLP,i)
-               upmean   = ppiclf_y(PPICLF_JVX,i)
-               vpmean   = ppiclf_y(PPICLF_JVY,i)
-               wpmean   = ppiclf_y(PPICLF_JVZ,i)
-               u2pmean  = upmean**2
-               v2pmean  = vpmean**2
-               w2pmean  = wpmean**2
-               icpmean  = 1
-            else if (qs_fluct_filter_flag==1) then
-               ! gaussian kernel
-               ! r = 0
-               !***AVERY - verify max filter dimension should be used***
-               maxFilter = MAX(ppiclf_filter(1),ppiclf_filter(2),
-     >                         ppiclf_filter(3))
-               gkern = sqrt(rpi*maxFilter**2/
-     >                (4.0d0*log(2.0d0)))**(-ppiclf_ndim)
-               !***AVERY - I think phipmean is using wrong index ***
-               ! Also, none of the below are means...
-               phipmean = gkern*ppiclf_rprop(PPICLF_R_JVOLP,i)
-               upmean   = gkern*ppiclf_y(PPICLF_JVX,i)*
-     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
-               vpmean   = gkern*ppiclf_y(PPICLF_JVY,i)*
-     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
-               wpmean   = gkern*ppiclf_y(PPICLF_JVZ,i)*
-     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
-               u2pmean  = gkern*(ppiclf_y(PPICLF_JVX,i)**2)*
-     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
-               v2pmean  = gkern*(ppiclf_y(PPICLF_JVY,i)**2)*
-     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
-               w2pmean  = gkern*(ppiclf_y(PPICLF_JVZ,i)**2)*
-     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
-               icpmean = 1
-            end if
-         end if
-
-         ! add neighbors
-         ! AVERY - always use subbins
-         IF ( 1 .EQ. 1 ) THEN !sbNearest_flag .EQ. 1) THEN
-            CALL ppiclf_solve_NearestNeighborSB(
-     >           i,tot_SBin,SBin_counter,SBin_map,n_SBin,i_Bin)
-!         ELSE
-!             CALL ppiclf_solve_NearestNeighbor(i)
-         END IF
+           ! add neighbors
+           ! AVERY - always use subbins
+           IF ( 1 .EQ. 1 ) THEN !sbNearest_flag .EQ. 1) THEN
+              CALL ppiclf_solve_NearestNeighborSB(
+     >             i,tot_SBin,SBin_counter,SBin_map,n_SBin,i_Bin)
+!           ELSE
+!               CALL ppiclf_solve_NearestNeighbor(i)
+           END IF
 
          end if ! end Step 1b; nearestneighbor
 

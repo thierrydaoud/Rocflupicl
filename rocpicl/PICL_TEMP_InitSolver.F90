@@ -787,6 +787,15 @@ DEALLOCATE(volp,STAT=errorFlag)
     END IF ! global%error
 
 #endif
+    IF(     (am_flag==2)          & 
+       .OR. (collisional_flag>=1) &
+       .OR. (qs_fluct_flag>=1)    &
+       .OR. (pseudoTurb_flag==1)) THEN
+      PPICLF_PPInteractions = .TRUE.
+    ELSE
+      PPICLF_PPInteractions = .FALSE.
+    END IF
+
 
 IF ( global%myProcid == MASTERPROC) then
    print*, ' '

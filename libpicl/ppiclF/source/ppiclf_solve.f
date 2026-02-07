@@ -195,6 +195,8 @@
       ppiclf_linperiodic(1) = .FALSE.    
       ppiclf_linperiodic(2) = .FALSE.   
       ppiclf_linperiodic(3) = .FALSE. 
+      
+      PPICLF_PPInteractions = .FALSE.
 
       ppiclf_cycle  = 0
       ppiclf_iostep = 1
@@ -1107,17 +1109,39 @@ c----------------------------------------------------------------------
       END IF
 
       IF(ppiclf_overlap) THEN
-        ! Interpolate fluid solver grid to particle
-        CALL ppiclf_solve_InterpParticleGrid
+        ! Copies Grid Cell ID for all Rocflu elements that map
+        ! to ppiclf domain for GSLIB Transfer.  This copy is from
+        ! MapOverlapGrid.
+        CALL ppiclf_solve_InitInterp
+
+        ! Makes array (ppiclf_int_fld_input) of all rprop data
+        ! for grid cellss that map to ppiclf domain.
+        DO j=1,PPICLF_INT_ICNT
+           CALL ppiclf_solve_InterpField(j)
+        END DO
+        
+        ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
+        ! cells that map to ppiclf domain.
+        CALL ppiclf_solve_InterpTupleTransfer
+
+        ! Maps up to 27 closest cell centers to particle
+        ! Includes: CellID, total dist, x dist, y dist, z dist
+        CALL ppiclf_solve_SBParticleToCellMap
+
+        ! Interpolates rprop data for ppiclf domain cells in this bin
+        CALL ppiclf_solve_Interpolate
+
+        ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
+        PPICLF_INT_ICNT = 0
         ! Project particle feedback to fluid solver grid
         CALL ppiclf_solve_ProjectParticleGrid
       END IF
 
-!      IF(ppiclf_gprequired) THEN
+      IF(PPICLF_PPInteractions) THEN
       ! Ghost particles are needed 
         CALL ppiclf_comm_CreateGhost
         CALL ppiclf_comm_MoveGhost
-!      END IF
+      END IF
 
       ! Zero collisions 
       ppiclf_ydotc = 0.0D0
@@ -1185,31 +1209,7 @@ c----------------------------------------------------------------------
 !
 ! Internal:
 !
-      INTEGER*4 j
-!
-      ! Copies Grid Cell ID for all Rocflu elements that map
-      ! to ppiclf domain for GSLIB Transfer.  This copy is from
-      ! MapOverlapGrid.
-      CALL ppiclf_solve_InitInterp
 
-      ! Makes array (ppiclf_int_fld_input) of all rprop data
-      ! for grid cellss that map to ppiclf domain.
-      DO j=1,PPICLF_INT_ICNT
-         CALL ppiclf_solve_InterpField(j)
-      END DO
-      
-      ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
-      ! cells that map to ppiclf domain.
-      CALL ppiclf_solve_InterpTupleTransfer
-
-      ! Maps up to 27 closest cell centers to particle
-      ! Includes: CellID, total dist, x dist, y dist, z dist
-      CALL ppiclf_solve_SBParticleToCellMap
-
-      ! Interpolates rprop data for ppiclf domain cells in this bin
-      CALL ppiclf_solve_Interpolate
-
-      PPICLF_INT_ICNT = 0
 
 
       RETURN
