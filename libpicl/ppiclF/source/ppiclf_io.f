@@ -1503,6 +1503,7 @@ c1511 continue
           END DO
           Cavg(i) = Cavg(i) / REAL(ActiveCnt)
         END DO
+      END IF
       RETURN
       END
 !-----------------------------------------------------------------------
