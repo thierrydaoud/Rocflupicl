@@ -1390,8 +1390,119 @@ c1511 continue
 !
 ! Internal:
 !
+      REAL*8 TimeArray(15,ppiclf_np), localTime(15),
+     >       TAvg(15), Tmin(15), Tmax(15), TminActive(15),
+     >       PAvg(2), CAvg(2)
+      INTEGER*4 Particles(2,ppiclf_np), localParticles(2),
+     >          Cells(2,ppiclf_np), localCells(2), ierr, i, j, k
+     >           Pmin(2), Pmax(2), PminActive(2),
+     >           Cmin(2), Cmax(2), CminActive(2)
+     >          ActiveCnt
+      CHARACTER*35 TimeName(15)
+      LOGICAL   ActiveProc(ppiclf_np)
 
+      TimeName(1)  = "CreateBin"              
+      TimeName(2)  = "SendParticles"         
+      TimeName(3)  = "SendGridOverlap"       
+      TimeName(4)  = "SendFluidFields"       
+      TimeName(5)  = "ParticleParticleModels"
+      TimeName(6)  = "FluidParticleModels"   
+      TimeName(7)  = "SendGhostParticles"    
+      TimeName(8)  = "MapParticlesCells"     
+      TimeName(9)  = "Interpolation"         
+      TimeName(10) = "Projection"            
+      TimeName(11) = "WriteSolution"         
+      TimeName(12) = "Integration"           
+      TimeName(13) = "Periodicity"           
+      TimeName(14) = "DataTransfers"         
+      TimeName(15) = "Total"                 
 
+      localTime(1)  = PPICLF_TCreateBin               
+      localTime(2)  = PPICLF_TSendParticles           
+      localTime(3)  = PPICLF_TSendGridOverlap         
+      localTime(4)  = PPICLF_TSendFluidFields         
+      localTime(5)  = PPICLF_TParticleParticleModels  
+      localTime(6)  = PPICLF_TFluidParticleModels     
+      localTime(7)  = PPICLF_TSendGhostParticles      
+      localTime(8)  = PPICLF_TMapParticlesCells       
+      localTime(9)  = PPICLF_TInterpolation           
+      localTime(10) = PPICLF_TProjection              
+      localTime(11) = PPICLF_TWriteSolution           
+      localTime(12) = PPICLF_TIntegration             
+      localTime(13) = PPICLF_TPeriodicity             
+      localTime(14) = PPICLF_TDataTransfers           
+      localTime(15) = PPICLF_TTotal
 
+      localParticles(1) = ppiclf_npart 
+      localParticles(2) = ppiclf_npart_gp
+
+      localCells(1) = ppiclf_nCells_FV2PICL_Orig
+      localCells(2) = ppiclf_nCells_FV2PICL                  
+
+      ! Move all data to rank 0 for printing.
+      CALL MPI_Gather(localTime, 15, MPI_DOUBLE_PRECISION,
+     >                TimeArray, 15, MPI_DOUBLE_PRECISION,
+     >                0, ppiclf_comm, ierr)
+
+      CALL MPI_Gather(localParticles, 2, MPI_INTEGER4,
+     >                Particles,      2, MPI_INTEGER4,
+     >                0, ppiclf_comm, ierr)
+
+      CALL MPI_Gather(localCells, 2, MPI_INTEGER4,
+     >                Cells,      2, MPI_INTEGER4,
+     >                0, ppiclf_comm, ierr)
+      IF(ppiclf_nid .EQ. 0) THEN
+        ActiveCnt = 0
+        DO i = 1,ppiclf_np
+          ActiveProc(i) = .FALSE.
+          IF(Particles(1,i) .GT. 0) THEN
+            ActiveProc(i) = .TRUE.
+            ActiveCnt = ActiveCnt + 1
+          END IF
+        END DO
+        IF(ActiveCnt .EQ. 0) RETURN
+        DO i = 1,15
+          TAvg(i)       = 0.0D0
+          Tmin(i)       = 1.0D22
+          Tmax(i)       = 1.0D-22
+          TminActive(i) = 1.0D22
+          DO j = 1,ppiclf_np
+            IF(ActiveProc(j)) 
+     >        TminActive(i) = MIN(TimeArray(i,j),TminActive(i))
+            Tmax(i) = MAX(TimeArray(i,j), Tmax(i))
+            Tmin(i) = MIN(TimeArray(i,j), Tmin(i))
+            IF(ActiveProc(j)) Tavg(i) = Tavg(i) + TimeArray(i,j) 
+          END DO
+          Tavg(i) = Tavg(i) / REAL(ActiveCnt)
+        END DO
+        DO i = 1,2
+          PAvg(i)       = 0.0D0
+          Pmin(i)       = 100000000
+          Pmax(i)       = 0
+          PminActive(i) = 100000000
+          DO j = 1,ppiclf_np
+            IF(ActiveProc(j)) 
+     >        PminActive(i) = MIN(Particles(i,j),PminActive(i))
+            Pmax(i) = MAX(Particles(i,j), Pmax(i))
+            Pmin(i) = MIN(Particles(i,j), Pmin(i))
+            IF(ActiveProc(j)) Pavg(i) = Pavg(i) + REAL(Particles(i,j))
+          END DO
+          Pavg(i) = Pavg(i) / REAL(ActiveCnt)
+        END DO
+        DO i = 1,2
+          CAvg(i)       = 0.0D0
+          Cmin(i)       = 100000000
+          Cmax(i)       = 0
+          CminActive(i) = 100000000
+          DO j = 1,ppiclf_np
+            IF(ActiveProc(j)) 
+     >        CminActive(i) = MIN(Cells(i,j),CminActive(i))
+            Cmax(i) = MAX(Cells(i,j), Cmax(i))
+            Cmin(i) = MIN(Cells(i,j), Cmin(i))
+            IF(ActiveProc(j)) Cavg(i) = Cavg(i) + REAL(Cells(i,j)) 
+          END DO
+          Cavg(i) = Cavg(i) / REAL(ActiveCnt)
+        END DO
       RETURN
       END
+!-----------------------------------------------------------------------
