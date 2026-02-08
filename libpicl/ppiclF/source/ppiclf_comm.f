@@ -139,9 +139,6 @@
       EXTERNAL  ppiclf_iglsum, ppiclf_glmin, ppiclf_glmax, ppiclf_glsum,
      >          ppiclf_iglmax
       LOGICAL   MaxBinsAchieved(3), TwoSmallBins
-#ifdef PERF
-      REAL *8 tstart,tfinal     
-#endif
 !
 
       ix = 1
@@ -556,9 +553,6 @@
       INTEGER*4  i, ii, jj, kk, nrank, ierr, partcheck
       EXTERNAL   ppiclf_iglmax
       INTEGER*4  ppiclf_iglmax
-#ifdef PERF
-      REAL *8 tstart,tfinal     
-#endif
 !
       partcheck = 0
       DO i=1,ppiclf_npart
@@ -604,7 +598,7 @@
       REAL*8    rtemp(rtempLim,PPICLF_LPART)
       INTEGER*4 i, icount, j0
 #ifdef PERF
-      REAL *8 tstart,tfinal     
+      REAL*8    tstart, tfinal
 #endif
 !
       ! copy particle y, rprop, rprop2, rprop3 arrays into rtemp
@@ -646,12 +640,22 @@
       END DO
       
       j0 = 4 ! index of ppiclf_iprop that contains rank to send to
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl
      >             ,ppiclf_npart,PPICLF_LPART ! Setup
      >             ,ppiclf_iprop,PPICLF_LIP   ! Integer Comm
      >             ,partl,0                   ! Logical Comm
      >             ,rtemp,rtempLim            ! Real Comm
      >             ,j0)                       ! Receiver processor index
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
 
       IF(ppiclf_npart .GT. PPICLF_LPART .OR. ppiclf_npart .LT. 0) THEN
         PRINT*,'Increase LPART. Processor:',ppiclf_nid,
@@ -725,7 +729,7 @@
       LOGICAL   partl, ErrorFound
       EXTERNAL  ppiclf_vlmin, ppiclf_vlmax
 #ifdef PERF
-      REAL *8 tstart,tfinal     
+      REAL*8    tstart, tfinal
 #endif
 !
 ! Code Start:
@@ -912,6 +916,10 @@
       nkey(1) = 2
       nkey(2) = 1
 
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
       CALL pfgslib_crystal_tuple_transfer(
      >        ppiclf_cr_hndl,ppiclf_nCells_FV2PICL,PPICLF_LEE !setup
      >        ,ppiclf_cell_map,nii ! Integer Comm
@@ -924,6 +932,12 @@
      >        ,partl,nl                 !Logical to sort
      >        ,ppiclf_picl_grid,nrr      !Real to sort
      >        ,nkey,2)                  !sorting method
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
+
 
       ! Find distance check for interpolation.
       ! This is 1.5*MaxCellLength to ensure that at least
@@ -972,9 +986,6 @@
      >           distSQ(3), distCheckSQ, buffer
       INTEGER*4  ip, idum, iip, jjp, kkp, iig, jjg, kkg, nrank, 
      >           j, k, l, GhostInc(3), ix, iy, iz
-#ifdef PERF
-      REAL *8 tstart,tfinal     
-#endif
 !
       ! Calculate the linear periodicity shift in each dimension
       DO l = 1,3
@@ -1186,18 +1197,30 @@
 !
       INTEGER*4 iprop_proc_index
       LOGICAL   partl  ! Dummy variable       
+
 #ifdef PERF
-      REAL *8 tstart,tfinal     
+      REAL*8    tstart, tfinal
 #endif
+
 !
       iprop_proc_index = 4 ! since ppiclf_iprop(4,np) contains processor
                            ! that should receive ghost particle
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl
      >             ,ppiclf_npart_gp,PPICLF_LPART_GP ! Setup
      >             ,ppiclf_iprop_gp,PPICLF_LIP_GP   ! Integer Comm
      >             ,partl,0                         ! Logical Comm
      >             ,ppiclf_rprop_gp,PPICLF_LRP_GP   ! Real Comm
      >             ,iprop_proc_index)               ! Receiver processor index
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
 
       RETURN
       END

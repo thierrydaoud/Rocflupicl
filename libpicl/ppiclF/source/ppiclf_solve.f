@@ -823,7 +823,7 @@ c----------------------------------------------------------------------
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TWriteSolution = tfinal-tstart
+      PPICLF_TWriteSolution = tfinal - tstart
 #endif
 
       RETURN
@@ -851,43 +851,30 @@ c----------------------------------------------------------------------
 ! Internal:
 !
       LOGICAL iout
+
 #ifdef PERF
-      REAL *8 tstart,tfinal     
-#endif
-!
-#ifdef PERF
-!Reset timers each RK stage
-      PPICLF_Tbinning                = 0.0D0
+      REAL*8    tstart, tfinal
+      REAL*8    tsPeriodic, tfPeriodic
+
+      ! Reset timers at start of each RK stage
+      PPICLF_TCreateBin              = 0.0D0
       PPICLF_TSendParticles          = 0.0D0
       PPICLF_TSendGridOverlap        = 0.0D0               
       PPICLF_TSendFluidFields        = 0.0D0             
       PPICLF_TParticleParticleModels = 0.0D0       
-      PPICLF_TFluidPartilceModels    = 0.0D0     
+      PPICLF_TFluidParticleModels    = 0.0D0     
       PPICLF_TSendGhostParticles     = 0.0D0     
       PPICLF_TMapParticlesCells      = 0.0D0    
       PPICLF_TInterpolation          = 0.0D0    
       PPICLF_TProjection             = 0.0D0     
-      PPICLF_TRemoveParticles        = 0.0D0           
       PPICLF_TWriteSolution          = 0.0D0                  
       PPICLF_TIntegration            = 0.0D0    
       PPICLF_TPeriodicity            = 0.0D0       
       PPICLF_TDataTransfers          = 0.0D0        
       PPICLF_TTotal                  = 0.0D0
+
+      tstart = MPI_WTIME()
 #endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
       ppiclf_cycle  = istep
       ppiclf_iostep = iostep
@@ -909,14 +896,27 @@ c----------------------------------------------------------------------
         CALL ppiclf_exittr('Wrong RK for rocpicl',0.D0,0)
       END IF
 
+#ifdef PERF
+      tsPeriodic = MPI_WTIME()
+#endif
+
       IF(ppiclf_linperiodic(1) .OR. ppiclf_linperiodic(2) .OR.
      >                             ppiclf_linperiodic(3)) THEN
         CALL ppiclf_solve_PeriodicParticleShift
       END IF
 
+#ifdef PERF
+      tfPeriodic = MPI_WTIME()
+      PPICLF_TPeriodicity = tfPeriodic - tsPeriodic
+#endif
 
       CALL ppiclf_solve_PostTimeStep
 
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TTotal = tfinal - tstart
+      CALL ppiclf_io_WritePerformance()
+#endif
       RETURN
       END
 
@@ -948,6 +948,9 @@ c----------------------------------------------------------------------
       REAL *8 tstart,tfinal     
 #endif
 !
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
       icalld = icalld + 1
 
       ! get rk3 coeffs
@@ -959,8 +962,16 @@ c----------------------------------------------------------------------
       iout = .FALSE.
       if (istage .EQ. nstage) iout = .TRUE.
 
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TIntegration = tfinal - tstart
+#endif
       ! evaluate ydot
       CALL ppiclf_solve_SetYdot
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
 
       !Zero out for first stage
       if (istage .EQ. 1) then
@@ -982,11 +993,18 @@ c----------------------------------------------------------------------
       END DO
       
       !Store Current stage RHS for next stage's use
-      DO i= 1,PPICLF_NPART
-        DO j= 1,PPICLF_LRS
-          ppiclf_y1(j,i) =  ppiclf_ydot(j,i)
+      IF(istage .NE. 3) THEN
+        DO i= 1,PPICLF_NPART
+          DO j= 1,PPICLF_LRS
+            ppiclf_y1(j,i) =  ppiclf_ydot(j,i)
+          END DO
         END DO
-      END DO
+      END IF
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TIntegration = PPICLF_TIntegration + (tfinal - tstart)
+#endif
 
       RETURN
       END
@@ -1129,7 +1147,6 @@ c----------------------------------------------------------------------
       END
 
 !----------------------------------------------------------------------
-
       SUBROUTINE ppiclf_solve_SetYdot
 !
       IMPLICIT NONE
@@ -1145,6 +1162,11 @@ c----------------------------------------------------------------------
 ! Assumes cells have already been mapped to particles and ghost
 ! particles are created.
 !
+
+#ifdef PERF
+      tstart = MPI_WTIME()     
+#endif
+
       ! Copies Grid Cell ID for all Rocflu elements that map
       ! to ppiclf domain for GSLIB Transfer.  This copy is from
       ! MapOverlapGrid.
@@ -1160,12 +1182,22 @@ c----------------------------------------------------------------------
       ! cells that map to ppiclf domain.
       CALL ppiclf_solve_InterpTupleTransfer
 
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TSendFluidFields = tfinal - tstart    
+      tstart = MPI_WTIME()
+#endif
+
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
 
       ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
       PPICLF_INT_ICNT = 0
 
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TInterpolation = tfinal - tstart    
+#endif
       CALL ppiclf_user_SetYdot
 
       RETURN
@@ -1253,43 +1285,101 @@ c----------------------------------------------------------------------
 ! Internal: 
 ! 
       INTEGER*4 :: i, j
+
 #ifdef PERF
       REAL *8 tstart,tfinal     
 #endif
 !
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
       ! bin coordinates changed
       CALL ppiclf_comm_CreateBin
 
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TCreateBin = tfinal - tstart
+      tstart = MPI_WTIME()
+#endif
+
       ! ppiclf_particleMoved set in FindParticle
       ! ppiclf_particleMoved .EQ. 0 means all particles
       ! stayed in same bin as previous RK Stage.
       CALL ppiclf_comm_FindParticle
-
       IF(ppiclf_particleMoved .NE. 0 .OR.
      >              ppiclf_binchanged) THEN
         CALL ppiclf_comm_MoveParticle
       END IF
 
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TSendParticles = tfinal - tstart
+      PPICLF_TSendGridOverlap = 0.0D0
+#endif
+
       IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
         CALL ppiclf_comm_MapOverlapGrid
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TSendGridOverlap = tfinal - tstart
+#endif
+
       END IF
 
+#ifdef PERF
+      PPICLF_TSendGhostParticles = 0.0D0
+#endif
+
       IF(PPICLF_PPInteractions) THEN
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
         ! Ghost particles are needed 
         CALL ppiclf_comm_CreateGhost
         CALL ppiclf_comm_MoveGhost
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TSendGhostParticles = tfinal-tstart
+#endif
+
       END IF
+
+#ifdef PERF
+      tstart= MPI_WTIME()
+#endif
 
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
       CALL ppiclf_solve_SBParticleToCellMap
 
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TMapParticlesCells = tfinal - tstart
+      tstart = MPI_WTIME()
+#endif
+
       ! Project particle feedback to fluid solver grid
       CALL ppiclf_solve_ProjectParticleGrid
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TProjection = tfinal - tstart
+#endif
 
       RETURN
       END
@@ -1415,6 +1505,10 @@ c----------------------------------------------------------------------
       nkey(1) = 2
       nkey(2) = 1
 
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl ! Setup
      >      ,ppiclf_nCells_Interp, PPICLF_LEE ! Amount of columns to transfer
      >      ,ppiclf_cell_map_interp, nii      ! Integer communication
@@ -1427,6 +1521,11 @@ c----------------------------------------------------------------------
      >      ,partl,nl                         ! Logical data
      >      ,ppiclf_int_fld,nrr               ! Real data
      >      ,nkey,2)                          ! Sorting order
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
 
       RETURN
       END
@@ -1740,10 +1839,6 @@ c----------------------------------------------------------------------
      >          CellCenter(3,28), w(27),binblength(3),  
      >          Max_CellLen(3),Max_CellLenSQ(3)
       LOGICAL   added, farAway
-#ifdef PERF
-      REAL *8 tstart,tfinal     
-#endif
-
       !***************************************************************
 
       IF(ppiclf_nCells_FV2PICL .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
@@ -1857,9 +1952,6 @@ c----------------------------------------------------------------------
       ! Local Variables
       INTEGER*4 i, j, k, ip, nnearest,cellID 
       REAL*8    wsum, eps, dist, a(27), w(27)  
-#ifdef PERF
-      REAL *8 tstart,tfinal     
-#endif
 
       IF(ppiclf_npart .LT. 1) RETURN
 
@@ -1906,9 +1998,6 @@ c----------------------------------------------------------------------
 ! Internal:
 !
       INTEGER*4 i, icount
-#ifdef PERF
-      REAL *8 tstart,tfinal     
-#endif
 !
       icount = 0
       DO i=1,ppiclf_npart
@@ -1973,9 +2062,11 @@ c----------------------------------------------------------------------
       REAL*8    CellVol, GaussianConst, dist, w(27), wsum,
      >          x_norm, y_norm, z_norm, PI, eps
       LOGICAL   partl 
+
 #ifdef PERF
-      REAL *8 tstart,tfinal     
+      REAL*8    tstart, tfinal
 #endif
+
 ! 
       PI = 4*ATAN(1.0D0)
       GaussianConst = 2.305D0 ! Distribution over 2 cell widths
@@ -2036,6 +2127,11 @@ c----------------------------------------------------------------------
       nrr = PPICLF_LRP_PRO
       nkey(1) = 2
       nkey(2) = 1
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl ! Setup
      >      ,ppiclf_nCells_Proj, PPICLF_LEE ! Amount of columns to transfer
      >      ,ppiclf_cell_map_proj, nii      ! Integer communication
@@ -2048,6 +2144,11 @@ c----------------------------------------------------------------------
      >      ,partl,nl                       ! Logical data
      >      ,ppiclf_pro_fld_picl,nrr        ! Real data
      >      ,nkey,2)                        ! Sorting order
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
 
       ppiclf_pro_fld = 0.0d0
       DO ie=1,ppiclf_nCells_Proj

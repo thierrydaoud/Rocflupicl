@@ -1382,3 +1382,16 @@ c1511 continue
       return
       end
 !-----------------------------------------------------------------------
+      subroutine ppiclf_io_WritePerformance()
+!
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+!
+! Internal:
+!
+
+
+
+      RETURN
+      END
