@@ -1394,9 +1394,9 @@ c1511 continue
      >       TAvg(15), Tmin(15), Tmax(15), TminActive(15),
      >       PAvg(2), CAvg(2)
       INTEGER*4 Particles(2,ppiclf_np), localParticles(2),
-     >          Cells(2,ppiclf_np), localCells(2), ierr, i, j, k
-     >           Pmin(2), Pmax(2), PminActive(2),
-     >           Cmin(2), Cmax(2), CminActive(2)
+     >          Cells(2,ppiclf_np), localCells(2), ierr, i, j, k,
+     >          Pmin(2), Pmax(2), PminActive(2),
+     >          Cmin(2), Cmax(2), CminActive(2),
      >          ActiveCnt
       CHARACTER*35 TimeName(15)
       LOGICAL   ActiveProc(ppiclf_np)
