@@ -1228,12 +1228,15 @@
 
       INCLUDE "PPICLF"
       INCLUDE "mpif.h"
-
-      INTEGER*4 ix, iy, iz, ierr
+ 
+      INTEGER*4 i, ix, iy, iz, ierr, ppiclf_iglsum
+      EXTERNAL  ppiclf_iglsum
 
       REAL*8    BinMinLen(3), xmin, ymin, zmin, xmax, ymax, zmax
      >          ,BinBuffer(3), temp1, temp2, periodicDistCheck
-     >          ,idum, jdum, kdum
+     >          ,idum, jdum, kdum, ppiclf_glmin, ppiclf_glmax 
+      EXTERNAL  ppiclf_glmin, ppiclf_glmax 
+
 
       ix = 1
       iy = 2
@@ -1252,7 +1255,6 @@
         ! of outer fluid cells
         ! Need ppiclf_nndist/2 to ensure BinMinLen is never violated
         BinBuffer(i) = MAX(ppiclf_filter(i)/2,ppiclf_nndist/2)
-        MaxBinsAchieved(i) = .FALSE.
       END DO
 
       xmin =  1D10
@@ -1341,7 +1343,7 @@
       INCLUDE "mpif.h"
 
       INTEGER*4  i, ii, jj, kk, nbin, ierr, partcheck, NumBins
-     >           ,ParticleCount(0:ppiclf_totalBins-1), ierr
+     >           ,ParticleCount(0:ppiclf_totalBins-1)
      >           ,BinToRankMapping(0:ppiclf_totalBins-1)
       EXTERNAL   ppiclf_iglmax
       INTEGER*4  ppiclf_iglmax
