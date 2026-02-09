@@ -113,11 +113,8 @@
       END
 !-----------------------------------------------------------------------
       SUBROUTINE ppiclf_comm_CreateBin
-!
-! This subroutine is called from ppiclf_solve_InitSolve
-!
+
       IMPLICIT NONE
-!
       INCLUDE "PPICLF"
       INCLUDE "mpif.h"
 !
@@ -279,8 +276,6 @@
      >                         ppiclf_binb(2*i-1)
       END DO
 
-!*** Start active bin iteration loop here      
-      ! Update with targetTotBin based on active/inactive
       targetTotBin = ppiclf_np
       ! This sets the number of bin permutations to try to find optimal
       ! balance
@@ -518,10 +513,6 @@
         END IF
       END DO
 
-! CALL ActiveBinCounter
-! End active bin check loop
-! CALL BinToProcessorMap
-      ! *** AVERY
       ! Find this processor's x,y,z bin indicies
       idum = modulo(ppiclf_nid,ppiclf_n_bins(1))
       jdum = modulo(ppiclf_nid/ppiclf_n_bins(1),ppiclf_n_bins(2))
@@ -1225,6 +1216,255 @@
       RETURN
       END
 
+!-----------------------------------------------------------------------
+! The following subroutines are for the new particle-based load balance
+! approach. The goal is to make ppiclf_npart approximately equal per
+! processor.
+!-----------------------------------------------------------------------
+
+      SUBROUTINE ppiclf_comm_CreateBinPartLB
+
+      IMPLICIT NONE
+
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+
+      INTEGER*4 ix, iy, iz, ierr
+
+      REAL*8    BinMinLen(3), xmin, ymin, zmin, xmax, ymax, zmax
+     >          ,BinBuffer(3), temp1, temp2, periodicDistCheck
+     >          ,idum, jdum, kdum
+
+      ix = 1
+      iy = 2
+      iz = 3
+        
+      ! iglsum is integer global sum across MPI ranks.
+      ppiclf_glnpart = ppiclf_iglsum(ppiclf_npart,1)
+
+      ! Bin must be larger than nearest neighbor search distance
+      ! and the ppiclf_filter(1:3).  This makes a buffer around the bin
+      ! domain. Increase if you desire to bin less frequently.
+      ! ppiclf_filter is 2x cell length in each direction
+      DO i = 1,3
+        BinMinLen(i) = MAX(ppiclf_filter(i),ppiclf_nndist)
+        ! Need ppiclf_filter to make sure you have 1 layer
+        ! of outer fluid cells
+        ! Need ppiclf_nndist/2 to ensure BinMinLen is never violated
+        BinBuffer(i) = MAX(ppiclf_filter(i)/2,ppiclf_nndist/2)
+        MaxBinsAchieved(i) = .FALSE.
+      END DO
+
+      xmin =  1D10
+      ymin =  1D10
+      zmin =  1D10
+      xmax = -1D10
+      ymax = -1D10
+      zmax = -1D10
+
+      ! Looping through particles on this processor
+      ! to find bin boundary locations
+      DO i=1,ppiclf_npart
+         ! Finding min/max particle extremes.
+         ! Add buffer so that layers of outer cells 
+         ! are available for interpolation/projection.
+         temp1 = ppiclf_y(ix,i) - BinBuffer(ix)
+         temp2 = ppiclf_y(ix,i) + BinBuffer(ix)
+         IF(temp1 .LT. xmin) xmin = temp1
+         IF(temp2 .GT. xmax) xmax = temp2
+
+         temp1 = ppiclf_y(iy,i) - BinBuffer(iy)
+         temp2 = ppiclf_y(iy,i) + BinBuffer(iy)
+         IF(temp1 .LT. ymin) ymin = temp1
+         IF(temp2 .GT. ymax) ymax = temp2
+
+         temp1 = ppiclf_y(iz,i) - BinBuffer(iz)
+         temp2 = ppiclf_y(iz,i) + BinBuffer(iz)
+         IF(temp1 .LT. zmin) zmin = temp1
+         IF(temp2 .GT. zmax) zmax = temp2
+      END DO
+
+      ! Finds global bin domain boundaries across MPI ranks
+      ppiclf_binb(1) = ppiclf_glmin(xmin,1)
+      ppiclf_binb(2) = ppiclf_glmax(xmax,1)
+      ppiclf_binb(3) = ppiclf_glmin(ymin,1)
+      ppiclf_binb(4) = ppiclf_glmax(ymax,1)
+      ppiclf_binb(5) = ppiclf_glmin(zmin,1)
+      ppiclf_binb(6) = ppiclf_glmax(zmax,1)
+
+      CALL MPI_BARRIER(ppiclf_comm,ierr)
+
+      ! Ensuring ppiclf_binb not greater than 
+      ! cartesian fluid domain extremes.
+      ! If dist within ppiclf_nndist, set ppiclf_binb
+      ! equal to fluid domain for periodic ghost particles.
+      ! Needed to know when to use linear periodic
+      
+      ppiclf_EqualDomain(1) = .FALSE.
+      ppiclf_EqualDomain(2) = .FALSE.
+      ppiclf_EqualDomain(3) = .FALSE.
+
+      DO i = 1,3
+        ! Check bin min domain
+        periodicDistCheck = MAX(ppiclf_nndist,ppiclf_filter(i))
+        IF(ppiclf_binb(i*2-1) - periodicDistCheck .LE. 
+     >                          ppiclf_xdrange(1,i)) THEN
+          ppiclf_binb(i*2-1) = ppiclf_xdrange(1,i)
+          ppiclf_EqualDomain(i) = .TRUE.
+        END IF
+        ! Check bin max domain
+        IF(ppiclf_binb(i*2)+periodicDistCheck .GE. 
+     >                          ppiclf_xdrange(2,i)) THEN
+          ppiclf_binb(i*2) = ppiclf_xdrange(2,i)
+        ELSE
+          ppiclf_EqualDomain(i) = .FALSE.
+        END IF
+      END DO
+
+      ppiclf_totalBins = 1
+      DO i = 1,3
+        ppiclf_n_bins(i) = INT( (ppiclf_binb(2)-ppiclf_binb(1)) /
+     >                          BinMinLen(i) )
+        ppiclf_bins_dx(i) = (ppiclf_binb(2) - ppiclf_binb(1)) / 
+     >                      ppiclf_n_bins(i)
+        ppiclf_totalBins = ppiclf_totalBins*ppiclf_n_bins(i)
+      END DO
+
+      RETURN
+      END
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_comm_FindParticlePartLB
+
+      IMPLICIT NONE
+
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+
+      INTEGER*4  i, ii, jj, kk, nbin, ierr, partcheck, NumBins
+     >           ,ParticleCount(0:ppiclf_totalBins-1), ierr
+     >           ,BinToRankMapping(0:ppiclf_totalBins-1)
+      EXTERNAL   ppiclf_iglmax
+      INTEGER*4  ppiclf_iglmax
+
+      DO i = 0,(ppiclf_totalBins - 1)
+        ParticleCount(i) = 0
+      END DO
+
+      DO i=1,ppiclf_npart
+        ! Calculates particle's bin index
+        ii  = FLOOR((ppiclf_y(1,i)-ppiclf_binb(1))/ppiclf_bins_dx(1))
+        jj  = FLOOR((ppiclf_y(2,i)-ppiclf_binb(3))/ppiclf_bins_dx(2)) 
+        kk  = FLOOR((ppiclf_y(3,i)-ppiclf_binb(5))/ppiclf_bins_dx(3)) 
+        
+        ! Calculates particle's bin
+        nbin = ii + ppiclf_n_bins(1)*jj + 
+     >         ppiclf_n_bins(1)*ppiclf_n_bins(2)*kk
+
+        ! Maps particle to correct processor based on active bin number
+        !ppiclf_iprop(4,i) = nrank ! Processor to send to
+        ppiclf_iprop(5,i) = ii    ! x bin #
+        ppiclf_iprop(6,i) = jj    ! y bin #
+        ppiclf_iprop(7,i) = kk    ! z bin #
+        ppiclf_iprop(8,i) = nbin ! total bin number
+        ParticleCount(nbin) = ParticleCount(nbin) + 1
+      END DO
+
+      CALL ppiclf_comm_partLoadBalance(ParticleCount,BinToRankMapping)
+
+      RETURN
+      END
+!----------------------------------------------------------------------
+      SUBROUTINE ppiclf_comm_partLoadBalance(PC,BTRM)
+   
+      IMPLICIT NONE
+
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+
+      INTEGER*4  PC(0:ppiclf_totalBins-1), ierr, i
+     >           ,BTRM(0:ppiclf_totalBins-1)
+     >           ,targetParticleCnt, particleSum
+     >           ,irank, dL, bin
+     >           ,d2, d3, ii, jj, kk, nb1, nb2, nb3
+     >           ,islice
+      REAL*8     largestDomainDim
+
+      ! Find the dimension to slice along. Using largest dimension
+      ! minimizes surface area between processors, which likely
+      ! minimizes ghost particle and overlap cell communication
+
+      !dL = largest dimension
+      dL = 1
+      largestDomainDim = ppiclf_binb(2) - ppiclf_binb(1)
+      DO i = 2,3
+        IF(ppiclf_binb(2*i)-ppiclf_binb(2*i-1) .GT. 
+     >                                        largestDomainDim) THEN
+          dL = i
+          largestDomainDim = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
+        END IF
+      END DO
+
+      nb1 = ppiclf_n_bins(1)
+      nb2 = ppiclf_n_bins(2)
+      nb3 = ppiclf_n_bins(3)
+
+      ! The following code now determines 
+      ! Now sum particles per bin across MPI Ranks
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, PC, ppiclf_totalBins
+     >                   ,MPI_INTEGER4, MPI_SUM
+     >                   ,ppiclf_comm, ierr)
+      targetParticleCnt = INT(REAL(ppiclf_glnpart)/REAL(ppiclf_np)) + 1
+
+      particleSum   = 0
+      irank = 0
+      ! Iterate through slices of largest dimension.
+      ! Increment slice by one and loop through all other dimensions.
+      DO islice = 0,(ppiclf_n_bins(dL) - 1)
+        IF(dL .EQ. 1) THEN
+          ii = islice
+          DO jj = 0, nb2-1
+            DO kk = 0, nb3-1
+              bin  = ii + nb1*jj + nb1*nb2*kk
+              particleSum = particleSum + PC(bin)
+              ! This maps the bin to the MPI-rank
+              BTRM(bin) = irank 
+            END DO
+          END DO
+        ELSEIF(dL .EQ. 2) THEN
+          jj = islice
+          DO ii = 0, (nb1 - 1)
+            DO kk = 0, (nb3 - 1)
+              bin  = ii + nb1*jj + nb1*nb2*kk
+              particleSum = particleSum + PC(bin)
+              ! This maps the bin to the MPI-rank
+              BTRM(bin) = irank 
+            END DO
+          END DO
+        ELSEIF(dL .EQ. 3) THEN
+          kk = islice
+          DO ii = 0, (nb1 - 1)
+            DO jj = 0, (nb2 - 1)
+              bin  = ii + nb1*jj + nb1*nb2*kk
+              particleSum = particleSum + PC(bin)
+              ! This maps the bin to the MPI-rank
+              BTRM(bin) = irank 
+            END DO
+          END DO
+        ELSE
+          PRINT*, 'ERROR in ppiclf_comm_partLoadBalance'
+          RETURN
+        END IF
+
+        IF(particleSum .GE. targetParticleCnt) THEN
+          ! Can also write MPI-rank domain boundary here
+          particleSum = 0
+          irank = irank + 1
+          irank = MIN(irank,ppiclf_np-1)
+        END IF
+      END DO
+
+      RETURN
+      END
 !----------------------------------------------------------------------
 !      subroutine ppiclf_comm_AngularCreateGhost
 !!
