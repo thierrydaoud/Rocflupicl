@@ -124,6 +124,7 @@ SUBROUTINE BcondFarfieldPerf( machInf,alphaInf,betaInf,pInf,tInf, &
   REAL(RFREAL) :: rgas, gamma, rhoInf, qInf, uInf, vInf, wInf
   REAL(RFREAL) :: re, ue, ve, we, pe, qn, crho0
   REAL(RFREAL) :: ra, ua, va, wa, pa, sgn, csound
+  REAL(RFREAL) :: ksg
 
 !******************************************************************************
 ! gas properties
@@ -171,22 +172,24 @@ SUBROUTINE BcondFarfieldPerf( machInf,alphaInf,betaInf,pInf,tInf, &
       sgn = +1._RFREAL
       pb  = pInf
     ENDIF
+    ksg = 0.0d0 ! no need for imposing Turbulence at far-field boundaries
     rhob  = ra + (pb-pa)/(csound*csound)
     rhoub = rhob*(ua+sgn*sxn*(pa-pb)/crho0)
     rhovb = rhob*(va+sgn*syn*(pa-pb)/crho0)
     rhowb = rhob*(wa+sgn*szn*(pa-pb)/crho0)
     rhoeb = rhob*MixtPerf_Eo_DGPUVW( rhob,gamma,pb,rhoub/rhob,rhovb/rhob, & 
-                                     rhowb/rhob )
+                                     rhowb/rhob,ksg)
 
 ! supersonic flow (qn<0: inflow / qn>0: outflow)
 
   ELSE
     IF (qn < 0._RFREAL) THEN
+      ksg = 0.0d0 ! no need for imposing Turbulence at far-field boundaries
       rhob  = rhoInf
       rhoub = rhoInf*uInf
       rhovb = rhoInf*vInf
       rhowb = rhoInf*wInf
-      rhoeb = rhob*MixtPerf_Eo_DGPVm( rhoInf,gamma,pInf,qInf )
+      rhoeb = rhob*MixtPerf_Eo_DGPVm( rhoInf,gamma,pInf,qInf,ksg )
       pb    = pInf
     ELSE
       rhob  = rho

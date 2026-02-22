@@ -154,13 +154,30 @@ SUBROUTINE RFLU_InitFlowSolver(casename,verbLevel,global,levels)
 !DEC$ NOFREEFORM
 
 ! number of timesteps kept in history kernels
+
+!Change here when viscous unsteady on
+!#define PPICLF_VU 0
+!#define PPICLF_LRP3 6*PPICLF_VU
+
 ! maximum number of triangular patch boundaries
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 64
+! rprop: 48
 
-! map: 10
+! rprop5: 0 - Storing Force Models
+
+! map: 22
+!--- Particle Volume Fraction Feedback
+!--- x,y,z Forces Feedback
+!---Energy Feedback
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+!--- Reynolds Subgrid Stress Tensor
+!--- Pseudo Turbulent Kinetic Energy
+
+
+
+
 
 
 
@@ -285,19 +302,19 @@ SUBROUTINE RFLU_InitFlowSolver(casename,verbLevel,global,levels)
   CALL MPI_Init(errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN 
-    CALL ErrorStop(global,ERR_MPI_OUTPUT,335)
+    CALL ErrorStop(global,ERR_MPI_OUTPUT,334)
   END IF ! global%error
   
   CALL MPI_Comm_size(global%mpiComm,global%nProcAlloc,errorFlag)
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN 
-    CALL ErrorStop(global,ERR_MPI_OUTPUT,341)
+    CALL ErrorStop(global,ERR_MPI_OUTPUT,340)
   END IF ! global%error
     
   CALL MPI_Comm_rank(global%mpiComm,global%myProcid,errorFlag)  
   global%error = errorFlag
   IF ( global%error /= ERR_NONE ) THEN 
-    CALL ErrorStop(global,ERR_MPI_OUTPUT,347)
+    CALL ErrorStop(global,ERR_MPI_OUTPUT,346)
   END IF ! global%error
 
 
@@ -324,7 +341,7 @@ SUBROUTINE RFLU_InitFlowSolver(casename,verbLevel,global,levels)
   IF ( global%myProcid == MASTERPROC ) THEN 
     INQUIRE(FILE="STOP",EXIST=fileExists)
     IF ( fileExists .EQV. .TRUE. ) THEN
-      CALL ErrorStop(global,ERR_STOPFILE_FOUND,387)
+      CALL ErrorStop(global,ERR_STOPFILE_FOUND,386)
     END IF ! fileExists
   END IF ! global%myProcid  
 
@@ -341,7 +358,7 @@ SUBROUTINE RFLU_InitFlowSolver(casename,verbLevel,global,levels)
   END IF ! global
 
   IF ( global%nProcs /= global%nProcAlloc ) THEN 
-    CALL ErrorStop(global,ERR_PROC_MISMATCH,404)
+    CALL ErrorStop(global,ERR_PROC_MISMATCH,403)
   END IF ! global%nProcs
   
   CALL RFLU_BuildDataStruct(global,levels)

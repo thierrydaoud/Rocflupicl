@@ -128,6 +128,7 @@ SUBROUTINE RFLU_CheckPositivity_GL(pRegion)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCv,pCvSpec,pDv,pGv
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -179,6 +180,8 @@ SUBROUTINE RFLU_CheckPositivity_GL(pRegion)
     rhoYg = pCvSpec(1,icg)
     rhoYv = pCvSpec(2,icg)
     rhoYl = rho - rhoYg - rhoYv
+    
+    ksg = pRegion%mixt%piclKsg(icg)
 
     u  = rrho*pCv(CV_MIXT_XMOM,icg)
     v  = rrho*pCv(CV_MIXT_YMOM,icg)
@@ -187,7 +190,7 @@ SUBROUTINE RFLU_CheckPositivity_GL(pRegion)
 
     Vm2 = u*u + v*v + w*w
     Cvm = (rhoYl*cvl + rhoYv*cvv + rhoYg*cvg)/rho
-    t   = MixtPerf_T_CvEoVm2(Cvm,Eo,Vm2)
+    t   = MixtPerf_T_CvEoVm2(Cvm,Eo,Vm2,ksg)
 
     Cl2 = MixtLiq_C2_Bp(Bp) 
     Cv2 = MixtPerf_C2_GRT(1.0_RFREAL,rGas,t)
@@ -247,7 +250,7 @@ SUBROUTINE RFLU_CheckPositivity_GL(pRegion)
                              LOCINFO_MODE_SILENT,OUTPUT_MODE_ANYBODY)
     END IF ! nLocs
     
-    CALL ErrorStop(global,ERR_NEGATIVE_POSDEF,241)   
+    CALL ErrorStop(global,ERR_NEGATIVE_POSDEF,244)   
   END IF ! nLocs
 
 ! ******************************************************************************

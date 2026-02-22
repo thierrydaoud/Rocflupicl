@@ -1,0 +1,174 @@
+! Y, YDot Components
+
+! x position
+@:ADDPROP(x, real, solution, ghost)
+! y position
+@:ADDPROP(y, real, solution, ghost)
+! z position
+@:ADDPROP(z, real, solution, ghost)
+
+! x velocity
+@:ADDPROP(vx, real, solution, ghost)
+! y velocity
+@:ADDPROP(vy, real, solution, ghost)
+! z velocity
+@:ADDPROP(vz, real, solution, ghost)
+
+@:ADDPROP(t, real, solution, ghost)
+
+! angular velocity (?)
+@:ADDPROP(ox, real, solution, ghost)
+@:ADDPROP(oy, real, solution, ghost)
+@:ADDPROP(oz, real, solution, ghost)
+
+@:ADDPROP(metal, real, solution, ghost)
+@:ADDPROP(oxide, real, solution, ghost)
+
+
+
+! rprop: PPICLF_LRP
+! rho p
+@:ADDPROP(JRHOP, real, ghost)
+
+! rho f (rho fluid, interpolated ?)
+@:ADDPROP(JRHOF, real, ghost)
+
+! particle diameter(?)
+@:ADDPROP(JDP, real, ghost)
+
+@:ADDPROP(JVOLP, real, ghost)
+@:ADDPROP(JPHIP, real, ghost)
+@:ADDPROP(JUX, real, ghost)
+@:ADDPROP(JUY, real, ghost)
+@:ADDPROP(JUZ, real, ghost)
+@:ADDPROP(JCS, real, ghost)
+@:ADDPROP(JDPDX, real, ghost)
+@:ADDPROP(JDPDY, real, ghost)
+@:ADDPROP(JDPDZ, real, ghost)
+
+! Du/Dt (?)
+@:ADDPROP(JSDRX, real, ghost)
+@:ADDPROP(JSDRY, real, ghost)
+@:ADDPROP(JSDRZ, real, ghost)
+
+@:ADDPROP(JRHSR, real, ghost)
+@:ADDPROP(JPGCX, real, ghost)
+@:ADDPROP(JPGCY, real, ghost)
+@:ADDPROP(JPGCZ, real, ghost)
+@:ADDPROP(JDPi, real, ghost)
+@:ADDPROP(JDPe, real, ghost)
+@:ADDPROP(JSPL, real, ghost)
+@:ADDPROP(JSPT, real, ghost)
+@:ADDPROP(JT, real, ghost)
+@:ADDPROP(FLUCTFX, real, ghost)
+@:ADDPROP(FLUCTFY, real, ghost)
+@:ADDPROP(FLUCTFZ, real, ghost)
+@:ADDPROP(WDOTX, real, ghost)
+@:ADDPROP(WDOTY, real, ghost)
+@:ADDPROP(WDOTZ, real, ghost)
+
+! gas-phase vorticity (interpolated)
+@:ADDPROP(JXVOR, real, ghost)
+@:ADDPROP(JYVOR, real, ghost)
+@:ADDPROP(JZVOR, real, ghost)
+
+! max particle diameter ?
+@:ADDPROP(JIDP, real, ghost)
+
+! total burn time
+@:ADDPROP(JBRNT, real, ghost)
+
+! pressure (?) (interpolated from fluid?)
+@:ADDPROP(JP, real, ghost)
+
+@:ADDPROP(JRHOGX, real, ghost)
+@:ADDPROP(JRHOGY, real, ghost)
+@:ADDPROP(JRHOGZ, real, ghost)
+@:ADDPROP(JDPVDX, real, ghost)
+@:ADDPROP(JDPVDY, real, ghost)
+@:ADDPROP(JDPVDZ, real, ghost)
+
+! DOmega/Dt (?)
+@:ADDPROP(JSDOX, real, ghost)
+@:ADDPROP(JSDOY, real, ghost)
+@:ADDPROP(JSDOZ, real, ghost)
+
+@:ADDPROP(XIPAR, real, ghost)
+@:ADDPROP(XIPERP, real, ghost)
+@:ADDPROP(XIT, real, ghost)
+
+
+@:ADDPROP(FQSX, real, ghost)
+@:ADDPROP(FQSY, real, ghost)
+@:ADDPROP(FQSZ, real, ghost)
+@:ADDPROP(FAMX, real, ghost)
+@:ADDPROP(FAMY, real, ghost)
+@:ADDPROP(FAMZ, real, ghost)
+@:ADDPROP(FAMBX, real, ghost)
+@:ADDPROP(FAMBY, real, ghost)
+@:ADDPROP(FAMBZ, real, ghost)
+@:ADDPROP(FCX, real, ghost)
+@:ADDPROP(FCY, real, ghost)
+@:ADDPROP(FCZ, real, ghost)
+@:ADDPROP(FVUX, real, ghost)
+@:ADDPROP(FVUY, real, ghost)
+@:ADDPROP(FVUZ, real, ghost)
+@:ADDPROP(QQ, real, ghost)
+@:ADDPROP(FPGX, real, ghost) 
+@:ADDPROP(FPGY, real, ghost) 
+@:ADDPROP(FPGZ, real, ghost) 
+
+
+
+! map: PPICLF_LRP_PRO
+!--- Particle Volume Fraction Feedback
+@:ADDPROP(P_JPHIP, proj)
+!--- x,y,z Forces Feedback
+! x feedback force
+@:ADDPROP(JFX, proj)
+! y feedback force
+@:ADDPROP(JFY, proj)
+! z feedback force
+@:ADDPROP(JFZ, proj)
+!---Energy Feedback
+@:ADDPROP(JE, proj)
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+@:ADDPROP(JPHIPD, proj)
+@:ADDPROP(JPHIPU, proj)
+@:ADDPROP(JPHIPV, proj)
+@:ADDPROP(JPHIPW, proj)
+@:ADDPROP(JPHIPT, proj)
+!--- Reynolds Subgrid Stress Tensor (RSG)
+@:ADDPROP(JRSG11, proj)
+@:ADDPROP(JRSG12, proj)
+@:ADDPROP(JRSG13, proj)
+@:ADDPROP(JRSG21, proj)
+@:ADDPROP(JRSG22, proj)
+@:ADDPROP(JRSG23, proj)
+@:ADDPROP(JRSG31, proj)
+@:ADDPROP(JRSG32, proj)
+@:ADDPROP(JRSG33, proj)
+!--- Pseudo Turbulent Kinetic Energy
+@:ADDPROP(JTSG1, proj)
+@:ADDPROP(JTSG2, proj)
+@:ADDPROP(JTSG3, proj)
+
+
+
+! dummy int props to make the iprop array line up with the old version, 
+! its unclear what each one is being used for. Giving them names as I see them used in code
+@:ADDPROP(dummyint1, int)
+@:ADDPROP(dummyint2, int)
+@:ADDPROP(dummyint3, int)
+@:ADDPROP(dummyint4, int)
+@:ADDPROP(dummyint5, int)
+@:ADDPROP(dummyint6, int)
+@:ADDPROP(dummyint7, int)
+@:ADDPROP(dummyint8, int)
+@:ADDPROP(RemoveParticle, int)
+@:ADDPROP(dummyint10, int)
+@:ADDPROP(dummyint11, int)
+
+
+
+! DONT PUT ANYTHING AFTER THIS LINE

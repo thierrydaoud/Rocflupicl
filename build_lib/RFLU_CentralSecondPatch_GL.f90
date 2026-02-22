@@ -116,6 +116,8 @@ SUBROUTINE RFLU_CentralSecondPatch_GL(pRegion,pPatch)
                            MixtPerf_R_CpG, &
                            RFLU_DecidePrint, &
                            RFLU_PrintLocInfo
+  
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
 
@@ -152,6 +154,7 @@ SUBROUTINE RFLU_CentralSecondPatch_GL(pRegion,pPatch)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: cv,dv,gv,pCvSpec,rhs,vals,sd
   REAL(RFREAL), DIMENSION(:,:,:), POINTER :: grad,pGradSpec 
   TYPE(t_global), POINTER :: global
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -250,6 +253,8 @@ SUBROUTINE RFLU_CentralSecondPatch_GL(pRegion,pPatch)
         vl  = cv(CV_MIXT_YMOM,c1)*irl
         wl  = cv(CV_MIXT_ZMOM,c1)*irl
         tl  = dv(DV_MIXT_TEMP,c1)
+          
+        ksg = pRegion%mixt%piclKsg(c1)
 
         Ygl = pCvSpec(1,c1)*irl
         Yvl = pCvSpec(2,c1)*irl
@@ -372,7 +377,7 @@ SUBROUTINE RFLU_CentralSecondPatch_GL(pRegion,pPatch)
         CALL BcondInflowPerf_GL(bcOptType,ro,po,to,Bp,Bt,cvl,cvv,cvg,Rg,Rv, &
                                 ur,vr,wr,vfgr,vfvr,vflr,temp,press,nx,ny, &  
                                 nz,rl,rul,rvl,rwl,rel,rgpgl,rvpvl,pl,rr, &  
-                                rur,rvr,rwr,rer,rgpgr,rvpvr,pr)
+                                rur,rvr,rwr,rer,rgpgr,rvpvr,pr,ksg)
 
         ql = (rul*nx + rvl*ny + rwl*nz)/rl - fs
         qr = (rur*nx + rvr*ny + rwr*nz)/rr - fs
@@ -472,6 +477,8 @@ SUBROUTINE RFLU_CentralSecondPatch_GL(pRegion,pPatch)
         vl  = cv(CV_MIXT_YMOM,c1)*irl
         wl  = cv(CV_MIXT_ZMOM,c1)*irl
         tl  = dv(DV_MIXT_TEMP,c1)
+        
+        ksg = pRegion%mixt%piclKsg(c1)
 
         Ygl = pCvSpec(1,c1)*irl
         Yvl = pCvSpec(2,c1)*irl
@@ -555,7 +562,7 @@ SUBROUTINE RFLU_CentralSecondPatch_GL(pRegion,pPatch)
         CALL BcondOutflowPerf_GL(bcOptType,ro,po,to,Bp,Bt,cvl,cvv, &
                                  cvg,Rg,Rv,pr,nx,ny,nz,rl,rul,rvl, &
                                  rwl,rel,rgpgl,rvpvl,pl,rr,rur,rvr, &
-                                 rwr,rer,rgpgr,rvpvr)
+                                 rwr,rer,rgpgr,rvpvr,ksg)
 
         ql = (rul*nx + rvl*ny + rwl*nz)/rl - fs
         qr = (rur*nx + rvr*ny + rwr*nz)/rr - fs
@@ -857,7 +864,7 @@ SUBROUTINE RFLU_CentralSecondPatch_GL(pRegion,pPatch)
 ! ==============================================================================
 
     CASE DEFAULT
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,849)
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,856)
   END SELECT ! pPatch%bcType
 
 ! ******************************************************************************

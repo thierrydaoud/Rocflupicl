@@ -1,3 +1,0 @@
-ModRandom.o: \
- ModDataTypes.o \
-

@@ -2758,13 +2758,30 @@ MODULE RFLU_ModReadWriteFlow
 
 
 ! number of timesteps kept in history kernels
+
+!Change here when viscous unsteady on
+!#define PPICLF_VU 0
+!#define PPICLF_LRP3 6*PPICLF_VU
+
 ! maximum number of triangular patch boundaries
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 64
+! rprop: 48
 
-! map: 10
+! rprop5: 0 - Storing Force Models
+
+! map: 22
+!--- Particle Volume Fraction Feedback
+!--- x,y,z Forces Feedback
+!---Energy Feedback
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+!--- Reynolds Subgrid Stress Tensor
+!--- Pseudo Turbulent Kinetic Energy
+
+
+
+
 
 
 
@@ -3539,7 +3556,7 @@ END IF
          IOSTAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
-      CALL ErrorStop(global,ERR_FILE_OPEN,3935,iFileName)
+      CALL ErrorStop(global,ERR_FILE_OPEN,3934,iFileName)
     END IF ! global%error
 
     END IF
@@ -3626,7 +3643,7 @@ END IF
       CLOSE(iFile,IOSTAT=errorFlag)
       global%error = errorFlag
       IF ( global%error /= ERR_NONE ) THEN
-        CALL ErrorStop(global,ERR_FILE_CLOSE,4056,iFileName)
+        CALL ErrorStop(global,ERR_FILE_CLOSE,4055,iFileName)
       END IF ! global%error
     END IF ! masterproc
 
@@ -3728,7 +3745,7 @@ END IF
          CALL RFLU_PICL_WriteFlowBinary(pRegion)
         END IF
       ELSE
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,4178)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,4177)
       END IF ! global%solutFormat
 
 ! ******************************************************************************
@@ -3759,7 +3776,7 @@ END IF
           CALL SPEC_RFLU_WriteEEvBinary(pRegion)
         END IF ! pRegion%specInput%nSpeciesEE
       ELSE
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,4238)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,4237)
       END IF ! global%solutFormat
     END IF ! global%specUsed
 

@@ -161,8 +161,7 @@ SUBROUTINE RFLU_TimeStepping(dTimeSystem,dIterSystem,regions)
 
 #ifdef PICL
 !DEC$ NOFREEFORM
-#include "../libpicl/ppiclF/source/PPICLF_USER.h"
-#include "../libpicl/ppiclF/source/PPICLF_STD.h"
+#include "PPICLF_STD.h"
 !DEC$ FREEFORM
 #endif
 

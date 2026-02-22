@@ -78,46 +78,46 @@
 !
 !******************************************************************************
 
-FUNCTION MixtPerf_Eo_DGPUVW(D,G,P,U,V,W)
+FUNCTION MixtPerf_Eo_DGPUVW(D,G,P,U,V,W,KSG)
 
   USE ModDataTypes
 
   IMPLICIT NONE
   
-  REAL(RFREAL), INTENT(IN) :: D,G,P,U,V,W
+  REAL(RFREAL), INTENT(IN) :: D,G,P,U,V,W,KSG
   REAL(RFREAL) :: MixtPerf_Eo_DGPUVW
    
-  MixtPerf_Eo_DGPUVW = P/(D*(G - 1.0_RFREAL)) + 0.5_RFREAL*(U*U + V*V + W*W)
+  MixtPerf_Eo_DGPUVW = P/(D*(G - 1.0_RFREAL)) + 0.5_RFREAL*(U*U + V*V + W*W) + KSG
 
 END FUNCTION MixtPerf_Eo_DGPUVW
 
 ! -----------------------------------------------------------------------------
 
-FUNCTION MixtPerf_Eo_DGPVm(D,G,P,Vm)
+FUNCTION MixtPerf_Eo_DGPVm(D,G,P,Vm,KSG)
 
   USE ModDataTypes
 
   IMPLICIT NONE
   
-  REAL(RFREAL), INTENT(IN) :: D,G,P,Vm
+  REAL(RFREAL), INTENT(IN) :: D,G,P,Vm,KSG
   REAL(RFREAL) :: MixtPerf_Eo_DGPVm
    
-  MixtPerf_Eo_DGPVm = P/(D*(G - 1.0_RFREAL)) + 0.5_RFREAL*Vm*Vm
+  MixtPerf_Eo_DGPVm = P/(D*(G - 1.0_RFREAL)) + 0.5_RFREAL*Vm*Vm + KSG
 
 END FUNCTION MixtPerf_Eo_DGPVm
 
 ! -----------------------------------------------------------------------------
 
-FUNCTION MixtPerf_Eo_GRTUVW(G,R,T,U,V,W)
+FUNCTION MixtPerf_Eo_GRTUVW(G,R,T,U,V,W,KSG)
 
   USE ModDataTypes
 
   IMPLICIT NONE
   
-  REAL(RFREAL), INTENT(IN) :: G,R,T,U,V,W
+  REAL(RFREAL), INTENT(IN) :: G,R,T,U,V,W,KSG
   REAL(RFREAL) :: MixtPerf_Eo_GRTUVW
    
-  MixtPerf_Eo_GRTUVW = R*T/(G - 1.0_RFREAL) + 0.5_RFREAL*(U*U + V*V + W*W)
+  MixtPerf_Eo_GRTUVW = R*T/(G - 1.0_RFREAL) + 0.5_RFREAL*(U*U + V*V + W*W) + KSG
 
 END FUNCTION MixtPerf_Eo_GRTUVW
 

@@ -1,3 +1,0 @@
-ModTools.o: \
- ModDataTypes.o \
-

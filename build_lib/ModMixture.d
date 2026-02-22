@@ -1,3 +1,0 @@
-ModMixture.o: \
- ModDataTypes.o \
-

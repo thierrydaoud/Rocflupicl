@@ -86,14 +86,15 @@ SUBROUTINE PICL_TEMP_InitSolver( pRegion)
   USE ModMixture, ONLY: t_mixt
 
 !PICL
+  use ppiclf_solve, only: ppiclf_solve_InitParticle, ppiclf_solve_Initialize
+  use ppiclf_m_comm, only: ppiclf_comm_InitOverlapGrid
   USE ModRandom, ONLY: Rand1Uniform,Rand1Normal
   USE RFLU_ModInCellTest
 
   IMPLICIT NONE
 #ifdef PICL
 !DEC$ NOFREEFORM
-#include "../libpicl/ppiclF/source/PPICLF_USER.h"
-#include "../libpicl/ppiclF/source/PPICLF_STD.h"
+#include "PPICLF_STD.h"
 !DEC$ FREEFORM
 #endif
 

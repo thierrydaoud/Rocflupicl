@@ -103,13 +103,30 @@ USE RFLU_ModConvertCv, ONLY: RFLU_ConvertCvCons2Prim, &
 !DEC$ NOFREEFORM
 
 ! number of timesteps kept in history kernels
+
+!Change here when viscous unsteady on
+!#define PPICLF_VU 0
+!#define PPICLF_LRP3 6*PPICLF_VU
+
 ! maximum number of triangular patch boundaries
 
 ! y, y1, ydot, ydotc: 12
 
-! rprop: 64
+! rprop: 48
 
-! map: 10
+! rprop5: 0 - Storing Force Models
+
+! map: 22
+!--- Particle Volume Fraction Feedback
+!--- x,y,z Forces Feedback
+!---Energy Feedback
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+!--- Reynolds Subgrid Stress Tensor
+!--- Pseudo Turbulent Kinetic Energy
+
+
+
+
 
 
 

@@ -1,3 +1,0 @@
-ModPartLag.o: \
- ModDataTypes.o \
-

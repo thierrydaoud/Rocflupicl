@@ -92,6 +92,8 @@ MODULE RFLU_ModRoeFlux
 
   USE RFLU_ModNSCBC
 
+  USE ModMixture, ONLY: t_mixt
+
   IMPLICIT NONE
 
   PRIVATE 
@@ -195,7 +197,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux(pRegion,fluxPart)
             CASE ( DISCR_ORDER_2 )
               CALL RFLU_ROE_ComputeFlux2_TCP(pRegion)   
             CASE DEFAULT
-              CALL ErrorStop(global,ERR_REACHED_DEFAULT,187)
+              CALL ErrorStop(global,ERR_REACHED_DEFAULT,189)
           END SELECT ! pRegion%mixtInput%spaceOrder          
 
 ! ------------------------------------------------------------------------------    
@@ -209,7 +211,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux(pRegion,fluxPart)
             CASE ( DISCR_ORDER_2 )
               CALL RFLU_ROE_ComputeFlux2_GL(pRegion)               
             CASE DEFAULT
-              CALL ErrorStop(global,ERR_REACHED_DEFAULT,201)
+              CALL ErrorStop(global,ERR_REACHED_DEFAULT,203)
           END SELECT ! pRegion%mixtInput%spaceOrder           
 
 ! ------------------------------------------------------------------------------    
@@ -217,7 +219,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux(pRegion,fluxPart)
 ! ------------------------------------------------------------------------------    
 
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,209)             
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,211)             
       END SELECT ! pRegion%mixtInput%gasModel  
 
 ! ==============================================================================
@@ -246,10 +248,10 @@ SUBROUTINE RFLU_ROE_ComputeFlux(pRegion,fluxPart)
                     CASE ( DISCR_ORDER_2 )
                       CALL RFLU_ROE_ComputeFluxC2_TCP(pRegion)              
                     CASE DEFAULT
-                      CALL ErrorStop(global,ERR_REACHED_DEFAULT,238)
+                      CALL ErrorStop(global,ERR_REACHED_DEFAULT,240)
                   END SELECT ! pRegion%mixtInput%spaceOrder          
                 CASE DEFAULT
-                  CALL ErrorStop(global,ERR_REACHED_DEFAULT,241)             
+                  CALL ErrorStop(global,ERR_REACHED_DEFAULT,243)             
               END SELECT ! pRegion%mixtInput%gasModel              
 
 ! --------- Dissipative part of flux -------------------------------------------
@@ -263,16 +265,16 @@ SUBROUTINE RFLU_ROE_ComputeFlux(pRegion,fluxPart)
                     CASE ( DISCR_ORDER_2 )
                       CALL RFLU_ROE_ComputeFluxD2_TCP(pRegion)           
                     CASE DEFAULT
-                      CALL ErrorStop(global,ERR_REACHED_DEFAULT,255)
+                      CALL ErrorStop(global,ERR_REACHED_DEFAULT,257)
                   END SELECT ! pRegion%mixtInput%spaceOrder          
                 CASE DEFAULT
-                  CALL ErrorStop(global,ERR_REACHED_DEFAULT,258)             
+                  CALL ErrorStop(global,ERR_REACHED_DEFAULT,260)             
               END SELECT ! pRegion%mixtInput%gasModel            
 
 ! --------- Default ------------------------------------------------------------
 
             CASE DEFAULT
-              CALL ErrorStop(global,ERR_REACHED_DEFAULT,264) 
+              CALL ErrorStop(global,ERR_REACHED_DEFAULT,266) 
           END SELECT ! fluxPart
 
 ! ------------------------------------------------------------------------------    
@@ -288,10 +290,10 @@ SUBROUTINE RFLU_ROE_ComputeFlux(pRegion,fluxPart)
                 CASE ( DISCR_ORDER_2 )
                   CALL RFLU_ROE_ComputeFlux2_TCP(pRegion)               
                 CASE DEFAULT
-                  CALL ErrorStop(global,ERR_REACHED_DEFAULT,280)
+                  CALL ErrorStop(global,ERR_REACHED_DEFAULT,282)
               END SELECT ! pRegion%mixtInput%spaceOrder          
             CASE DEFAULT
-              CALL ErrorStop(global,ERR_REACHED_DEFAULT,283)             
+              CALL ErrorStop(global,ERR_REACHED_DEFAULT,285)             
           END SELECT ! pRegion%mixtInput%gasModel              
 
 ! ------------------------------------------------------------------------------    
@@ -299,10 +301,10 @@ SUBROUTINE RFLU_ROE_ComputeFlux(pRegion,fluxPart)
 ! ------------------------------------------------------------------------------    
 
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,291)   
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,293)   
       END SELECT ! global%solverType                               
     CASE DEFAULT
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,294) 
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,296) 
   END SELECT ! global%flowType      
 
 ! ******************************************************************************
@@ -549,6 +551,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxC2_TCP(pRegion)
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_patch), POINTER :: pPatch
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -617,6 +620,8 @@ SUBROUTINE RFLU_ROE_ComputeFluxC2_TCP(pRegion)
     vl  = pCv(CV_MIXT_YMOM,c1)*irl
     wl  = pCv(CV_MIXT_ZMOM,c1)*irl
     pl  = pDv(DV_MIXT_PRES,c1)
+    
+    ksg = pRegion%mixt%piclKsg(c1) 
 
     dx  = xc - pGrid%cofg(XCOORD,c1)
     dy  = yc - pGrid%cofg(YCOORD,c1)
@@ -638,7 +643,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxC2_TCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c1)*dy &
             + pGc(ZCOORD,GRC_MIXT_PRES,c1)*dz
 
-    el = MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl)
+    el = MixtPerf_Eo_DGPUVW(rl,g,pl,ul,vl,wl,ksg)
     ql = ul*nx + vl*ny + wl*nz - fs
 
 ! ------------------------------------------------------------------------------
@@ -652,6 +657,8 @@ SUBROUTINE RFLU_ROE_ComputeFluxC2_TCP(pRegion)
     vr  = pCv(CV_MIXT_YMOM,c2)*irr
     wr  = pCv(CV_MIXT_ZMOM,c2)*irr
     pr  = pDv(DV_MIXT_PRES,c2)
+    
+    ksg = pRegion%mixt%piclKsg(c2) 
 
     dx  = xc - pGrid%cofg(XCOORD,c2)
     dy  = yc - pGrid%cofg(YCOORD,c2)
@@ -673,7 +680,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxC2_TCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c2)*dy &
             + pGc(ZCOORD,GRC_MIXT_PRES,c2)*dz
 
-    er = MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr)
+    er = MixtPerf_Eo_DGPUVW(rr,g,pr,ur,vr,wr,ksg)
     qr = ur*nx + vr*ny + wr*nz - fs
 
 ! ==============================================================================
@@ -717,7 +724,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxC2_TCP(pRegion)
         CASE ( 2 ) 
           CALL RFLU_NSCBC_CompSecondPatchFlux(pRegion,pPatch)
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,718)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,725)
       END SELECT ! pPatch%spaceOrder
     ELSE
       SELECT CASE ( pPatch%spaceOrder )
@@ -726,7 +733,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxC2_TCP(pRegion)
         CASE ( 2 ) 
           CALL RFLU_CentralSecondPatch(pRegion,pPatch)
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,727)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,734)
       END SELECT ! pPatch%spaceOrder
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -767,6 +774,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxD1_TCP(pRegion)
   USE ModInterfaces, ONLY: MixtPerf_C_GHoVm2, &
                            MixtPerf_Ho_CpTUVW
 
+  USE ModMixture, ONLY: t_mixt
   IMPLICIT NONE
 
 ! ******************************************************************************
@@ -792,6 +800,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxD1_TCP(pRegion)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCv,pDiss,pDv
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid    
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -862,7 +871,9 @@ SUBROUTINE RFLU_ROE_ComputeFluxD1_TCP(pRegion)
     pl  = pDv(DV_MIXT_PRES,c1)
     tl  = pDv(DV_MIXT_TEMP,c1)
 
-    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl)
+    ksg = pRegion%mixt%piclKsg(c1)
+
+    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl,ksg)
 
 ! ------------------------------------------------------------------------------
 !   Right state
@@ -876,7 +887,9 @@ SUBROUTINE RFLU_ROE_ComputeFluxD1_TCP(pRegion)
     pr  = pDv(DV_MIXT_PRES,c2)
     tr  = pDv(DV_MIXT_TEMP,c2)
 
-    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr)
+    ksg = pRegion%mixt%piclKsg(c2)
+
+    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr,ksg)
 
 ! ==============================================================================
 !   Compute Roe-averaged face variables (h for hat)
@@ -998,6 +1011,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxD2_TCP(pRegion)
                            MixtPerf_Ho_CpTUVW, &
                            MixtPerf_R_CpG, &
                            MixtPerf_T_DPR
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
 
@@ -1025,6 +1039,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxD2_TCP(pRegion)
   REAL(RFREAL), DIMENSION(:,:,:), POINTER :: pGc
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid    
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -1100,6 +1115,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxD2_TCP(pRegion)
     vl  = pCv(CV_MIXT_YMOM,c1)*irl
     wl  = pCv(CV_MIXT_ZMOM,c1)*irl
     pl  = pDv(DV_MIXT_PRES,c1)
+    ksg = pRegion%mixt%piclKsg(c1)
 
     dx  = xc - pGrid%cofg(XCOORD,c1)
     dy  = yc - pGrid%cofg(YCOORD,c1)
@@ -1122,7 +1138,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxD2_TCP(pRegion)
             + pGc(ZCOORD,GRC_MIXT_PRES,c1)*dz
 
     tl = MixtPerf_T_DPR(rl,pl,gc)
-    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl)
+    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl,ksg)
 
 ! ------------------------------------------------------------------------------
 !   Right state
@@ -1134,6 +1150,7 @@ SUBROUTINE RFLU_ROE_ComputeFluxD2_TCP(pRegion)
     vr  = pCv(CV_MIXT_YMOM,c2)*irr
     wr  = pCv(CV_MIXT_ZMOM,c2)*irr
     pr  = pDv(DV_MIXT_PRES,c2)
+    ksg = pRegion%mixt%piclKsg(c2)
 
     dx  = xc - pGrid%cofg(XCOORD,c2)
     dy  = yc - pGrid%cofg(YCOORD,c2)
@@ -1155,8 +1172,9 @@ SUBROUTINE RFLU_ROE_ComputeFluxD2_TCP(pRegion)
             + pGc(YCOORD,GRC_MIXT_PRES,c2)*dy &
             + pGc(ZCOORD,GRC_MIXT_PRES,c2)*dz
 
+
     tr = MixtPerf_T_DPR(rr,pr,gc)
-    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr)
+    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr,ksg)
 
 ! ==============================================================================
 !   Compute Roe-averaged face variables (h for hat)
@@ -1694,7 +1712,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux1_TCP(pRegion)
   USE ModInterfaces, ONLY: MixtPerf_C_GHoVm2, &
                            MixtPerf_Ho_CpTUVW, &
                            RFLU_CentralFirstPatch
-
+  USE ModMixture, ONLY: t_mixt
   IMPLICIT NONE
 
 ! ******************************************************************************
@@ -1722,6 +1740,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux1_TCP(pRegion)
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid    
   TYPE(t_patch), POINTER :: pPatch
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -1794,7 +1813,9 @@ SUBROUTINE RFLU_ROE_ComputeFlux1_TCP(pRegion)
     pl = pDv(DV_MIXT_PRES,c1)
     tl = pDv(DV_MIXT_TEMP,c1)
 
-    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl)
+    ksg = pRegion%mixt%piclKsg(c1)
+
+    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl,ksg)
 
     ql = ul*nx + vl*ny + wl*nz - fs
 
@@ -1811,7 +1832,8 @@ SUBROUTINE RFLU_ROE_ComputeFlux1_TCP(pRegion)
     pr = pDv(DV_MIXT_PRES,c2)
     tr = pDv(DV_MIXT_TEMP,c2)
 
-    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr)
+    ksg = pRegion%mixt%piclKsg(c2)
+    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr,ksg)
 
     qr = ur*nx + vr*ny + wr*nz - fs
 
@@ -2473,7 +2495,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux2_GL(pRegion)
         CASE ( 2 ) 
           CALL RFLU_NSCBC_CompSecondPatchFlux(pRegion,pPatch)
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2495)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2517)
       END SELECT ! pPatch%spaceOrder
     ELSE
       SELECT CASE ( pPatch%spaceOrder )
@@ -2482,7 +2504,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux2_GL(pRegion)
         CASE ( 2 ) 
           CALL RFLU_CentralSecondPatch_GL(pRegion,pPatch)
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2504)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2526)
       END SELECT ! pPatch%spaceOrder
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -2528,7 +2550,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux2_TCP(pRegion)
                            MixtPerf_T_DPR, &
                            RFLU_CentralFirstPatch, & 
                            RFLU_CentralSecondPatch
-
+  USE ModMixture, ONLY: t_mixt
   IMPLICIT NONE
 
 ! ******************************************************************************
@@ -2557,7 +2579,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux2_TCP(pRegion)
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_patch), POINTER :: pPatch
-
+  REAL(RFREAL) :: ksg
 ! ******************************************************************************
 ! Start
 ! ******************************************************************************
@@ -2656,9 +2678,11 @@ SUBROUTINE RFLU_ROE_ComputeFlux2_TCP(pRegion)
 
 ! TEMPORARY: Manoj            
 ! END TEMPORARY: Manoj 
+    
+    ksg = pRegion%mixt%piclKsg(c1)
 
     tl = MixtPerf_T_DPR(rl,pl,gc)
-    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl)
+    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl,ksg)
 
     ql = ul*nx + vl*ny + wl*nz - fs
 
@@ -2699,9 +2723,11 @@ SUBROUTINE RFLU_ROE_ComputeFlux2_TCP(pRegion)
 
 ! TEMPORARY: Manoj            
 ! END TEMPORARY: Manoj 
+    
+    ksg = pRegion%mixt%piclKsg(c2)
 
     tr = MixtPerf_T_DPR(rr,pr,gc)
-    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr)
+    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr,ksg)
 
     qr = ur*nx + vr*ny + wr*nz - fs
 
@@ -2835,7 +2861,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux2_TCP(pRegion)
         CASE ( 2 ) 
           CALL RFLU_NSCBC_CompSecondPatchFlux(pRegion,pPatch)
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2880)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2906)
       END SELECT ! pPatch%spaceOrder
     ELSE
       SELECT CASE ( pPatch%spaceOrder )
@@ -2844,7 +2870,7 @@ SUBROUTINE RFLU_ROE_ComputeFlux2_TCP(pRegion)
         CASE ( 2 ) 
           CALL RFLU_CentralSecondPatch(pRegion,pPatch)
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2889)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,2915)
       END SELECT ! pPatch%spaceOrder
     END IF ! pPatch%bcKind
   END DO ! iPatch
@@ -2904,6 +2930,7 @@ SUBROUTINE RFLU_ROE_FluxFunction(nx,ny,nz,nm,fs,cp,g,rl,ul,vl,wl,pl,tl,rr,ur, &
 
   USE ModInterfaces, ONLY: MixtPerf_C_GHoVm2, &
                            MixtPerf_Ho_CpTUVW
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
 
@@ -2926,13 +2953,16 @@ SUBROUTINE RFLU_ROE_FluxFunction(nx,ny,nz,nm,fs,cp,g,rl,ul,vl,wl,pl,tl,rr,ur, &
   REAL(RFREAL) :: ah,dissFact,dp,dq,dr,du,de,dv1,dv2,dv5,dw,efc,epsentr,Hh, &
                   Hl,Hr,l1,l2,l5,qh,ql,qr,rh,sh,term,t1,t2,t3,t5,uh,vh,wh,wt
   REAL(RFREAL) :: flxConv(5),flxDiss(5)
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start, Compute face state
 ! ******************************************************************************
 
-  Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl)
-  Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr)
+  ! This function is not being used that's why Ksg is just zeroed out 
+  ksg = 0.0d0
+  Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl,ksg)
+  Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr,ksg)
 
   ql = ul*nx + vl*ny + wl*nz - fs
   qr = ur*nx + vr*ny + wr*nz - fs

@@ -1,0 +1,33 @@
+#:mute
+
+#:def ADDPROP(name,*args)
+$:fyppmacros.AddProp(name, *args)
+#:enddef ADDPROP
+
+#:def GENERATESTRUCTS(*args, **kwargs)
+$:fyppmacros.GenStructs()
+#:enddef GENERATESTRUCTS
+
+
+$:fyppmacros.setvar("ndim", NDIM)
+
+#:include 'ppiclf_user_particle.fhpp'
+
+#:endmute
+
+$:fyppmacros.FinalizeParticleStruct()
+
+#:def USEPARTICLE(*args)
+$:fyppmacros.GenPropAccess(*args)
+#:enddef USEPARTICLE
+
+#:def PART_ARRAYLEN(name)
+$:fyppmacros.arrayLens[name]
+#:enddef PART_ARRAYLEN
+
+#:def ARRAYSLICE(*args)
+$:fyppmacros.GenerateArraySlice(*args)
+#:enddef ARRAYSLICE
+
+
+

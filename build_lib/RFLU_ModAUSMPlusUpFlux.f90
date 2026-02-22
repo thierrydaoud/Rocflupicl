@@ -95,6 +95,8 @@ MODULE RFLU_ModAUSMPlusUpFlux
   USE RFLU_ModGridSpeedUtils, ONLY: RFLU_DescaleGridSpeed
   USE RFLU_ModRindStates
 
+  USE ModMixture, ONLY: t_mixt
+
 
 
   IMPLICIT NONE
@@ -180,7 +182,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux(pRegion)
         CASE ( DISCR_ORDER_2 )
           CALL RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)               
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,174)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,176)
       END SELECT ! pRegion%mixtInput%spaceOrder    
 
 ! ==============================================================================
@@ -194,7 +196,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux(pRegion)
         CASE ( DISCR_ORDER_2 )
           CALL RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)               
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,188)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,190)
       END SELECT ! pRegion%mixtInput%spaceOrder
 
 ! ==============================================================================
@@ -210,7 +212,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux(pRegion)
         CASE ( DISCR_ORDER_2 )
           CALL RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)               
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,204)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,206)
       END SELECT ! pRegion%mixtInput%spaceOrder                           
 
 ! ==============================================================================
@@ -224,7 +226,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux(pRegion)
         CASE ( DISCR_ORDER_2 )
           CALL RFLU_AUSMPlusUp_ComputeFlux2_MJWL(pRegion)               
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,218)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,220)
       END SELECT ! pRegion%mixtInput%spaceOrder
 
 ! ==============================================================================
@@ -232,7 +234,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux(pRegion)
 ! ==============================================================================
 
     CASE DEFAULT
-      CALL ErrorStop(global,ERR_REACHED_DEFAULT,226)             
+      CALL ErrorStop(global,ERR_REACHED_DEFAULT,228)             
   END SELECT ! pRegion%mixtInput%gasModel       
 
 ! ******************************************************************************
@@ -1699,15 +1701,15 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MJWL(pRegion)
   END IF
 
   IF ( pRegion%spec%cvState /= CV_MIXT_STATE_CONS ) THEN 
-    CALL ErrorStop(global,ERR_CV_STATE_INVALID,1758)
+    CALL ErrorStop(global,ERR_CV_STATE_INVALID,1760)
   END IF ! pRegion%spec%cvState  
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_JWL ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,1762)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,1764)  
   END IF ! pRegion%mixtInput%gasModel
 
   IF ( (indCp /= 1) .OR. (indMol /= 1) ) THEN 
-    CALL ErrorStop(global,ERR_REACHED_DEFAULT,1766)  
+    CALL ErrorStop(global,ERR_REACHED_DEFAULT,1768)  
   END IF ! indCp
 
 ! Rahul - Gas only simulations
@@ -1897,7 +1899,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MJWL(pRegion)
       write(STDOUT,*) 'face #', ifg
       write(STDOUT,*) 'c1, c2', c1,c2
       write(STDOUT,*) 'phiF',vFracF
-      CALL ErrorStop(global,ERR_INVALID_VALUE,1999,'Invalid volume fraction')
+      CALL ErrorStop(global,ERR_INVALID_VALUE,2001,'Invalid volume fraction')
      END IF
 
 
@@ -1962,7 +1964,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MJWL(pRegion)
       CASE ( 2 )
         CALL RFLU_CentralSecondPatch(pRegion,pPatch)
       CASE DEFAULT
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,2065)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,2067)
     END SELECT ! pPatch%spaceOrder
   END DO ! iPatch
 
@@ -2011,6 +2013,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
                            MixtPerf_T_DPR, & 
                            RFLU_CentralFirstPatch, &
                            RFLU_CentralSecondPatch
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
   
@@ -2045,6 +2048,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
   REAL(RFREAL), DIMENSION(:,:), POINTER :: pCvSpec 
   REAL(RFREAL), DIMENSION(:,:,:), POINTER :: pGcSpec 
   TYPE(t_spec_type), POINTER :: pSpecType
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -2088,15 +2092,15 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
   END IF
 
   IF ( pRegion%spec%cvState /= CV_MIXT_STATE_CONS ) THEN 
-    CALL ErrorStop(global,ERR_CV_STATE_INVALID,2203)
+    CALL ErrorStop(global,ERR_CV_STATE_INVALID,2207)
   END IF ! pRegion%spec%cvState  
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_PSEUDO ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,2207)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,2211)  
   END IF ! pRegion%mixtInput%gasModel
 
   IF ( (indCp /= 1) .OR. (indMol /= 1) ) THEN 
-    CALL ErrorStop(global,ERR_REACHED_DEFAULT,2211)  
+    CALL ErrorStop(global,ERR_REACHED_DEFAULT,2215)  
   END IF ! indCp
 
 ! Rahul - For gas only simulations
@@ -2174,6 +2178,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
     vl = pCv(CV_MIXT_YMOM,c1)*irl
     wl = pCv(CV_MIXT_ZMOM,c1)*irl
     pl = pDv(DV_MIXT_PRES,c1)
+
+    ksg = pRegion%mixt%piclKsg(c1)
         
     rl = rl + pGc(XCOORD,GRC_MIXT_DENS,c1)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c1)*dy &
@@ -2198,7 +2204,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
 
     tl = MixtPerf_T_DPR(rl,pl,gcl)
     al = MixtPerf_C_GRT(gl,gcl,tl)
-    Hl = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl)
+    Hl = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl,ksg)
 
 ! ------------------------------------------------------------------------------
 !   Right state
@@ -2245,6 +2251,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
     wr = pCv(CV_MIXT_ZMOM,c2)*irr
     pr = pDv(DV_MIXT_PRES,c2)
         
+    ksg = pRegion%mixt%piclKsg(c2)
+
     rr = rr + pGc(XCOORD,GRC_MIXT_DENS,c2)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c2)*dy &
             + pGc(ZCOORD,GRC_MIXT_DENS,c2)*dz
@@ -2268,7 +2276,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
 
     tr = MixtPerf_T_DPR(rr,pr,gcr)
     ar = MixtPerf_C_GRT(gr,gcr,tr)
-    Hr = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr)
+    Hr = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr,ksg)
     
 ! ==============================================================================
 !   Compute volume fraction at face 
@@ -2369,7 +2377,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MPSD(pRegion)
       CASE ( 2 ) 
         CALL RFLU_CentralSecondPatch(pRegion,pPatch)
       CASE DEFAULT
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,2523)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,2531)
     END SELECT ! pPatch%spaceOrder
   END DO ! iPatch
 
@@ -2417,6 +2425,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
                            MixtPerf_T_DPR, & 
                            RFLU_CentralFirstPatch, & 
                            RFLU_CentralSecondPatch
+  USE ModMixture, ONLY: t_mixt
 
   IMPLICIT NONE
   
@@ -2454,6 +2463,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
   REAL(RFREAL), DIMENSION(:,:,:), POINTER :: pGcSpec 
   TYPE(t_spec_type), POINTER :: pSpecType
   TYPE(t_spec_input), POINTER :: pSpecInput
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -2500,15 +2510,15 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
   nTol = 1.0E-14_RFREAL
 
   IF ( pRegion%spec%cvState /= CV_MIXT_STATE_CONS ) THEN 
-    CALL ErrorStop(global,ERR_CV_STATE_INVALID,2666)
+    CALL ErrorStop(global,ERR_CV_STATE_INVALID,2676)
   END IF ! pRegion%spec%cvState  
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_MIXT_TCPERF ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,2670)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,2680)  
   END IF ! pRegion%mixtInput%gasModel
 
   IF ( (indCp /= 1) .OR. (indMol /= 1) ) THEN 
-    CALL ErrorStop(global,ERR_REACHED_DEFAULT,2674)  
+    CALL ErrorStop(global,ERR_REACHED_DEFAULT,2684)  
   END IF ! indCp
 
 ! Rahul - For gas only simulations
@@ -2577,6 +2587,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
     vl = pCv(CV_MIXT_YMOM,c1)*irl
     wl = pCv(CV_MIXT_ZMOM,c1)*irl
     pl = pDv(DV_MIXT_PRES,c1)
+
+    ksg = pRegion%mixt%piclKsg(c1)
         
     rl = rl + pGc(XCOORD,GRC_MIXT_DENS,c1)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c1)*dy &
@@ -2601,7 +2613,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
 
     tl = MixtPerf_T_DPR(rl,pl,gcl)
     al = MixtPerf_C_GRT(gl,gcl,tl)
-    Hl = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl)
+    Hl = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl,ksg)
 
 ! DEBUG: Manoj-PBA1D, enthalpy for program burn
     IF ( (global%pbaFlag .EQV. .TRUE.) .AND. &
@@ -2631,7 +2643,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
         ELSE
           al = SQRT((pl/rl)*(1.0_RFREAL+(gProducts-1.0_RFREAL)*YProdl))
           Hl = (pl/rl)*(1.0_RFREAL/((gProducts-1.0_RFREAL)*YProdl)+1.0_RFREAL) &
-               + 0.5_RFREAL*(ul*ul+vl*vl+wl*wl)
+               + 0.5_RFREAL*(ul*ul+vl*vl+wl*wl) + Ksg
         END IF
       END IF ! YExpl
     END IF ! global%pbaFlag 
@@ -2673,6 +2685,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
     vr = pCv(CV_MIXT_YMOM,c2)*irr
     wr = pCv(CV_MIXT_ZMOM,c2)*irr
     pr = pDv(DV_MIXT_PRES,c2)
+
+    ksg = pRegion%mixt%piclKsg(c2)
         
     rr = rr + pGc(XCOORD,GRC_MIXT_DENS,c2)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c2)*dy &
@@ -2697,7 +2711,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
 
     tr = MixtPerf_T_DPR(rr,pr,gcr)
     ar = MixtPerf_C_GRT(gr,gcr,tr)
-    Hr = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr)
+    Hr = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr,ksg)
 
 ! DEBUG: Manoj-PBA1D, enthalpy for program burn
     IF ( (global%pbaFlag .EQV. .TRUE.) .AND. &
@@ -2727,7 +2741,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_MTCP(pRegion)
         ELSE
           ar = SQRT((pr/rr)*(1.0_RFREAL+(gProducts-1.0_RFREAL)*YProdr))
           Hr = (pr/rr)*(1.0_RFREAL/((gProducts-1.0_RFREAL)*YProdr)+1.0_RFREAL) &
-               + 0.5_RFREAL*(ur*ur+vr*vr+wr*wr)
+               + 0.5_RFREAL*(ur*ur+vr*vr+wr*wr) + ksg
         END IF
       END IF ! YExpl
     END IF ! global%pbaFlag 
@@ -2796,6 +2810,8 @@ IF (1==1) THEN
       YExpr  = irr*pRegion%spec%cv(iCvSpecExplosive,c2)
       YProdl = irl*pRegion%spec%cv(iCvSpecProducts,c1)
       YProdr = irr*pRegion%spec%cv(iCvSpecProducts,c2)
+      
+      ksg = pRegion%mixt%piclKsg(c2)
 
 ! ------------------------------------------------------------------------------
 !     Identify the interface between explosive and non-explosive  
@@ -2837,8 +2853,9 @@ IF (1==1) THEN
           vr = 0.0_RFREAL
           wr = 0.0_RFREAL
 
-          Hl  = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl)
-          Hr  = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr)
+          Hl  = MixtPerf_Ho_CpTUVW(cpl,tl,ul,vl,wl,ksg)
+          ksg = pRegion%mixt%piclKsg(c2)
+          Hr  = MixtPerf_Ho_CpTUVW(cpr,tr,ur,vr,wr,ksg)
         END IF ! prodInterfaceType
 
 ! ----- Product is on left side ------------------------------------------------        
@@ -2986,7 +3003,7 @@ END IF ! 1==2
       CASE ( 2 ) 
         CALL RFLU_CentralSecondPatch(pRegion,pPatch)
       CASE DEFAULT
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,3197)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,3214)
     END SELECT ! pPatch%spaceOrder
   END DO ! iPatch
 
@@ -3032,6 +3049,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
                            RFLU_CentralFirstPatch, & 
                            RFLU_CentralSecondPatch
 
+  USE ModMixture, ONLY: t_mixt
   IMPLICIT NONE
   
 ! ******************************************************************************
@@ -3060,6 +3078,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_patch), POINTER :: pPatch
 
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -3070,7 +3089,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
   CALL RegisterFunction(global,'RFLU_AUSMPlusUp_ComputeFlux2_TCP',"../modflu/RFLU_ModAUSMPlusUpFlux.F90")
 
   IF ( pRegion%mixtInput%gasModel /= GAS_MODEL_TCPERF ) THEN
-    CALL ErrorStop(global,ERR_GASMODEL_INVALID,3294)  
+    CALL ErrorStop(global,ERR_GASMODEL_INVALID,3313)  
   END IF ! pRegion%mixtInput%gasModel
 
 
@@ -3155,6 +3174,8 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
     vl  = pCv(CV_MIXT_YMOM,c1)*irl
     wl  = pCv(CV_MIXT_ZMOM,c1)*irl
     pl  = pDv(DV_MIXT_PRES,c1)
+
+    ksg = pRegion%mixt%piclKsg(c1)
     
     rl = rl + pGc(XCOORD,GRC_MIXT_DENS,c1)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c1)*dy &
@@ -3179,7 +3200,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
     tl = MixtPerf_T_DPR(rl,pl,gc)
 
     al = MixtPerf_C_GRT(g,gc,tl)
-    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl)
+    Hl = MixtPerf_Ho_CpTUVW(cp,tl,ul,vl,wl,ksg)
     
 ! ------------------------------------------------------------------------------
 !   Right state
@@ -3201,6 +3222,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
     vr  = pCv(CV_MIXT_YMOM,c2)*irr
     wr  = pCv(CV_MIXT_ZMOM,c2)*irr
     pr  = pDv(DV_MIXT_PRES,c2)
+    ksg = pRegion%mixt%piclKsg(c2)
 
     rr = rr + pGc(XCOORD,GRC_MIXT_DENS,c2)*dx &
             + pGc(YCOORD,GRC_MIXT_DENS,c2)*dy &
@@ -3226,7 +3248,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
     tr = MixtPerf_T_DPR(rr,pr,gc)
 
     ar = MixtPerf_C_GRT(g,gc,tr)
-    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr)
+    Hr = MixtPerf_Ho_CpTUVW(cp,tr,ur,vr,wr,ksg)
     
 ! ==============================================================================
 !   Rahul - 11/10/15
@@ -3313,7 +3335,7 @@ SUBROUTINE RFLU_AUSMPlusUp_ComputeFlux2_TCP(pRegion)
       CASE ( 2 ) 
         CALL RFLU_CentralSecondPatch(pRegion,pPatch)
       CASE DEFAULT
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,3596)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,3618)
     END SELECT ! pPatch%spaceOrder
   END DO ! iPatch
 

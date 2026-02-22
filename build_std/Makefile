@@ -24,7 +24,7 @@ include ../Makefile.$(SYSTEM)
 LIBEXT= $(LIBSYS) $(LIBMPI) $(LIBLAP) $(LIBPET) $(LIBX11)
 
 ifdef PICL
-LIBINT+=${PICLFSRC}/libppiclF.a
+LIBINT+=${PICLFSRC}/../build/libppiclF.a
 endif
 
 

@@ -1,5 +1,5 @@
 module purge
-module load gcc/14.2.0 openmpi/5.0.7
+module load python/3.12 gcc/14.2.0 openmpi/5.0.7
 module list
 cd libpicl
 rm ppiclF/source/ppiclf.f

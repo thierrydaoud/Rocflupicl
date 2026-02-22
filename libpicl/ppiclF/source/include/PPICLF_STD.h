@@ -32,7 +32,7 @@
 #define PPICLF_LIP 11
 #endif
 
-#ifndef PPICLF_LPARET_GP
+#ifndef PPICLF_LPART_GP
 #define PPICLF_LPART_GP 8*PPICLF_LPART
 #endif
 

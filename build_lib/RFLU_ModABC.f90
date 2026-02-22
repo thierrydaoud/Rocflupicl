@@ -85,7 +85,7 @@ MODULE RFLU_ModABC
   USE ModGrid, ONLY: t_grid
   USE ModBndPatch, ONLY: t_patch  
   USE ModDataStruct, ONLY: t_region
-  USE ModMixture, ONLY: t_mixt_input
+  USE ModMixture, ONLY: t_mixt, t_mixt_input
   USE ModError
   USE ModMPI
 
@@ -752,6 +752,7 @@ SUBROUTINE RFLU_ABC_SetRefSoln(pRegion)
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_mixt_input), POINTER :: pMixtInput
+  REAL(RFREAL) :: ksg
 
 ! ******************************************************************************
 ! Start
@@ -839,6 +840,8 @@ SUBROUTINE RFLU_ABC_SetRefSoln(pRegion)
             x = pGrid%cofg(XCOORD,icg)
             y = pGrid%cofg(YCOORD,icg)
 
+            ksg = pRegion%mixt%piclKsg(icg) 
+
             CALL RFLU_ComputeExactFlowProudman(global,x,y,height,dInc,vInj, &
                                                pTot,d,u,v,w,p)
           
@@ -863,7 +866,7 @@ SUBROUTINE RFLU_ABC_SetRefSoln(pRegion)
               pCvRef(CV_MIXT_XMOM,icg) = d*u
               pCvRef(CV_MIXT_YMOM,icg) = d*v
               pCvRef(CV_MIXT_ZMOM,icg) = d*w
-              pCvRef(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCvRef(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! global%solverType
           END DO ! icg 
 
@@ -876,6 +879,7 @@ SUBROUTINE RFLU_ABC_SetRefSoln(pRegion)
             x = pGrid%cofg(XCOORD,icg)
             y = pGrid%cofg(YCOORD,icg)
             z = pGrid%cofg(ZCOORD,icg)
+            ksg = pRegion%mixt%piclKsg(icg) 
 
             CALL RFLU_ComputeExactFlowCulick(global,x,y,z,d,u,v,w,p)
 
@@ -900,7 +904,7 @@ SUBROUTINE RFLU_ABC_SetRefSoln(pRegion)
               pCvRef(CV_MIXT_XMOM,icg) = d*u
               pCvRef(CV_MIXT_YMOM,icg) = d*v
               pCvRef(CV_MIXT_ZMOM,icg) = d*w
-              pCvRef(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w)
+              pCvRef(CV_MIXT_ENER,icg) = d*MixtPerf_Eo_DGPUVW(d,g,p,u,v,w,ksg)
             END IF ! global%solverType
           END DO ! icg          
 
@@ -909,7 +913,7 @@ SUBROUTINE RFLU_ABC_SetRefSoln(pRegion)
 ! ------------------------------------------------------------------------------
           
         CASE DEFAULT
-          CALL ErrorStop(global,ERR_REACHED_DEFAULT,901)
+          CALL ErrorStop(global,ERR_REACHED_DEFAULT,905)
         END SELECT ! global%casename
 
 ! ==============================================================================
@@ -917,7 +921,7 @@ SUBROUTINE RFLU_ABC_SetRefSoln(pRegion)
 ! ==============================================================================  
               
       CASE DEFAULT 
-        CALL ErrorStop(global,ERR_REACHED_DEFAULT,909)
+        CALL ErrorStop(global,ERR_REACHED_DEFAULT,913)
     END SELECT ! pRegion%mixtInput%fluidModel
 
 ! ==============================================================================
@@ -1025,6 +1029,7 @@ SUBROUTINE RFLU_ABC_SourceTerms(region)
   TYPE(t_global), POINTER :: global
   TYPE(t_grid), POINTER :: pGrid
   TYPE(t_region), POINTER :: pRegion
+  REAL(RFREAL) :: ksg
 
 ! *****************************************************************************
 ! Start, set pointers
@@ -1060,6 +1065,7 @@ SUBROUTINE RFLU_ABC_SourceTerms(region)
     vo = pRegion%mixt%cvRef(CV_MIXT_YMOM,distrib*icg)
     wo = pRegion%mixt%cvRef(CV_MIXT_ZMOM,distrib*icg)
     po = pRegion%mixt%cvRef(CV_MIXT_PRES,distrib*icg)
+    ksg = pRegion%mixt%piclKsg(icg) 
 
     mw = pRegion%mixt%gv(GV_MIXT_MOL,indMol*icg)
     cp = pRegion%mixt%gv(GV_MIXT_CP ,indCp *icg)
@@ -1069,7 +1075,7 @@ SUBROUTINE RFLU_ABC_SourceTerms(region)
     rouo = ro*uo
     rovo = ro*vo
     rowo = ro*wo
-    roEo = ro*MixtPerf_Eo_DGPUVW(ro,g,po,uo,vo,wo) 
+    roEo = ro*MixtPerf_Eo_DGPUVW(ro,g,po,uo,vo,wo,ksg) 
 
     vol = pGrid%vol(icg)
 

@@ -22,7 +22,7 @@ include ../Makefile.common
 include ../Makefile.$(SYSTEM)
 
 ifdef PICL
-LIBINT+=${PICLFSRC}/libppiclF.a
+LIBINT+=${PICLFSRC}/../build/libppiclF.a
 endif
 
 ### vpath definitions ##########################################################
