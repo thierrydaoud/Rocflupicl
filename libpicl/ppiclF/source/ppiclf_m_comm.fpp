@@ -4,7 +4,7 @@ module ppiclf_m_comm
     use mpi
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@, @{USEMODVAR(PPICLF_t_ghostParticle, ppiclf_gparts)}@
     ! grid data
     use ppiclf_data, only: ppiclf_ncells_fv2picl, ppiclf_ncells_fv2picl_orig, ppiclf_nfvcells, ppiclf_xdrange, ppiclf_fluid_grid, ppiclf_cell_map, ppiclf_picl_grid, ppiclf_cell_map_Orig
     ! particle options variables
@@ -38,7 +38,7 @@ module ppiclf_m_comm
     public :: ppiclf_comm_LinearPeriodicityGhost
     public :: ppiclf_comm_MoveGhost
 
-    real*8 rprop_transfer(${fyppmacros.CountRealGhostProps()}$, PPICLF_LPART_GP)
+    real*8 rprop_transfer(${fyppmacros.CountReals("PPICLF_t_ghostParticle")}$, PPICLF_LPART_GP)
     integer*4 iprop_transfer(8, PPICLF_LPART_GP)
 
     ! mapping of (local particle index, rank to send to)
@@ -195,18 +195,18 @@ module ppiclf_m_comm
             ! Finding min/max particle extremes.
             ! Add buffer so that layers of outer cells 
             ! are available for interpolation/projection.
-            temp1 = @{USEPARTICLE(i, y, x)}@ - BinBuffer(ix)
-            temp2 = @{USEPARTICLE(i, y, x)}@ + BinBuffer(ix)
+            temp1 = @{USEPARTICLE(ppiclf_parts(i)%y%pos%x)}@ - BinBuffer(ix)
+            temp2 = @{USEPARTICLE(ppiclf_parts(i)%y%pos%x)}@ + BinBuffer(ix)
             IF(temp1 .LT. xmin) xmin = temp1
             IF(temp2 .GT. xmax) xmax = temp2
 
-            temp1 = @{USEPARTICLE(i, y, y)}@ - BinBuffer(iy)
-            temp2 = @{USEPARTICLE(i, y, y)}@ + BinBuffer(iy)
+            temp1 = @{USEPARTICLE(ppiclf_parts(i)%y%pos%y)}@ - BinBuffer(iy)
+            temp2 = @{USEPARTICLE(ppiclf_parts(i)%y%pos%y)}@ + BinBuffer(iy)
             IF(temp1 .LT. ymin) ymin = temp1
             IF(temp2 .GT. ymax) ymax = temp2
 
-            temp1 = @{USEPARTICLE(i, y, z)}@ - BinBuffer(iz)
-            temp2 = @{USEPARTICLE(i, y, z)}@ + BinBuffer(iz)
+            temp1 = @{USEPARTICLE(ppiclf_parts(i)%y%pos%z)}@ - BinBuffer(iz)
+            temp2 = @{USEPARTICLE(ppiclf_parts(i)%y%pos%z)}@ + BinBuffer(iz)
             IF(temp1 .LT. zmin) zmin = temp1
             IF(temp2 .GT. zmax) zmax = temp2
         END DO
@@ -554,21 +554,21 @@ module ppiclf_m_comm
         partcheck = 0
         DO i=1,ppiclf_npart
             ! Calculates particle's bin index
-            ii  = FLOOR((@{USEPARTICLE(i, y, x)}@-ppiclf_binb(1))/ppiclf_bins_dx(1))
-            jj  = FLOOR((@{USEPARTICLE(i, y, y)}@-ppiclf_binb(3))/ppiclf_bins_dx(2)) 
-            kk  = FLOOR((@{USEPARTICLE(i, y, z)}@-ppiclf_binb(5))/ppiclf_bins_dx(3)) 
+            ii  = FLOOR((@{USEPARTICLE(ppiclf_parts(i)%y%pos%x)}@-ppiclf_binb(1))/ppiclf_bins_dx(1))
+            jj  = FLOOR((@{USEPARTICLE(ppiclf_parts(i)%y%pos%y)}@-ppiclf_binb(3))/ppiclf_bins_dx(2)) 
+            kk  = FLOOR((@{USEPARTICLE(ppiclf_parts(i)%y%pos%z)}@-ppiclf_binb(5))/ppiclf_bins_dx(3)) 
         
             ! Calculates particle's bin
             nrank  = ii + ppiclf_n_bins(1)*jj + ppiclf_n_bins(1)*ppiclf_n_bins(2)*kk
-            IF(nrank .NE. ppiclf_parts(i)%iprop(4)) partcheck = 1
+            IF(nrank .NE. @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(4)) partcheck = 1
 
             ! Maps particle to correct processor based on active bin number
             ! ***Use BinToProcMap for active/inactive bin***
-            ppiclf_parts(i)%iprop(4) = nrank ! Processor to send to
-            ppiclf_parts(i)%iprop(5) = ii    ! x bin #
-            ppiclf_parts(i)%iprop(6) = jj    ! y bin #
-            ppiclf_parts(i)%iprop(7) = kk    ! z bin #
-            ppiclf_parts(i)%iprop(8) = nrank ! total bin number
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(4) = nrank ! Processor to send to
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(5) = ii    ! x bin #
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(6) = jj    ! y bin #
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(7) = kk    ! z bin #
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(8) = nrank ! total bin number
         END DO
         ppiclf_particleMoved = ppiclf_iglmax([partcheck],1)
         CALL mpi_barrier(ppiclf_comm,ierr)
@@ -626,11 +626,11 @@ module ppiclf_m_comm
       
         DO i=1, ppiclf_npart
             icount = 1
-#:for structArray, memberArray, n in fyppmacros.Loop_All_RealArrays()
-            CALL ppiclf_copy(rtemp(icount, i), ${structArray}$%${memberArray}$(1), ${n}$)
+#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)")
+            CALL ppiclf_copy(rtemp(icount, i), ${particle}$(1), ${n}$)
             icount = icount + ${n}$
 #:endfor
-            itemp(:,i) = ppiclf_parts(i)%iprop
+            itemp(:,i) = @{USEPARTICLE(ppiclf_parts(i)%iprop)}@
         END DO
         j0 = 4 ! index of ppiclf_iprop that contains rank to send to
         CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl  & 
@@ -676,8 +676,9 @@ module ppiclf_m_comm
             !     icount = icount + PPICLF_LRP5
             ! END IF
             ! CALL ppiclf_copy(ppiclf_feedbk(1,i),rtemp(icount,i), PPICLF_LRP_PRO)
-#:for structArray, memberArray, n in fyppmacros.Loop_All_RealArrays()
-            CALL ppiclf_copy(${structArray}$%${memberArray}$(1), rtemp(icount, i), ${n}$)
+
+#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)")
+            CALL ppiclf_copy(${particle}$(1), rtemp(icount, i), ${n}$)
             icount = icount + ${n}$
 #:endfor
         END DO
@@ -918,22 +919,22 @@ module ppiclf_m_comm
         DO ip=1,ppiclf_npart
             idum = 0
             !             ! Copy particle solution variables
-            ! #:for structArray, memberArray, n in fyppmacros.Loop_All_SlnArrays()
-            !             DO j=1,${n}$
+            ! :for structArray, memberArray, n in fyppmacros.Loop_All_SlnArrays()
+            !             DO j=1,{n}$
             !                 idum = idum + 1
-            !                 ppiclf_cp_map(idum,ip) = ${structArray}$(ip)%${memberArray}$(j)
+            !                 ppiclf_cp_map(idum,ip) = {structArray}$(ip)%{memberArray}$(j)
             !             END DO
-            ! #:endfor
+            ! :endfor
             !             ! Copy particle property variables
-            !             DO j=1,@{PART_ARRAYLEN(real_prop)}@
+            !             DO j=1,{PART_ARRAYLEN(real_prop)}@
             !                 idum = idum + 1
             !                 ppiclf_cp_map(idum,ip) = ppiclf_parts(ip)%rprop(j)
             !             END DO
 
             ! GP Bin Index
-            iip    = ppiclf_parts(ip)%iprop(5)
-            jjp    = ppiclf_parts(ip)%iprop(6)
-            kkp    = ppiclf_parts(ip)%iprop(7)
+            iip    = @{USEPARTICLE(ppiclf_parts(ip)%iprop)}@(5)
+            jjp    = @{USEPARTICLE(ppiclf_parts(ip)%iprop)}@(6)
+            kkp    = @{USEPARTICLE(ppiclf_parts(ip)%iprop)}@(7)
    
             ! Found that buffer was needed in unit testing 
             ! due to round-off errors with periodicity
@@ -942,7 +943,7 @@ module ppiclf_m_comm
 
             DO ix = 1,3
                 distSQ = 0.0D0
-                GhostPos(1) = @{USEPARTICLE(ip, y, x)}@ ! ppiclf_cp_map(1,ip)
+                GhostPos(1) = @{USEPARTICLE(ppiclf_parts(ip)%y%pos%x)}@ ! ppiclf_cp_map(1,ip)
                 IF(ix .LT. 3) THEN
                     CALL ppiclf_comm_GhostDistCheck(ix,GhostPos(1), ppiclf_nndist*buffer,GhostInc(1),1,distSQ(1))
                     IF(GhostInc(1) .EQ. 0) CYCLE
@@ -964,7 +965,7 @@ module ppiclf_m_comm
                 END IF
 
                 DO iy = 1,3
-                    GhostPos(2) = @{USEPARTICLE(ip, y, y)}@ ! ppiclf_cp_map(2,ip)
+                    GhostPos(2) = @{USEPARTICLE(ppiclf_parts(ip)%y%pos%y)}@ ! ppiclf_cp_map(2,ip)
                     IF(iy .LT. 3) THEN
                         CALL ppiclf_comm_GhostDistCheck(iy,GhostPos(2), ppiclf_nndist*buffer,GhostInc(2),2,distSQ(2))
                         IF(GhostInc(2) .EQ. 0.) CYCLE
@@ -989,7 +990,7 @@ module ppiclf_m_comm
                     END IF
 
                     DO iz = 1,3
-                        GhostPos(3) = @{USEPARTICLE(ip, y, z)}@ ! ppiclf_cp_map(3,ip)
+                        GhostPos(3) = @{USEPARTICLE(ppiclf_parts(ip)%y%pos%z)}@ ! ppiclf_cp_map(3,ip)
                         IF(iz .LT. 3) THEN
                             CALL ppiclf_comm_GhostDistCheck(iz,GhostPos(3), ppiclf_nndist*buffer,GhostInc(3),3,distSQ(3))
                             IF(GhostInc(3) .EQ. 0) CYCLE
@@ -1023,9 +1024,9 @@ module ppiclf_m_comm
                         ppiclf_npart_gp = ppiclf_npart_gp + 1
                         PPICLF_GP_MAP(0, ppiclf_npart_gp) = ip ! local particle index
                         ! ! Copy particle ID info
-                        PPICLF_GP_MAP(1,ppiclf_npart_gp) = ppiclf_parts(ip)%iprop(1)
-                        PPICLF_GP_MAP(2,ppiclf_npart_gp) = ppiclf_parts(ip)%iprop(2)
-                        PPICLF_GP_MAP(3,ppiclf_npart_gp) = ppiclf_parts(ip)%iprop(3)
+                        PPICLF_GP_MAP(1,ppiclf_npart_gp) = @{USEPARTICLE(ppiclf_parts(ip)%iprop)}@(1)
+                        PPICLF_GP_MAP(2,ppiclf_npart_gp) = @{USEPARTICLE(ppiclf_parts(ip)%iprop)}@(2)
+                        PPICLF_GP_MAP(3,ppiclf_npart_gp) = @{USEPARTICLE(ppiclf_parts(ip)%iprop)}@(3)
                         PPICLF_GP_MAP(4,ppiclf_npart_gp) = nrank !*** change to processor
                         PPICLF_GP_MAP(5,ppiclf_npart_gp) = iig
                         PPICLF_GP_MAP(6,ppiclf_npart_gp) = jjg
@@ -1112,7 +1113,7 @@ module ppiclf_m_comm
         !
         LOGICAL partl
         integer*4, parameter :: iprop_proc_index = 4
-        integer*4, parameter :: LRP_GP = ${fyppmacros.CountRealGhostProps()}$
+        integer*4, parameter :: LRP_GP = ${fyppmacros.CountReals("PPICLF_t_ghostParticle")}$
         integer*4 i, i_rprop
 
         !
@@ -1120,8 +1121,8 @@ module ppiclf_m_comm
         !
         do i=1, ppiclf_npart_gp
             i_rprop = 1
-#:for structArray, memberArray, firstGhost, lastGhost, n in fyppmacros.Loop_All_Ghost_Real()
-            rprop_transfer(i_rprop:i_rprop + ${n - 1}$, PPICLF_GP_MAP(0,i)) = ${structArray}$(PPICLF_GP_MAP(0,i))%${memberArray}$(${firstGhost}$:${lastGhost}$)
+#:for overlapProp, n in fyppmacros.Loop_All_Real_Overlaps("ppiclf_parts(PPICLF_GP_MAP(0,i))", "PPICLF_t_ghostParticle")   
+            rprop_transfer(i_rprop:i_rprop + ${n - 1}$, PPICLF_GP_MAP(0,i)) = ${overlapProp}$
             i_rprop = i_rprop + ${n}$
 #:endfor
             iprop_transfer(:, i) =  PPICLF_GP_MAP(1:8,i)
@@ -1140,11 +1141,12 @@ module ppiclf_m_comm
         !
         do i=1, ppiclf_npart_gp
             i_rprop = 1
-#:for structArray, memberArray, firstGhost, lastGhost, n in fyppmacros.Loop_All_Ghost_Real()
-            ${structArray}$(0 - i)%${memberArray}$(${firstGhost}$:${lastGhost}$) = rprop_transfer(i_rprop:i_rprop + ${n - 1}$, i)
+#:for overlapProp, n in fyppmacros.Loop_All_Real_Overlaps("ppiclf_gparts(i)", "PPICLF_t_particle")   
+            ${overlapProp}$ = rprop_transfer(i_rprop:i_rprop + ${n - 1}$, i)
             i_rprop = i_rprop + ${n}$
 #:endfor
-            ppiclf_parts(0-i)%iprop(1:8) = iprop_transfer(:, i)
+            ! ppiclf_parts(0-i)%iprop(1:8) = iprop_transfer(:, i)
+            @{USEPARTICLE(ppiclf_gparts(i)%iprop)}@(1:8) = iprop_transfer(:, i)
         end do
 
     END SUBROUTINE ppiclf_comm_MoveGhost

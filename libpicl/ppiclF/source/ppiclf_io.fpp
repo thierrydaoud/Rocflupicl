@@ -4,7 +4,7 @@ module ppiclf_io
     use mpi
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only: ppiclf_ncells_fv2picl, ppiclf_nfvcells
     ! particle options variables
@@ -170,41 +170,45 @@ module ppiclf_io
         ic_lip = 0
         do i=1,npart
             ic_pos = ic_pos + 1
-            @{USEPARTICLE(i, y, x)}@ = rout_pos(ic_pos)
+            @{USEPARTICLE(ppiclf_parts(i)%y%pos%x)}@ = rout_pos(ic_pos)
             ic_pos = ic_pos + 1
-            @{USEPARTICLE(i, y, y)}@ = rout_pos(ic_pos)
+            @{USEPARTICLE(ppiclf_parts(i)%y%pos%y)}@ = rout_pos(ic_pos)
             ic_pos = ic_pos + 1
             if (ppiclf_ndim .eq. 3) then
-                @{USEPARTICLE(i, y, z)}@ = rout_pos(ic_pos)
+                @{USEPARTICLE(ppiclf_parts(i)%y%pos%z)}@ = rout_pos(ic_pos)
             endif
         enddo
         ! this being from 1 to PPICLF_LRS, which seems wrong, because that would mean it was just overwriting the position data that was set in the previous line
-#:for structArray, memberArray, n in fyppmacros.Loop_All_SlnArrays()
+#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)%y")
         do j=1,${n}$
             do i=1,npart
                 ic_sln = ic_sln + 1
-                ${structArray}$%${memberArray}$(j) = rout_sln(ic_sln)
+                ${particle}$(j) = rout_sln(ic_sln)
             enddo
         enddo
 #:endfor
-        do j=1,@{PART_ARRAYLEN(real_prop)}@
+#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)%rprop")
+        do j=1,${n}$
             do i=1,npart
                 ic_lrp = ic_lrp + 1
-                ppiclf_parts(i)%rprop(j) = rout_lrp(ic_lrp)
+                ${particle}$(j) = rout_lrp(ic_lrp)
             enddo
             !*** need to add ppiclf_rprop2 ppiclf_rprop3, rprop4, & prop5
         enddo
+#:endfor
         ! This reads the particle tag infomation.
         do j=1,3
             do i=1,npart
                 ic_lip = ic_lip + 1
-                ppiclf_parts(i)%iprop(j) = int(rout_lip(ic_lip))
+                @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(j) = int(rout_lip(ic_lip))
+                ! ppiclf_parts(i)%iprop(j) = int(rout_lip(ic_lip))
             enddo
         enddo
 
         ppiclf_npart = npart
 
-        dp_max = MAXVAL(@{USEPARTICLE(0:, JDP)}@)
+        dp_max = MAXVAL(@{USEPARTICLE(ppiclf_parts(:)%rprop%dp)}@)
+        ! dp_max = MAXVAL({USEPARTICLE(0:, JDP)}@)
         !dp_max = MAXVAL(ppiclf_rprop(PPICLF_R_JDP,:))
         call ppiclf_printsi('  End ReadParticleVTU$',npt_total)
 
@@ -875,37 +879,39 @@ module ppiclf_io
         do i=1,nxx
 
             ic_pos = ic_pos + 1
-            rout_pos(ic_pos) = sngl(@{USEPARTICLE(i, y, x)}@)
+            rout_pos(ic_pos) = sngl(@{USEPARTICLE(ppiclf_parts(i)%y%pos%x)}@)
             ic_pos = ic_pos + 1
-            rout_pos(ic_pos) = sngl(@{USEPARTICLE(i, y, y)}@)
+            rout_pos(ic_pos) = sngl(@{USEPARTICLE(ppiclf_parts(i)%y%pos%y)}@)
             ic_pos = ic_pos + 1
             if (ppiclf_ndim .eq. 3) then
-                rout_pos(ic_pos) = sngl(@{USEPARTICLE(i, y, z)}@)
+                rout_pos(ic_pos) = sngl(@{USEPARTICLE(ppiclf_parts(i)%y%pos%z)}@)
             else
                 rout_pos(ic_pos) = 0.0
             endif
         enddo
-#:for structArray, memberArray, n in fyppmacros.Loop_All_SlnArrays()
+#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)%y")
         do j=1,${n}$
             do i=1,nxx
                 ic_sln = ic_sln + 1
-                rout_sln(ic_sln) = sngl(${structArray}$(i)%${memberArray}$(j))
+                rout_sln(ic_sln) = sngl(${particle}$(j))
             enddo
         enddo
 #:endfor
-        do j=1,@{PART_ARRAYLEN(real_prop)}@
+#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)%rprop")
+        do j=1,${n}$
             do i=1,nxx
                 ic_lrp = ic_lrp + 1
-                rout_lrp(ic_lrp) = sngl(ppiclf_parts(i)%rprop(j))
+                rout_lrp(ic_lrp) = sngl(${particle}$(j))
             enddo
         enddo
+#:endfor
 
 !TODO: This isn't clear, so im just making it work for now, but it needs to be fixed at some point
         do j=1,3
             do i=1,nxx
                 ! This prints out the particle tag info
                 ic_lip = ic_lip + 1
-                rout_lip(ic_lip) = real(ppiclf_parts(i)%iprop(j))
+                rout_lip(ic_lip) = real(@{USEPARTICLE(ppiclf_parts(i)%iprop)}@(j))
             enddo
         enddo
 

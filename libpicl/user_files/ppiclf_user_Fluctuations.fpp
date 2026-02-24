@@ -34,7 +34,7 @@
 submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -119,9 +119,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
         !    This is now fixed - Comment 4/12/24
         !
         ! Particle velocity fluctuation
-        upflct = @{USEPARTICLE(i, y, VX)}@ - upmean
-        vpflct = @{USEPARTICLE(i, y, VY)}@ - vpmean
-        wpflct = @{USEPARTICLE(i, y, VZ)}@ - wpmean
+        upflct = @{USEPARTICLE(ppiclf_parts(i)%y%Vel%X)}@ - upmean
+        vpflct = @{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@ - vpmean
+        wpflct = @{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@ - wpmean
 
         ! Granular temperature
         ! theta = (upflct*upflct + vpflct*vpflct + wpflct*wpflct)/3.0
@@ -148,9 +148,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
         dW2 = sqrt(fac)*Z2
         dW3 = sqrt(fac)*Z3
 
-        fqs_fluct(1) = (1.0-aSDE*fac)*(@{USEPARTICLE(i, FLUCTFX)}@)+ bSDE*dW1
-        fqs_fluct(2) = (1.0-aSDE*fac)*(@{USEPARTICLE(i, FLUCTFY)}@)+ bSDE*dW2
-        fqs_fluct(3) = (1.0-aSDE*fac)*(@{USEPARTICLE(i, FLUCTFZ)}@)+ bSDE*dW3
+        fqs_fluct(1) = (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%X)}@)+ bSDE*dW1
+        fqs_fluct(2) = (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%Y)}@)+ bSDE*dW2
+        fqs_fluct(3) = (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%Z)}@)+ bSDE*dW3
 
 
         if (ppiclf_debug==2 .and. (iStage==1 .and. ppiclf_nid==0)) then
@@ -164,7 +164,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
                         ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3),     & ! 27
                         ppiclf_binb(1:6),                                       & ! 28-33
                         upmean,vpmean,wpmean,phipmean,                          & ! 34-37
-                        @{ARRAYSLICE(i, (y, vx), (y, vz), 3)}@,                 & ! 38-40
+                        @{USEPARTICLE(ppiclf_parts(i)%y%vel)}@,                 & ! 38-40
                         upflct,vpflct,wpflct,icpmean,                           & ! 41-44
                         fq,Fs,bq,theta,chi,tF_inv,                              & ! 45-50
                         aSDE,bSDE,sigF,                                         & ! 51-53
@@ -275,9 +275,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
         !    as that of the chosen particle - Comment 3/6/24
         !    This is now fixed - Comment 4/12/24
         !
-        upflct = @{USEPARTICLE(i, y, VX)}@ - upmean
-        vpflct = @{USEPARTICLE(i, y, VY)}@ - vpmean
-        wpflct = @{USEPARTICLE(i, y, VZ)}@ - wpmean
+        upflct = @{USEPARTICLE(ppiclf_parts(i)%y%vel%X)}@ - upmean
+        vpflct = @{USEPARTICLE(ppiclf_parts(i)%y%vel%Y)}@ - vpmean
+        wpflct = @{USEPARTICLE(ppiclf_parts(i)%y%vel%Z)}@ - wpmean
 
         ! Granular temperature
         ! theta = (upflct*upflct + vpflct*vpflct + wpflct*wpflct)/3.0
@@ -307,9 +307,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
         if(vmag > 1.d-8) then
             avec = [vx,vy,vz]/vmag
 
-            CD_prime = (@{USEPARTICLE(i, FLUCTFX)}@)*avec(1) +   &
-                       (@{USEPARTICLE(i, FLUCTFY)}@)*avec(2) +   &
-                       (@{USEPARTICLE(i, FLUCTFZ)}@)*avec(3)
+            CD_prime = (@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%X)}@)*avec(1) +   &
+                       (@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%Y)}@)*avec(2) +   &
+                       (@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%Z)}@)*avec(3)
             CD_frac  = CD_prime/sigD
 
         else
@@ -393,9 +393,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
         if(qs_fluct_flag .eq. 0) then
             fqs_fluct = 0.0d0
         else
-            fqs_fluct(1) = (1.0-aSDE*fac)*(@{USEPARTICLE(i, FLUCTFX)}@) + bSDE_CD*dW1*avec(1) + bSDE_CL*dW2*dvec(1)
-            fqs_fluct(2) = (1.0-aSDE*fac)*(@{USEPARTICLE(i, FLUCTFY)}@) + bSDE_CD*dW1*avec(2) + bSDE_CL*dW2*dvec(2)
-            fqs_fluct(3) = (1.0-aSDE*fac)*(@{USEPARTICLE(i, FLUCTFZ)}@) + bSDE_CD*dW1*avec(3) + bSDE_CL*dW2*dvec(3)
+            fqs_fluct(1) = (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%X)}@) + bSDE_CD*dW1*avec(1) + bSDE_CL*dW2*dvec(1)
+            fqs_fluct(2) = (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%Y)}@) + bSDE_CD*dW1*avec(2) + bSDE_CL*dW2*dvec(2)
+            fqs_fluct(3) = (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%Z)}@) + bSDE_CD*dW1*avec(3) + bSDE_CL*dW2*dvec(3)
         endif
 
         if (ppiclf_debug==2 .and. (iStage==1 .and. ppiclf_nid==0)) then
@@ -409,7 +409,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
                     ppiclf_n_bins(1)*ppiclf_n_bins(2)*ppiclf_n_bins(3),     & ! 27
                     ppiclf_binb(1:6),                                       & ! 28-33
                     upmean,vpmean,wpmean,phipmean,                          & ! 34-37
-                    @{ARRAYSLICE(i, (y, vx), (y, vz), 3)}@,                 & ! 38-40
+                    @{USEPARTICLE(ppiclf_parts(i)%y%vel)}@,                 & ! 38-40
                     upflct,vpflct,wpflct,icpmean,                           & ! 41-44
                     fq,Fs,bq,theta,chi,tF_inv,                              & ! 45-50
                     aSDE,bSDE_CD,bSDE_CL,                                   & ! 51-53
@@ -420,7 +420,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
                     fqs_fluct(1:3),                                         & ! 76-78
                     Z1,Z2,dW1,dW2,                                          & ! 79-82
                     ppiclf_np,                                              & ! 83
-                    @{ARRAYSLICE(i, (y, x), (y, z), 3)}@                      ! 84-86
+                    @{USEPARTICLE(ppiclf_parts(i)%y%pos)}@                    ! 84-86
                 endif
             endif
         endif
@@ -571,9 +571,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Fluctuations
             dW3 = sqrt(fac)*Z3
     
             ! Langevin Model implemented for xi_par, xi_perp, xi_T
-            xi_par =    (1.0-aSDE*fac)*(@{USEPARTICLE(i, XIPAR)}@) + bSDE_CD*dW1
-            xi_perp =   (1.0-aSDE*fac)*(@{USEPARTICLE(i, XIPERP)}@) + bSDE_CL*dW2
-            xi_T =      (1.0-aSDE*fac)*(@{USEPARTICLE(i, XIT)}@) + bSDE_CT*dW3
+            xi_par =    (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%XIPAR)}@) + bSDE_CD*dW1
+            xi_perp =   (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%XIPERP)}@) + bSDE_CL*dW2
+            xi_T =      (1.0-aSDE*fac)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%XIT)}@) + bSDE_CT*dW3
 
             ! CD_prime has unit of Force
             ! CD_average has unit of Force

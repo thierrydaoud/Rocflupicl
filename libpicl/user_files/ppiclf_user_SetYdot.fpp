@@ -41,7 +41,7 @@
 submodule (ppiclf_user) ppiclf_user_SetYdot_imp
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@, @{USEMODVAR(PPICLF_t_ghostParticle, ppiclf_gparts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -223,7 +223,7 @@ module procedure ppiclf_user_SetYdot
     ! Reapply axi-sym collision correction
     ! Right now hard coding smallest radius  
     do i=1,ppiclf_npart
-       @{USEPARTICLE(i, JDPe)}@ = (0.00005/(@{USEPARTICLE(i, JSPT)}@)) * (@{USEPARTICLE(i, JDP)}@) 
+       @{USEPARTICLE(ppiclf_parts(i)%rprop%JDPe)}@ = (0.00005/(@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPT)}@)) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@) 
     end do 
     !
     !-----------------------------------------------------------------------
@@ -280,7 +280,7 @@ module procedure ppiclf_user_SetYdot
             rmu = rmu_ref
         elseif (rmu_flag==rmu_suth_param) then
             ! Sutherland law
-            temp    = @{USEPARTICLE(i, JT)}@
+            temp    = @{USEPARTICLE(ppiclf_parts(i)%rprop%JT)}@
             rmu     = rmu_ref*sqrt(temp/tref)*(1.0d0+suth/tref)/(1.0d0+suth/temp)
         else
             call ppiclf_exittr('Unknown viscosity law$', 0.0d0, 0)
@@ -289,19 +289,19 @@ module procedure ppiclf_user_SetYdot
 
 
         ! Useful values
-        rmass  = @{USEPARTICLE(i, JVOLP)}@ * @{USEPARTICLE(i, JRHOP)}@
-        vx     = @{USEPARTICLE(i, JUX)}@ - @{USEPARTICLE(i, y, vx)}@
-        vy     = @{USEPARTICLE(i, JUY)}@ - @{USEPARTICLE(i, y, vy)}@
-        vz     = @{USEPARTICLE(i, JUZ)}@ - @{USEPARTICLE(i, y, vz)}@
+        rmass  = @{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@ * @{USEPARTICLE(ppiclf_parts(i)%rprop%RHOP)}@
+        vx     = @{USEPARTICLE(ppiclf_parts(i)%rprop%U%X)}@ - @{USEPARTICLE(ppiclf_parts(i)%y%vel%x)}@
+        vy     = @{USEPARTICLE(ppiclf_parts(i)%rprop%U%Y)}@ - @{USEPARTICLE(ppiclf_parts(i)%y%vel%y)}@
+        vz     = @{USEPARTICLE(ppiclf_parts(i)%rprop%U%Z)}@ - @{USEPARTICLE(ppiclf_parts(i)%y%vel%z)}@
         vmag   = sqrt(vx*vx + vy*vy + vz*vz)
-        rhof   = @{USEPARTICLE(i, JRHOF)}@  
-        dp     = @{USEPARTICLE(i, JDP)}@
+        rhof   = @{USEPARTICLE(ppiclf_parts(i)%rprop%RHOF)}@  
+        dp     = @{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@
         rep    = vmag*dp*rhof/rmu
-        rphip  = @{USEPARTICLE(i, JPHIP)}@
-        rphif  = 1.0d0-(@{USEPARTICLE(i, JPHIP)}@)
-        asndf  = @{USEPARTICLE(i, JCS)}@
+        rphip  = @{USEPARTICLE(ppiclf_parts(i)%rprop%PHIP)}@
+        rphif  = 1.0d0-(@{USEPARTICLE(ppiclf_parts(i)%rprop%PHIP)}@)
+        asndf  = @{USEPARTICLE(ppiclf_parts(i)%rprop%CS)}@
         rmachp = vmag/asndf
-        rhop   = @{USEPARTICLE(i, JRHOP)}@
+        rhop   = @{USEPARTICLE(ppiclf_parts(i)%rprop%RHOP)}@
 
         ! TLJ - 04/03/2025; Do not calculate forces if vmag = 0
         !       Otherwise the particles might move before the 
@@ -328,13 +328,13 @@ module procedure ppiclf_user_SetYdot
         !   velocity magnitude for plotting purposes - 01/03/2025
 
         ! ***This is bad practice and leads to hard to debug code -Avery***
-        @{USEPARTICLE(i, JSPT)}@ = sqrt((@{USEPARTICLE(i, y, vx)}@)**2 + (@{USEPARTICLE(i, y, vy)}@)**2 + (@{USEPARTICLE(i, y, vz)}@)**2)
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%JSPT)}@ = sqrt((@{USEPARTICLE(ppiclf_parts(i)%y%vel%x)}@)**2 + (@{USEPARTICLE(ppiclf_parts(i)%y%vel%y)}@)**2 + (@{USEPARTICLE(ppiclf_parts(i)%y%vel%z)}@)**2)
 
         rep = max(0.1d0,rep)
 
         ! Redefine volume fractions
         ! Need to make sure phi_p + phi_f = 1
-        rphip = @{USEPARTICLE(i, JPHIP)}@
+        rphip = @{USEPARTICLE(ppiclf_parts(i)%rprop%PHIP)}@
         rphip = min(rphip,0.62d0)
         rphif = 1.0d0-rphip
         !*** AVERY - we should rethink this limit of 62% pVF ***
@@ -407,10 +407,10 @@ module procedure ppiclf_user_SetYdot
                 ! box filter
                 !***AVERY - I think phipmean is using wrong index ***
                 ! Also, none of the below are means...
-                phipmean = @{USEPARTICLE(i, JVOLP)}@
-                upmean   = @{USEPARTICLE(i, y, vx)}@
-                vpmean   = @{USEPARTICLE(i, y, vy)}@
-                wpmean   = @{USEPARTICLE(i, y, vz)}@
+                phipmean = @{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
+                upmean   = @{USEPARTICLE(ppiclf_parts(i)%y%vel%x)}@
+                vpmean   = @{USEPARTICLE(ppiclf_parts(i)%y%vel%y)}@
+                wpmean   = @{USEPARTICLE(ppiclf_parts(i)%y%vel%z)}@
                 u2pmean  = upmean**2
                 v2pmean  = vpmean**2
                 w2pmean  = wpmean**2
@@ -423,13 +423,13 @@ module procedure ppiclf_user_SetYdot
                 gkern = sqrt(rpi*maxFilter**2/ (4.0d0*log(2.0d0)))**(-ppiclf_ndim)
                 !***AVERY - I think phipmean is using wrong index ***
                 ! Also, none of the below are means...
-                phipmean = gkern * @{USEPARTICLE(i, JVOLP)}@
-                upmean   = gkern * (@{USEPARTICLE(i, y, vx)}@) * @{USEPARTICLE(i, JVOLP)}@
-                vpmean   = gkern * (@{USEPARTICLE(i, y, vy)}@) * @{USEPARTICLE(i, JVOLP)}@
-                wpmean   = gkern * (@{USEPARTICLE(i, y, vz)}@) * @{USEPARTICLE(i, JVOLP)}@
-                u2pmean  = gkern * ((@{USEPARTICLE(i, y, vx)}@)**2)* (@{USEPARTICLE(i, JVOLP)}@)
-                v2pmean  = gkern * ((@{USEPARTICLE(i, y, vy)}@)**2)* (@{USEPARTICLE(i, JVOLP)}@)
-                w2pmean  = gkern * ((@{USEPARTICLE(i, y, vz)}@)**2)* (@{USEPARTICLE(i, JVOLP)}@)
+                phipmean = gkern * @{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
+                upmean   = gkern * (@{USEPARTICLE(ppiclf_parts(i)%y%vel%x)}@) * @{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
+                vpmean   = gkern * (@{USEPARTICLE(ppiclf_parts(i)%y%vel%y)}@) * @{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
+                wpmean   = gkern * (@{USEPARTICLE(ppiclf_parts(i)%y%vel%z)}@) * @{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
+                u2pmean  = gkern * ((@{USEPARTICLE(ppiclf_parts(i)%y%vel%x)}@)**2)* (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@)
+                v2pmean  = gkern * ((@{USEPARTICLE(ppiclf_parts(i)%y%vel%y)}@)**2)* (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@)
+                w2pmean  = gkern * ((@{USEPARTICLE(ppiclf_parts(i)%y%vel%z)}@)**2)* (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@)
                 icpmean = 1
                 end if
             end if
@@ -482,14 +482,14 @@ module procedure ppiclf_user_SetYdot
         fqsz = fqsz + fqs_fluct(3)
 
         ! Store quasi-steady fluctuating force
-        @{USEPARTICLE(i, FLUCTFX)}@ = fqs_fluct(1)
-        @{USEPARTICLE(i, FLUCTFY)}@ = fqs_fluct(2)
-        @{USEPARTICLE(i, FLUCTFZ)}@ = fqs_fluct(3)
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%X)}@ = fqs_fluct(1)
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%Y)}@ = fqs_fluct(2)
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%FLUCTF%Z)}@ = fqs_fluct(3)
         
         ! Store normally distributed random variables xi for PseudoTurbulence
-        @{USEPARTICLE(i, XIPAR)}@  = xi_par
-        @{USEPARTICLE(i, XIPERP)}@ = xi_perp
-        @{USEPARTICLE(i, XIT)}@    = xi_T
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%XIPAR)}@  = xi_par
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%XIPERP)}@ = xi_perp
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%XIT)}@    = xi_T
 
 
         !
@@ -523,9 +523,9 @@ module procedure ppiclf_user_SetYdot
             else
                 ! if particle has no neighbors, need to multiply added mass forces
                 ! by volume, as this is taken care of in Binary subroutine
-                famx = famx*@{USEPARTICLE(i, JVOLP)}@
-                famy = famy*@{USEPARTICLE(i, JVOLP)}@
-                famz = famz*@{USEPARTICLE(i, JVOLP)}@
+                famx = famx*@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
+                famy = famy*@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
+                famz = famz*@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
             endif
         endif
 
@@ -536,14 +536,14 @@ module procedure ppiclf_user_SetYdot
         ! Step 5: Force component pressure gradient
         !
         if (pg_flag == 1) then
-            fdpdx = -(@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, JDPDX)}@)
-            fdpdy = -(@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, JDPDY)}@)
-            fdpdz = -(@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, JDPDZ)}@)
+            fdpdx = -(@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%DPDX%X)}@)
+            fdpdy = -(@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%DPDX%Y)}@)
+            fdpdz = -(@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%DPDX%Z)}@)
 
             if (flow_model == 1) then ! Navier-Stokes Flow Model
-                fdpvdx = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, JDPVDX)}@)
-                fdpvdy = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, JDPVDY)}@)
-                fdpvdz = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, JDPVDZ)}@)
+                fdpvdx = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%DPVDX%X)}@)
+                fdpvdy = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%DPVDX%Y)}@)
+                fdpvdz = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%DPVDX%Z)}@)
             endif ! flow_model
 
             fdpdx = fdpdx + fdpvdx
@@ -563,9 +563,9 @@ module procedure ppiclf_user_SetYdot
             ! Sam - STILL NEED TO VALIDATE COLLISION FORCE
             ! Sam - Step 1b already calls nearest neighbor
             
-            fcx  = @{USEPARTICLE(i, ydotc, vx)}@
-            fcy  = @{USEPARTICLE(i, ydotc, vy)}@
-            fcz  = @{USEPARTICLE(i, ydotc, vz)}@
+            fcx  = @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%x)}@
+            fcy  = @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%y)}@
+            fcz  = @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%z)}@
 
         endif ! collisional_flag >= 1
 
@@ -602,9 +602,9 @@ module procedure ppiclf_user_SetYdot
         rmass_omega = rmass*dp*dp/10.0d0
 
         if (collisional_flag >= 2) then
-            taux  = @{USEPARTICLE(i, ydotc, ox)}@
-            tauy  = @{USEPARTICLE(i, ydotc, oy)}@
-            tauz  = @{USEPARTICLE(i, ydotc, oz)}@
+            taux  = @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%x)}@
+            tauy  = @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%y)}@
+            tauz  = @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%z)}@
             call ppiclf_user_Torque_driver(i,iStage,taux,tauy,tauz,taux_hydro,tauy_hydro,tauz_hydro)
         endif ! collisional_flag >= 2
 
@@ -621,18 +621,18 @@ module procedure ppiclf_user_SetYdot
         !
         ! Step 10: Set ydot for all PPICLF_SLN number of equations
         !
-        @{USEPARTICLE(i, ydot, x)}@ = @{USEPARTICLE(i, y, vx)}@
-        @{USEPARTICLE(i, ydot, y)}@ = @{USEPARTICLE(i, y, vy)}@
-        @{USEPARTICLE(i, ydot, z)}@ = @{USEPARTICLE(i, y, vz)}@
-        @{USEPARTICLE(i, ydot, vx)}@ = (fqsx+famx+fdpdx+fvux+liftx+fcx)/(rmass+rmass_add)
-        @{USEPARTICLE(i, ydot, vx)}@ = (fqsy+famy+fdpdy+fvuy+lifty+fcy)/(rmass+rmass_add)
-        @{USEPARTICLE(i, ydot, vz)}@ = (fqsz+famz+fdpdz+fvuz+liftz+fcz)/(rmass+rmass_add)
-        @{USEPARTICLE(i, ydot, t)}@  = qq/rmass_therm
-        @{USEPARTICLE(i, ydot, ox)}@ = taux/rmass_omega
-        @{USEPARTICLE(i, ydot, oy)}@ = tauy/rmass_omega
-        @{USEPARTICLE(i, ydot, oz)}@ = tauz/rmass_omega
-        @{USEPARTICLE(i, ydot, metal)}@  = mdot_me
-        @{USEPARTICLE(i, ydot, oxide)}@  = mdot_ox
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%x)}@ = @{USEPARTICLE(ppiclf_parts(i)%y%vel%x)}@
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%y)}@ = @{USEPARTICLE(ppiclf_parts(i)%y%vel%y)}@
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%z)}@ = @{USEPARTICLE(ppiclf_parts(i)%y%vel%z)}@
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%x)}@ = (fqsx+famx+fdpdx+fvux+liftx+fcx)/(rmass+rmass_add)
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%x)}@ = (fqsy+famy+fdpdy+fvuy+lifty+fcy)/(rmass+rmass_add)
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%z)}@ = (fqsz+famz+fdpdz+fvuz+liftz+fcz)/(rmass+rmass_add)
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%t)}@  = qq/rmass_therm
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%x)}@ = taux/rmass_omega
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%y)}@ = tauy/rmass_omega
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%z)}@ = tauz/rmass_omega
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%metal)}@  = mdot_me
+        @{USEPARTICLE(ppiclf_parts(i)%ydot%oxide)}@  = mdot_ox
 
         !
         ! Update data for viscous unsteady case
@@ -659,69 +659,69 @@ module procedure ppiclf_user_SetYdot
 
 
         IF(feedback_flag==0) THEN
-            @{USEPARTICLE(i, JFX)}@ = 0.0d0 
-            @{USEPARTICLE(i, JFY)}@ = 0.0d0 
-            @{USEPARTICLE(i, JFZ)}@ = 0.0d0 
-            @{USEPARTICLE(i, JE)}@  = 0.0d0
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JFX)}@ = 0.0d0 
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JFY)}@ = 0.0d0 
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JFZ)}@ = 0.0d0 
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JE)}@  = 0.0d0
         END IF
 
         IF(feedback_flag==1) THEN
             ! Momentum equations feedback terms
-            @{USEPARTICLE(i, JFX)}@ = (@{USEPARTICLE(i, JSPL)}@) * ((@{USEPARTICLE(i, ydot, vx)}@)*rmass - fcx)
-            @{USEPARTICLE(i, JFY)}@ = (@{USEPARTICLE(i, JSPL)}@) * ((@{USEPARTICLE(i, ydot, vy)}@)*rmass - fcy)
-            @{USEPARTICLE(i, JFZ)}@ = (@{USEPARTICLE(i, JSPL)}@) * ((@{USEPARTICLE(i, ydot, vz)}@)*rmass - fcz)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JFX)}@ = (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@) * ((@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%x)}@)*rmass - fcx)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JFY)}@ = (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@) * ((@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%y)}@)*rmass - fcy)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JFZ)}@ = (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@) * ((@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%z)}@)*rmass - fcz)
 
             ! Energy equation feedback term
             ! 09/19/2025 - Thierry - Added Lift force
             ! Still need to add Torue \cdot angular velocity
-            @{USEPARTICLE(i, feedback, JE)}@ = (@{USEPARTICLE(i, JSPL)}@)           &
-                * ( (fqsx+fvux+liftx)*(@{USEPARTICLE(i, y, VX)}@)   +               &
-                    (fqsy+fvuy+lifty)*(@{USEPARTICLE(i, y, VY)}@)   +               &
-                    (fqsz+fvuz+liftz)*(@{USEPARTICLE(i, y, VZ)}@)   +               &
-                    famx*(@{USEPARTICLE(i, JUX)}@)                  +               &
-                    famy*(@{USEPARTICLE(i, JUY)}@)                  +               &
-                    famz*(@{USEPARTICLE(i, JUZ)}@)                  +               &
-                    taux_hydro*(@{USEPARTICLE(i, y, OX)}@)          +               &
-                    tauy_hydro*(@{USEPARTICLE(i, y, OY)}@)          +               &
-                    tauz_hydro*(@{USEPARTICLE(i, y, OZ)}@)          +               &
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JE)}@ = (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)           &
+                * ( (fqsx+fvux+liftx)*(@{USEPARTICLE(ppiclf_parts(i)%y%vel%X)}@)    +               &
+                    (fqsy+fvuy+lifty)*(@{USEPARTICLE(ppiclf_parts(i)%y%vel%Y)}@)    +               &
+                    (fqsz+fvuz+liftz)*(@{USEPARTICLE(ppiclf_parts(i)%y%vel%Z)}@)    +               &
+                    famx*(@{USEPARTICLE(ppiclf_parts(i)%rprop%U%X)}@)               +               &
+                    famy*(@{USEPARTICLE(ppiclf_parts(i)%rprop%U%Y)}@)               +               &
+                    famz*(@{USEPARTICLE(ppiclf_parts(i)%rprop%U%Z)}@)               +               &
+                    taux_hydro*(@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%X)}@)       +               &
+                    tauy_hydro*(@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Y)}@)       +               &
+                    tauz_hydro*(@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Z)}@)       +               &
                     qq )
 
             IF(pseudoTurb_flag==1) THEN
                 ! 09/02/2025 -  Addition of PTKE to Rocflu's Energy Equation
-                @{USEPARTICLE(i, feedback, JE)}@ = (@{USEPARTICLE(i, JSPL)}@)       &
-                    * (                                                             &
-                    (fqsx+fvux+famx+liftx) * (@{USEPARTICLE(i, y, VX)}@)    +       &
-                    (fqsy+fvuy+famy+lifty) * (@{USEPARTICLE(i, y, VY)}@)    +       &
-                    (fqsz+fvuz+famz+liftz) * (@{USEPARTICLE(i, y, VZ)}@)    +       &
+                @{USEPARTICLE(ppiclf_parts(i)%feedback%JE)}@ = (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)       &
+                    * (                                                                             &
+                    (fqsx+fvux+famx+liftx) * (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%X)}@)     +       &
+                    (fqsy+fvuy+famy+lifty) * (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@)     +       &
+                    (fqsz+fvuz+famz+liftz) * (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@)     +       &
                     qq )
             ELSE
                 Rsg   = 0.0D0
                 T_par = 0.0D0
             END IF ! pseudoTurb_flag
             ! 07/21/2025 - Thierry - Added Reynolds Subgrid Stress Feedback
-            @{USEPARTICLE(i, JRSG11)}@ = Rsg(1,1) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JRSG12)}@ = Rsg(1,2) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JRSG13)}@ = Rsg(1,3) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JRSG21)}@ = Rsg(2,1) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JRSG22)}@ = Rsg(2,2) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JRSG23)}@ = Rsg(2,3) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JRSG31)}@ = Rsg(3,1) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JRSG32)}@ = Rsg(3,2) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JRSG33)}@ = Rsg(3,3) * (@{USEPARTICLE(i, JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG11)}@ = Rsg(1,1) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG12)}@ = Rsg(1,2) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG13)}@ = Rsg(1,3) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG21)}@ = Rsg(2,1) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG22)}@ = Rsg(2,2) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG23)}@ = Rsg(2,3) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG31)}@ = Rsg(3,1) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG32)}@ = Rsg(3,2) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JRSG33)}@ = Rsg(3,3) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
 
-            @{USEPARTICLE(i, JTSG1)}@ = T_par(1) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JTSG2)}@ = T_par(2) * (@{USEPARTICLE(i, JSPL)}@)
-            @{USEPARTICLE(i, JTSG3)}@ = T_par(3) * (@{USEPARTICLE(i, JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JTSG1)}@ = T_par(1) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JTSG2)}@ = T_par(2) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%feedback%JTSG3)}@ = T_par(3) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
 
         END IF ! Feedback flag
 
         ! Update volume fraction feedback quantities with feedback on or off
-        @{USEPARTICLE(i, P_JPHIP)}@  = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, JSPL)}@)
-        @{USEPARTICLE(i, JPHIPD)}@   = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, JRHOP)}@)
-        @{USEPARTICLE(i, JPHIPU)}@   = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, y, VX)}@)
-        @{USEPARTICLE(i, JPHIPV)}@   = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, y, VY)}@)
-        @{USEPARTICLE(i, JPHIPW)}@   = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, y, VZ)}@)
-        @{USEPARTICLE(i, JPHIPT)}@   = (@{USEPARTICLE(i, JVOLP)}@) * (@{USEPARTICLE(i, y, T)}@)
+        @{USEPARTICLE(ppiclf_parts(i)%feedback%P_JPHIP)}@  = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%JSPL)}@)
+        @{USEPARTICLE(ppiclf_parts(i)%feedback%JPHIPD)}@   = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOP)}@)
+        @{USEPARTICLE(ppiclf_parts(i)%feedback%JPHIPU)}@   = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%X)}@)
+        @{USEPARTICLE(ppiclf_parts(i)%feedback%JPHIPV)}@   = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@)
+        @{USEPARTICLE(ppiclf_parts(i)%feedback%JPHIPW)}@   = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@)
+        @{USEPARTICLE(ppiclf_parts(i)%feedback%JPHIPT)}@   = (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%y%T)}@)
 
 
         ! Step 12: If stationary, don't move particles. Feedback can still be on
@@ -729,31 +729,31 @@ module procedure ppiclf_user_SetYdot
         !
         if (stationary .gt. 0) then
             if (stationary==1) then
-                @{USEPARTICLE(i, ydot, X)}@   = 0.0d0
-                @{USEPARTICLE(i, ydot, Y)}@   = 0.0d0
-                @{USEPARTICLE(i, ydot, Z)}@   = 0.0d0
-                @{USEPARTICLE(i, ydot, VX)}@  = 0.0d0
-                @{USEPARTICLE(i, ydot, VY)}@  = 0.0d0
-                @{USEPARTICLE(i, ydot, VZ)}@  = 0.0d0
-                @{USEPARTICLE(i, ydot, T)}@   = 0.0d0
-                @{USEPARTICLE(i, ydot, OX)}@  = 0.0d0
-                @{USEPARTICLE(i, ydot, OY)}@  = 0.0d0
-                @{USEPARTICLE(i, ydot, OZ)}@  = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%X)}@   = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%Y)}@   = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%Z)}@   = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%X)}@  = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Y)}@  = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Z)}@  = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%T)}@   = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%X)}@  = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%Y)}@  = 0.0d0
+                @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%Z)}@  = 0.0d0
             else
                 call ppiclf_exittr('Unknown stationary flag$', 0.0d0, 0)
             endif
         elseif(stationary .lt. 0) then
             call ppiclf_user_unit_tests(i,iStage,famx,famy,famz)
-            @{USEPARTICLE(i, ydot, X)}@     = @{USEPARTICLE(i, y, VX)}@
-            @{USEPARTICLE(i, ydot, Y)}@     = @{USEPARTICLE(i, y, VY)}@
-            @{USEPARTICLE(i, ydot, Z)}@     = @{USEPARTICLE(i, y, VZ)}@
-            @{USEPARTICLE(i, ydot, VX)}@    = (@{USEPARTICLE(i, ydot, VX)}@)+famx
-            @{USEPARTICLE(i, ydot, VY)}@    = (@{USEPARTICLE(i, ydot, VY)}@)+famy
-            @{USEPARTICLE(i, ydot, VZ)}@    = (@{USEPARTICLE(i, ydot, VZ)}@)+famz
-            @{USEPARTICLE(i, ydot, T)}@     = 0.0d0
-            @{USEPARTICLE(i, ydot, OX)}@    = 0.0d0
-            @{USEPARTICLE(i, ydot, OY)}@    = 0.0d0
-            @{USEPARTICLE(i, ydot, OZ)}@    = 0.0d0
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%X)}@     = @{USEPARTICLE(ppiclf_parts(i)%y%vel%X)}@
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%Y)}@     = @{USEPARTICLE(ppiclf_parts(i)%y%vel%Y)}@
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%pos%Z)}@     = @{USEPARTICLE(ppiclf_parts(i)%y%vel%Z)}@
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%X)}@     = (@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%X)}@)+famx
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Y)}@     = (@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Y)}@)+famy
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Z)}@     = (@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Z)}@)+famz
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%T)}@         = 0.0d0
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%X)}@ = 0.0d0
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%Y)}@ = 0.0d0
+            @{USEPARTICLE(ppiclf_parts(i)%ydot%ang_vel%Z)}@ = 0.0d0
         endif
 
 
@@ -762,27 +762,27 @@ module procedure ppiclf_user_SetYdot
         ! Step 13: Store forces
 
         ! TODO: update this conditional
-        IF(PPICLF_LRP5 .EQ. 19) THEN
-            @{USEPARTICLE(i, rprop, FQSX)}@  = fqsx
-            @{USEPARTICLE(i, rprop, FQSY)}@  = fqsy
-            @{USEPARTICLE(i, rprop, FQSZ)}@  = fqsz
-            @{USEPARTICLE(i, rprop, FAMX)}@  = famx - rmass_add * (@{USEPARTICLE(i, ydot, VX)}@)
-            @{USEPARTICLE(i, rprop, FAMY)}@  = famy - rmass_add * (@{USEPARTICLE(i, ydot, VY)}@)
-            @{USEPARTICLE(i, rprop, FAMZ)}@  = famz - rmass_add * (@{USEPARTICLE(i, ydot, VZ)}@)
-            @{USEPARTICLE(i, rprop, FAMBX)}@ = FamBinary(1)
-            @{USEPARTICLE(i, rprop, FAMBY)}@ = FamBinary(2)
-            @{USEPARTICLE(i, rprop, FAMBZ)}@ = FamBinary(3)
-            @{USEPARTICLE(i, rprop, FCX)}@   = fcx
-            @{USEPARTICLE(i, rprop, FCY)}@   = fcy
-            @{USEPARTICLE(i, rprop, FCZ)}@   = fcz
-            @{USEPARTICLE(i, rprop, FVUX)}@  = fvux
-            @{USEPARTICLE(i, rprop, FVUY)}@  = fvuy
-            @{USEPARTICLE(i, rprop, FVUZ)}@  = fvuz
-            @{USEPARTICLE(i, rprop, QQ)}@    = qq
-            @{USEPARTICLE(i, rprop, FPGX)}@  = fdpdx
-            @{USEPARTICLE(i, rprop, FPGY)}@  = fdpdy
-            @{USEPARTICLE(i, rprop, FPGZ)}@  = fdpdz
-        END IF
+        ! IF(PPICLF_LRP5 .EQ. 19) THEN
+        !     {USEPARTICLE(i, rprop, FQSX)}@  = fqsx
+        !     {USEPARTICLE(i, rprop, FQSY)}@  = fqsy
+        !     {USEPARTICLE(i, rprop, FQSZ)}@  = fqsz
+        !     {USEPARTICLE(i, rprop, FAMX)}@  = famx - rmass_add * ({USEPARTICLE(i, ydot, VX)}@)
+        !     {USEPARTICLE(i, rprop, FAMY)}@  = famy - rmass_add * ({USEPARTICLE(i, ydot, VY)}@)
+        !     {USEPARTICLE(i, rprop, FAMZ)}@  = famz - rmass_add * ({USEPARTICLE(i, ydot, VZ)}@)
+        !     {USEPARTICLE(i, rprop, FAMBX)}@ = FamBinary(1)
+        !     {USEPARTICLE(i, rprop, FAMBY)}@ = FamBinary(2)
+        !     {USEPARTICLE(i, rprop, FAMBZ)}@ = FamBinary(3)
+        !     {USEPARTICLE(i, rprop, FCX)}@   = fcx
+        !     {USEPARTICLE(i, rprop, FCY)}@   = fcy
+        !     {USEPARTICLE(i, rprop, FCZ)}@   = fcz
+        !     {USEPARTICLE(i, rprop, FVUX)}@  = fvux
+        !     {USEPARTICLE(i, rprop, FVUY)}@  = fvuy
+        !     {USEPARTICLE(i, rprop, FVUZ)}@  = fvuz
+        !     {USEPARTICLE(i, rprop, QQ)}@    = qq
+        !     {USEPARTICLE(i, rprop, FPGX)}@  = fdpdx
+        !     {USEPARTICLE(i, rprop, FPGY)}@  = fdpdy
+        !     {USEPARTICLE(i, rprop, FPGZ)}@  = fdpdz
+        ! END IF
         !
         ! Step 14: If debug mode is ON, calculate and print the max values.
         !          The user should not have this ON for production runs.
@@ -853,23 +853,22 @@ module procedure ppiclf_user_SetYdot
                 if (mod(idebug,1)==0) then
                     if (i<=5) then
                         write(7020+i,*) i, ppiclf_time, rhof,   &
-                            (@{USEPARTICLE(i, JSDRX)}@),        &
-                            (@{USEPARTICLE(i, JSDRY)}@),        &
-                            (@{USEPARTICLE(i, JSDRZ)}@),        &
-                            (@{USEPARTICLE(i, ydot, VX)}@),     &
-                            (@{USEPARTICLE(i, ydot, VY)}@),     &
-                            (@{USEPARTICLE(i, ydot, VZ)}@),     &
-                            (@{USEPARTICLE(i, y, VX)}@),        &
-                            (@{USEPARTICLE(i, y, VY)}@),        &
-                            (@{USEPARTICLE(i, y, VZ)}@),        &
-                            (@{USEPARTICLE(i, y, OX)}@),        &
-                            (@{USEPARTICLE(i, y, OY)}@),        &
-                            (@{USEPARTICLE(i, y, OZ)}@)
+                            (@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%X)}@),        &
+                            (@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%Y)}@),        &
+                            (@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%Z)}@),        &
+                            (@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%X)}@),     &
+                            (@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Y)}@),     &
+                            (@{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Z)}@),     &
+                            (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%X)}@),        &
+                            (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@),        &
+                            (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@),        &
+                            (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%X)}@),        &
+                            (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Y)}@),        &
+                            (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Z)}@)
 
-                        ! this relies on the specific ordering of the properties, which should always be consistent, but may cause problems
                         write(7040+i,*) i, ppiclf_time,                                         &
-                            @{ARRAYSLICE(i, (rprop, JSDRX), JSDRZ, 3)}@,    &   ! Du/Dt
-                            @{ARRAYSLICE(i, (rprop, JSDOX), JSDOZ, 3)}@         ! DOmega/Dt
+                            @{USEPARTICLE(ppiclf_parts(i)%rprop%SDR)}@,    &   ! Du/Dt
+                            @{USEPARTICLE(ppiclf_parts(i)%rprop%SDO)}@        ! DOmega/Dt
 
                         write(7050+i,*) i, ppiclf_time, fqs_mag,fam_mag,fdp_mag,fc_mag,tau_max
 
@@ -894,38 +893,38 @@ module procedure ppiclf_user_SetYdot
         do i=1,ppiclf_npart
      
             ! Substantial derivative of density - how rocflu does it 
-            SDrho = (@{USEPARTICLE(i, JRHSR)}@)                         +   & 
-            (@{USEPARTICLE(i, y, VX)}@) * (@{USEPARTICLE(i, JPGCX)}@)   +   & 
-            (@{USEPARTICLE(i, y, VY)}@) * (@{USEPARTICLE(i, JPGCY)}@)   +   & 
-            (@{USEPARTICLE(i, y, VZ)}@) * (@{USEPARTICLE(i, JPGCZ)}@)
+            SDrho = (@{USEPARTICLE(ppiclf_parts(i)%rprop%RHSR)}@)                         +   & 
+            (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%X)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%PGC%X)}@)   +   & 
+            (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%PGC%Y)}@)   +   & 
+            (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%PGC%Z)}@)
             
             ! material derivative is phi weighted in Rocflu
             ! drho/dt
             SDrho = SDrho / (rphif)  
-            vgradrhog = vx * (@{USEPARTICLE(i, JRHOGX)}@) +  &
-                        vy * (@{USEPARTICLE(i, JRHOGY)}@) +  &
-                        vz * (@{USEPARTICLE(i, JRHOGZ)}@)
+            vgradrhog = vx * (@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOG%X)}@) +  &
+                        vy * (@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOG%Y)}@) +  &
+                        vz * (@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOG%Z)}@)
       
             ! Fluid density
-            rhof   = @{USEPARTICLE(i, JRHOF)}@
+            rhof   = @{USEPARTICLE(ppiclf_parts(i)%rprop%RHOF)}@
 
-            vx = (@{USEPARTICLE(i, JUX)}@) - (@{USEPARTICLE(i, y, VX)}@)
-            vy = (@{USEPARTICLE(i, JUY)}@) - (@{USEPARTICLE(i, y, VY)}@)
-            vz = (@{USEPARTICLE(i, JUZ)}@) - (@{USEPARTICLE(i, y, VZ)}@)
-            ug = (@{USEPARTICLE(i, JUX)}@)
-            vg = (@{USEPARTICLE(i, JUY)}@)
-            wg = (@{USEPARTICLE(i, JUZ)}@)
+            vx = (@{USEPARTICLE(ppiclf_parts(i)%rprop%U%X)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%X)}@)
+            vy = (@{USEPARTICLE(ppiclf_parts(i)%rprop%U%Y)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@)
+            vz = (@{USEPARTICLE(ppiclf_parts(i)%rprop%U%Z)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@)
+            ug = (@{USEPARTICLE(ppiclf_parts(i)%rprop%U%X)}@)
+            vg = (@{USEPARTICLE(ppiclf_parts(i)%rprop%U%Y)}@)
+            wg = (@{USEPARTICLE(ppiclf_parts(i)%rprop%U%Z)}@)
             ! Unary added mass solves rho^g d(u^p)/dt implicitly
             ! Binary added mass solves it explicitly and not implicitly
             ! WDOTX = D(rho^g u^g)/Dt - d(rho^g u^p)/dt)
             ! X-acceleration
-            @{USEPARTICLE(i, WDOTX)}@ = vx*SDrho + rhof*(@{USEPARTICLE(i, JSDRX)}@) + ug*vgradrhog - rhof*(@{USEPARTICLE(i, ydot, VX)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%rprop%WDOT%X)}@ = vx*SDrho + rhof*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%X)}@) + ug*vgradrhog - rhof*(@{USEPARTICLE(ppiclf_parts(i)%ydot%Vel%X)}@)
           
             ! Y-acceleration
-            @{USEPARTICLE(i, WDOTY)}@ = vy*SDrho + rhof*(@{USEPARTICLE(i, JSDRY)}@) + vg*vgradrhog - rhof*(@{USEPARTICLE(i, ydot, VY)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%rprop%WDOT%Y)}@ = vy*SDrho + rhof*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%Y)}@) + vg*vgradrhog - rhof*(@{USEPARTICLE(ppiclf_parts(i)%ydot%Vel%Y)}@)
 
             ! Z-acceleration
-            @{USEPARTICLE(i, WDOTZ)}@ = vz*SDrho + rhof*(@{USEPARTICLE(i, JSDRZ)}@) + wg*vgradrhog - rhof*(@{USEPARTICLE(i, ydot, VZ)}@)
+            @{USEPARTICLE(ppiclf_parts(i)%rprop%WDOT%Z)}@ = vz*SDrho + rhof*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%Z)}@) + wg*vgradrhog - rhof*(@{USEPARTICLE(ppiclf_parts(i)%ydot%Vel%Z)}@)
           
             ! write out for debug
             if (ppiclf_debug==2) then
@@ -933,17 +932,17 @@ module procedure ppiclf_user_SetYdot
                     if (mod(idebug,10)==0) then
                         if (i<=3) then
                             write(7020+i,*) i, ppiclf_time, rhof,   &
-                                @{USEPARTICLE(i, JSDRX)}@,          &
-                                @{USEPARTICLE(i, JSDRY)}@,          &
-                                @{USEPARTICLE(i, JSDRZ)}@,          &
-                                @{USEPARTICLE(i, ydot, VX)}@,       &
-                                @{USEPARTICLE(i, ydot, VY)}@,       &
-                                @{USEPARTICLE(i, ydot, VZ)}@,       &
-                                @{USEPARTICLE(i, y, VX)}@,          &
-                                @{USEPARTICLE(i, y, VY)}@,          &
-                                @{USEPARTICLE(i, y, VZ)}@
+                                @{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%X)}@,          &
+                                @{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%Y)}@,          &
+                                @{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%Z)}@,          &
+                                @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%X)}@,       &
+                                @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Y)}@,       &
+                                @{USEPARTICLE(ppiclf_parts(i)%ydot%vel%Z)}@,       &
+                                @{USEPARTICLE(ppiclf_parts(i)%y%vel%X)}@,          &
+                                @{USEPARTICLE(ppiclf_parts(i)%y%vel%Y)}@,          &
+                                @{USEPARTICLE(ppiclf_parts(i)%y%vel%Z)}@
 
-                            write(7030+i,*) i, ppiclf_time, @{ARRAYSLICE(i, WDOTX, WDOTZ, 3)}@
+                            write(7030+i,*) i, ppiclf_time, @{USEPARTICLE(ppiclf_parts(i)%rprop%WDOT)}@ 
 
                         endif
                     endif

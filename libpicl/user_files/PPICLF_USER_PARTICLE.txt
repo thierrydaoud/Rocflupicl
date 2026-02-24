@@ -1,5 +1,0 @@
-Solution Properties (Y, Ydot, Ydotc, etc)
-
-
-
-rprop

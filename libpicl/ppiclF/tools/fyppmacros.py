@@ -1,63 +1,181 @@
+import copy
 #the props dict will have the property name as the key
 #and an array with 3 elements, 0 is the datatype, 1 is bool for being a solution, 2 is bool for ghost prop
 props = {}
-arrayLens = {}
+propArrays = {}
+propArrayNames = ["real_sol", "real_prop", "int_prop", "proj", "real_sol_ghost", "real_prop_ghost", "int_prop_ghost", "interp"]
 FinalStructs = None
 Mapping = {}
 ndim = -1
+definedVars = {}
 
+# define the structures as they would appear to the user if we were using regular fortran derived types
 
-# five types of arrays: pos, real_sol, real_sol_wpos(real_sol + pos), int_sol, real_prop, int_prop, proj (projection). Each one defines one or more arrays in one or more structures.
-# this allows us to swap layouts if we want to optimize memory accesses
-# the third element of each component array specification, is a list of ways that the array can be refered to, ie y or ydot
-layout = [
+"""
+Format for the layout specification
+{
+    # user facing structure name, this is how it will be refered to in macros. Can conflict with other structures in code, but probably shouldn't for readability
+    "UserStructName": "PPICLF_t_particle",
+    # components of the structure from the user perspective. Key is the name that will refer to it, and the value is the property type that will be put in the array.
+    "UserComponents":
     {
-        "StructName": "PPICLF_t_particlepos",
-        "ppiclfArrayName" : "ppiclf_partpos",
-        "ppiclfGhostArrayName" : "ppiclf_partpos_ghost",
-        "arrays":
+        "y":        "real_sol",
+        "ydot":     "real_sol",
+        "ydotc":    "real_sol",
+        "y1":       "real_sol",
+        "rprop":    "real_prop",
+        "iprop":    "int_prop",
+        "feedback": "proj"
+    }
+    # FortranStructs defines a list of the structs that will exist from the perspective of fortran/the compiler,
+    # as well as how the user components defined above will map into them.
+    "FortranStructs":
+    [
+        {
+            # this is the actual name of the stucture that will be in the code, this  
+            "FortStructName": "PPICLF_t_particlepos",
+            "components":
             [
-                ("pos",  "pos", ["y"])
-                ]
+                
+            ]
+        },
+        {
+            "FortStructName": "PPICLF_t_particle"
+        }
+    ]
+}
+"""
+userLayout = [
+    {
+        "UserStructName": "PPICLF_t_particle",
+        "UserComponents":
+        {
+            "y":        "real_sol",
+            "ydot":     "real_sol",
+            "ydotc":    "real_sol",
+            "y1":       "real_sol",
+            "rprop":    "real_prop",
+            "iprop":    "int_prop",
+            "feedback": "proj"
+        },
+        "FortranStructs":
+        {
+            "PPICLF_t_particlepos" : {
+                "components":
+                {
+                    "y":        "PROP,pos"
+                }
+            },
+            "PPICLF_t_particle_data" : {
+                "components":
+                {
+                    "y":        "remaining",
+                    "ydot":     "ALL",
+                    "ydotc":    "ALL",
+                    "y1":       "ALL",
+                    "rprop":    "ALL",
+                    "iprop":    "ALL",
+                    "feedback": "ALL"
+                }
+            }
+        }
     },
     {
-        "StructName": "PPICLF_t_particle",
-        "ppiclfArrayName" : "ppiclf_parts",
-        "ppiclfGhostArrayName" : "ppiclf_parts_ghost",
-        "arrays":
-            [
-                ("y_real",  "real_sol", ["y"]),
-                ("y_int",   "int_sol", ["y"]),
-                ("ydot_real",   "real_sol_wpos", ["ydot"]),
-                ("ydot_int",    "int_sol", ["ydot"]),
-                ("ydotc_real", "real_sol_wpos", ["ydotc"]),
-                ("ydotc_int", "int_sol", ["ydotc"]),
-                ("rprop",   "real_prop", ["prop", "rprop"]),
-                ("iprop",   "int_prop", ["prop", "iprop"]),
-                ("feedback", "proj", ["feedbk", "proj", "feedback"]),
-                ("y1_real", "real_sol_wpos", ["y1"]),
-                ("y1_int", "int_sol", ["y1"]),
-                ]
+        "UserStructName": "PPICLF_t_ghostParticle",
+        "UserComponents":
+        {
+            "y":        "real_sol_ghost",
+            "rprop":    "real_prop_ghost",
+            "iprop":    "int_prop_ghost",
+        },
+        "FortranStructs":
+        {
+            "PPICLF_t_particle_ghost" : {
+                "components":
+                {
+                    "y":        "ALL",
+                    "rprop":    "ALL",
+                    "iprop":    "ALL"
+                }
+            }
+        }
     }
 ]
 
-INTERNAL_evaldtype = lambda args: "int" if "int" in args else "real"
-INTERNAL_evalsolution = lambda args: "solution" in args
-INTERNAL_evalghost = lambda args: "ghost" in args
-INTERNAL_evaltemp = lambda args: "temp" in args
-INTERNAL_evalproj = lambda args: "proj" in args
+def EvalPropArgs(args):
+    solution = False
+    savedProp = False
+    ghost = False
+    vector = False
+    interp = False
+    proj = False
+    dtype = None
+    for arg in args:
+        arg = arg.lower()
+        if arg in ["solution"]:
+            solution = True
+            continue
+        if arg in ["ghost"]:
+            ghost = True
+            continue
+        if arg in ["prop", "saved"]:
+            savedProp = True
+            continue
+        if arg in ["interp", "interpolated"]:
+            interp = True
+            continue
+        if arg in ["proj"]:
+            proj = True
+            dtype = "real"
+            continue
+        typeinfo = arg.split("_")
+        # print(typeinfo)
+        if "vec" in typeinfo:
+            vector = True
+        if "real" in typeinfo:
+            dtype = "real"
+        if "int" in typeinfo:
+            dtype = "int"
+        
 
-INTERNAL_evalargs = lambda args : [INTERNAL_evaldtype(args), INTERNAL_evalsolution(args), INTERNAL_evalghost(args), INTERNAL_evaltemp(args), INTERNAL_evalproj(args)]
+    
+    if dtype is None:
+        raise RuntimeError("Didn't specify type of property")
+    
+    return {
+        "sol": solution,
+        "savedProp": savedProp,
+        "ghost": ghost,
+        "vector": vector,
+        "interp": interp,
+        "proj": proj,
+        "dtype": dtype
+    }
+
+
+def convertStringListToList(string):
+    if string[0] in "([":
+        string = [s.strip() for s in string[1:-1].split(",")]
+    else:
+        string = [string]
+    return string
 
 def setvar(name, value):
     globals()[name] = value
 
 
 def AddProp(name, *args):
-    name = name.lower()
+    name = convertStringListToList(name.lower())
+    componentNames = None
+    if len(name) > 1:
+        componentNames = name[1:]
+    name = name[0]
     if name in props.keys():
         raise RuntimeError("Property " + name + " redefined")
-    props.update({name : INTERNAL_evalargs(args)})
+
+    newProp = {"name" : name, "componentNames": componentNames,  **EvalPropArgs(args)}
+    # print(newProp)
+    props.update({name: newProp})
 
 
 # This is the function that actually decides what indexes to assign to each property in the array
@@ -89,257 +207,519 @@ def GenerateMapping(**kwargs):
         }
     # print(Mapping)
 
-        
-    
+def SelectFortStruct(prop, fortStructs):
+    for i in range(len(fortStructs)):
+        if type(fortStructs[i][1]) is not list and type(fortStructs[i][1]) is not tuple:
+            fortStructs[i][1] = [fortStructs[i][1],]
+    for struct in fortStructs:
+        correctStruct = True
+        for modifier in struct[1]:
+            
+            if modifier.lower() == "all" or modifier.lower() == "remaining":
+                return struct[0]
+            if modifier[0:10].lower() == "less,prop," and modifier[10:].lower() == prop["name"]:
+                correctStruct = False
+                break
+            if modifier[0:5].lower() =="prop," and modifier[5:].lower() == prop["name"]:
+                return struct[0]
+    raise RuntimeError("failed to find an array to put " + str(prop["name"]) + " in")
+
+def DumpFinalStructs():
+    global FinalStructs
+    print("Final Structs:")
+    for mainStructName, mainStruct in FinalStructs.items():
+        print(mainStructName)
+        # print(mainStruct["components"])
+        for fortStructName, fortStruct in mainStruct["FortranStructs"].items():
+            print("\t" + fortStructName)
+            # print(fortStruct)
+            for arrayName, includedProps in fortStruct["components"].items():
+                # print(includedProps)
+                print("\t\t" + arrayName + " " + str([p + "(" + str(v["startIndex"]) + ":" + str(v["startIndex"] + v["len"] - 1) + ")" for p, v in includedProps.items() if type(p) is not int]) + "Total Len: " + str(includedProps[0]))
+
 
 def FinalizeParticleStruct(*args, **kwargs):
-    global FinalStructs, props, arrayLens
+    global FinalStructs, props, propArrays, propArrayNames
     if ndim < 2 or ndim > 3:
         raise RuntimeError("Must set ndim to 2 or 3")
-
-    posProps = [("x", True), ("y", True)]
-    props.pop("x")
-    props.pop("y")
-    if ndim == 3:
-        posProps.append(("z", True))
-        props.pop("z")
-    # TODO: better check to make sure we actually defined the same number and an accidentally defined z doesn't slip in
-
-    real_sol = [(k,v[2]) for k,v in props.items() if v[0] == "real" and v[1] == True and v[4] == False]
-    int_sol = [(k,v[2]) for k,v in props.items() if v[0] == "int" and v[1] == True and v[4] == False]
-
-    real_prop = [(k,v[2]) for k,v in props.items() if v[0] == "real" and v[1] == False and v[4] == False]
-    int_prop = [(k,v[2]) for k,v in props.items() if v[0] == "int" and v[1] == False and v[4] == False]
-
-    proj = [(k,v[2]) for k,v in props.items() if v[4] == True]
     
-    real_sol_wpos = posProps + real_sol
-
-    if len(int_sol) != 0:
-        raise RuntimeError("Tried to create an integer solution property")
-    # print(real_sol)
-    # print(real_sol_wpos)
-    # print(int_sol)
-    # print(real_prop)
-    # print(int_prop)
-
-    def MakeArrayDeclDict(a):
-        nonlocal posProps, real_sol, int_sol, real_prop, int_prop, real_sol_wpos, proj
-        d = {"name" : a[0]}
+    for basePropArray in propArrayNames:
+        propArrays[basePropArray] = []
     
-        if a[1] == "pos":
-            if len(posProps) != ndim:
-                raise RuntimeError("NDIM doesn't match number xyz defs")
-            d["type"] = "real"
-            d["n"] = len(posProps)
-        elif a[1] == "real_sol":
-            d["type"] = "real"
-            d["n"] = len(real_sol)
-        elif a[1] == "int_sol":
-            d["type"] = "int"
-            d["n"] = len(int_sol)
-        elif a[1] == "real_prop":
-            d["type"] = "real"
-            d["n"] = len(real_prop)
-        elif a[1] == "int_prop":
-            d["type"] = "int"
-            d["n"] = len(int_prop)
-        elif a[1] == "real_sol_wpos":
-            d["type"] = "real"
-            d["n"] = len(real_sol_wpos)
-        elif a[1] == "proj":
-            d["type"] = "real"
-            d["n"] = len(proj)
+
+    # print(props)
+    for prop in props.values():
+        if prop["vector"]:
+            if prop["componentNames"] is None:
+                prop["componentNames"] = ["x", "y", "z"][0:ndim]
+            prop["len"] = len(prop["componentNames"])
         else:
-            raise RuntimeError
-        
-        return d
+            prop["len"] = 1
 
 
-    if len(real_sol) + len(int_sol) + len(real_prop) + len(int_prop) + len(proj) != len(props.keys()):
-        raise RuntimeError("Failed to generate particle struct, particle lengths dont match")
+        used = False
+        if prop["sol"] and prop["dtype"] == "real":
+            propArrays["real_sol"].append(prop)
+            if prop["ghost"]:
+                propArrays["real_sol_ghost"].append(prop)
+            used=True
+        if prop["savedProp"] and prop["dtype"] == "real":
+            propArrays["real_prop"].append(prop)
+            if prop["ghost"]:
+                propArrays["real_prop_ghost"].append(prop)
+            used=True
+        if prop["savedProp"] and prop["dtype"] == "int":
+            propArrays["int_prop"].append(prop)
+            if prop["ghost"]:
+                propArrays["int_prop_ghost"].append(prop)
+            used=True
+        if prop["interp"]:
+            propArrays["interp"].append(prop)
+            used=True
+        if prop["proj"]:
+            propArrays["proj"].append(prop)
+            used=True
+
+
+        if not used:
+            raise RuntimeError("Property " + prop["name"] + " not allocated to any array. " + str(prop))
+    # for k,v in propArrays.items():
+    #     print(k + ": " + str([ p["name"] for p in v]))
 
     FinalStructs = {}
-    for struct in layout:
-        FinalStructs[struct["StructName"]] = [MakeArrayDeclDict(a) for a in struct["arrays"]]
+    for UserStruct in userLayout:
+        # print(UserStruct["UserStructName"])
+        final = {}
+        final["UserName"] = UserStruct["UserStructName"]
+        final["components"] = {}
+        final["FortranStructs"] = { fsName : {"components" : {a : {} for a in fs["components"].keys()}} for fsName, fs in UserStruct["FortranStructs"].items()}
+        # print(final["FortranStructs"])
+        for name, array in UserStruct["UserComponents"].items():
+            final["components"][name] = {}
+            baseArray = propArrays[array]
+            fortArrays = []
+            for fortStructName, fortStruct in UserStruct["FortranStructs"].items():
+                if name in fortStruct["components"].keys():
+                    fortArrays.append([fortStructName, fortStruct["components"][name]])
 
+            for prop in baseArray:
+                selectedStruct = SelectFortStruct(prop, fortArrays)
+                final["FortranStructs"][selectedStruct]["components"][name].update({prop["name"] : copy.deepcopy(prop)})
+                final["components"][name][prop["name"]] = (selectedStruct, len(final["FortranStructs"][selectedStruct]["components"][name]) - 1)
+        
+        for fortStructName, fortStruct in final["FortranStructs"].items():
+            # print("\t" + fortStructName)
+            for arrayName, arrayProps in fortStruct["components"].items():
+                i = 1
+                # print(arrayProps)
+                for p in arrayProps.values():
+                    p["startIndex"] = i
+                    i += p["len"]
+                # store the array's length in index 0, since all of the properties are stored with string valued keys this wont be mistaken for a property name
+                arrayProps[0] = i - 1
+                # store the array's type in index 1, for same reasons
+                arrayProps[1] = [v for p, v in arrayProps.items() if p != 0][0]["dtype"]
+                # print(arrayProps[1])
+                # print("\t\t\t", end="")
+                # for p in arrayProps.values():
+                #     print(p["name"] + "(" + str(p["startIndex"]) + ":" + str(p["startIndex"] + p["len"] - 1) + ")", end=" ")
+                # print("")
 
-    GenerateMapping(pos=posProps, real_sol=real_sol, int_sol=int_sol, real_prop=real_prop, int_prop=int_prop, real_sol_wpos=real_sol_wpos, proj=proj)
-    
+        FinalStructs[UserStruct["UserStructName"]] = final
+
+    # DumpFinalStructs()
 
 
 def PRINTPROPS():
     for name in props.keys():
         name + ' ' + str(props[name][0]) + " " + str(props[name][1]) + ' ' + str(props[name][2])
         
-def ComponentDeclStr(component):
+def ComponentDeclStr(name, component):
     typestr = lambda t: "real*8" if t == "real" else "integer*4"
-    return typestr(component["type"]) + " :: " + component["name"] + "(" + str(component["n"]) + ")"
+    return typestr(component[1]) + " :: " + name + "(" + str(component[0]) + ")"
+
 def GenStructs():
+    # return
     # print(FinalStructs)
+    # DumpFinalStructs()
     if FinalStructs is None:
         raise RuntimeError("Must call Finalize before the particle structure is usable.")
 
     finalCode = ""
     
-    for structName, components in FinalStructs.items():
-        # print("Generating " + str(structName))
+    for structName, arrays in [(fortStructName, fortStruct["components"]) for UserStruct in FinalStructs.values() for fortStructName, fortStruct in UserStruct["FortranStructs"].items()]:
         s = "type :: " + structName + "\n"
-        for component in components:
-            if component["n"] == 0:
+        for arrayName, array in arrays.items():
+
+            if array[0] == 0:
                 continue
-            s += "    " + ComponentDeclStr(component) + "\n"
+            s += "    " + ComponentDeclStr(arrayName, array) + "\n"
         s += "end type " + structName + "\n\n"
         finalCode += s
 
     return finalCode
 
-def DetermineReferences(**kwargs):
-    specifiedStruct = None
-    specifiedSubstruct = None
-
-    if "substructures" in kwargs.keys():
-        # if type(kwargs["substructures"]) is not list and type(kwargs["substructures"]) is not tuple:
-        #     kwargs["substructures"] = [kwargs["substructures"],]
-        #     print(type(kwargs["substructures"]) is not list)
-        #     raise RuntimeError
-        # print(type(kwargs["substructures"]))
-        if len(kwargs["substructures"]) == 2:
-            specifiedStruct = kwargs["substructures"][0]
-            specifiedSubstruct = kwargs["substructures"][1]
-        elif len(kwargs["substructures"]) == 1:
-            if kwargs["substructures"][0] in [struct["StructName"] for struct in layout]:
-                specifiedStruct = kwargs["substructures"][0]
-            else:
-                specifiedSubstruct = kwargs["substructures"][0]
+def ListComponents(*args):
+    index = None
+   
+    if len(args) == 2:
+        structType = args[0]
+        name = args[1]
+    elif len(args) == 1 and (args[0] in FinalStructs.keys()):
+        return list(FinalStructs[args[0]]["FortranStructs"].keys())
     else:
-        if "specifiedStruct" in kwargs.keys():
-            specifiedStruct = kwargs["specifiedStruct"]
-        if "specifiedSubstruct" in kwargs.keys():
-            specifiedSubstruct = kwargs["specifiedSubstruct"]
+        # print(args)
+        reference = DetermineReferences(args[0])
+        name = reference[0][0]
+        if len(reference[0]) > 1:
+            index = reference[0][1]
+        structType = definedVars[name]
+    components = []
+    for fortStructName in FinalStructs[structType]["FortranStructs"].keys():
+        components.append(name + "__" + fortStructName + (index if index is not None else ""))
+    return components
 
-    propName = kwargs["propName"]
+def DeclarePartVar(structType, name, *args):
+    global definedVars
+    definedVars[name] = structType
+    finalCode = ""
+    for fortStructName in FinalStructs[structType]["FortranStructs"].keys():
+        finalCode += "type(" + fortStructName + ") :: " + name + "__" + fortStructName + "".join(args) + "\n"
     
-    containingArrays = [k for k, v in Mapping.items() if propName in v["map"].keys()]
+    return finalCode
 
-    possibleRefs = [(struct, array[0], array[1]) for struct in layout for array in struct["arrays"] if array[1] in containingArrays]
-    if specifiedStruct is not None:
-        possibleRefs = [r for r in possibleRefs if r[0]["StructName"] == specifiedStruct]
-    
-    if specifiedSubstruct is not None:
-        possibleRefs = [r for r in possibleRefs if specifiedSubstruct in [a[2] for a in r[0]["arrays"] if a[0] == r[1]][0]]
 
-    if len(possibleRefs) == 0:
-        # print(Mapping)
-        print([(k,v["map"].keys())  for k, v in Mapping.items()])
-        print("SpecifiedStruct: " + str(specifiedStruct) + "\nSpecifiedSubStruct: " + str(specifiedSubstruct) + "\nPropName: " + propName)
+def ImportModVar(structType, name):
+    global definedVars
+    definedVars[name] = structType
+    return ", ".join(ListComponents(structType, name))
 
-        raise RuntimeError("Cannot reference particle property " + str(kwargs))
-    elif len(possibleRefs) > 1:
-        print(possibleRefs)
-        print("SpecifiedStruct: " + str(specifiedStruct) + "\nSpecifiedSubStruct: " + str(specifiedSubstruct) + "\nPropName: " + propName)
-        raise RuntimeError("Ambiguous particle property reference " + str(kwargs))
-    
-    return possibleRefs
-
-def GenPropAccess(*args):
-    if len(args) < 2:
-        raise RuntimeError("Not enough arguments to PropAccess macro")
-    particleIndex = args[0]
-    propName = args[-1].lower()
+def DetermineReferences(refString):
+    components = refString.split("%")
+    # print(refString)
+    # print(components)
+    for i, component in enumerate(components):
+        if "(" not in component:
+            components[i] = [component]
+            continue
+        idx = component.index("(")
+        name = component[0:idx]
+        index = component[idx:]
+        components[i] = [name, index]
+            
+    if components[0][0] not in definedVars:
+        raise ValueError(components[0][0] + " is not defined.")
+    return components
     
 
+def GenPropAccess(givenRef, *args):
+    # print("got here " + givenRef)
+    UserReference = DetermineReferences(givenRef)
+    # print(givenRef)
+    # print(UserReference)
+    try:
+        UserStruct = definedVars[UserReference[0][0]]
+    except Exception as e:
+        print("Lookup of " + str(UserReference[0][0] + " failed. " + givenRef))
+    # hacky way to access a whole array, only works if every element in the user array is stored in the same fortran struct
+    skipPropIndex = False
+    if len(UserReference) == 2:
+        anyPropName = list(FinalStructs[UserStruct]["components"][UserReference[1][0]].keys())[0]
+        UserReference.append([anyPropName, ])
+        skipPropIndex = True
+    
+    if len(args) != 0:
+        if "skipIndex" in args:
+            skipPropIndex = True
+        else:
+            raise ValueError("invalid arguments to USEPARTICLE: " + str(args))
+    UserReference[2][0] = UserReference[2][0].lower()
+    fortStructName = FinalStructs[UserStruct]["components"][UserReference[1][0]][UserReference[2][0]][0]
+
+    prop = FinalStructs[UserStruct]["FortranStructs"][fortStructName]["components"][UserReference[1][0]][UserReference[2][0]]
+
+    fortRef = UserReference[0][0] + "__" + fortStructName # mangled name of variable
+    fortRef += UserReference[0][1] if len(UserReference[0]) > 1 else ""
+    fortRef += "%" + UserReference[1][0] # component array
+    # fortRef += "%" + UserReference[2][0]
+    if skipPropIndex:
+        pass
+    elif prop["vector"] and len(UserReference) > 3:
+        fortRef += "(" + str(prop["startIndex"] + prop["componentNames"].index(UserReference[3][0].lower())) + ")"
+    elif prop["vector"]: # and len(UserReference) == 3: (always true after first if)
+        fortRef += "(" + str(prop["startIndex"]) + ":" + str(prop["startIndex"] + prop["len"] -1 )+ ")"
+    else: # non vector component
+        fortRef += "(" + str(prop["startIndex"]) + ")"
+    # print(fortRef)
+    return fortRef
+    # DetermineReferences(*args)
+    # if len(args) < 2:
+    #     raise RuntimeError("Not enough arguments to PropAccess macro")
+    # particleIndex = args[0]
+    # propName = args[-1].lower()
+    
+
 
     
 
-    chosenRef = DetermineReferences(propName=propName, substructures=args[1:-1])[0]
+    # chosenRef = DetermineReferences(propName=propName, substructures=args[1:-1])[0]
 
-    refStr = chosenRef[0]["ppiclfArrayName"] + "(" + str(particleIndex) + ")%" + chosenRef[1] + "(" + str(Mapping[chosenRef[2]]["map"][propName]) + ")"
-    return refStr
+    # refStr = chosenRef[0]["ppiclfArrayName"] + "(" + str(particleIndex) + ")%" + chosenRef[1] + "(" + str(Mapping[chosenRef[2]]["map"][propName]) + ")"
+    # return refStr
+def Loop_All_Reals(*givenRefs):
+    if len(givenRefs) == 1:
+        return Loop_All_Reals_SingleRef(givenRefs[0])
+    # print(givenRefs)
+    UserRefs = [DetermineReferences(given) for given in givenRefs]
+    UserStructs = [definedVars[ur[0][0]] for ur in UserRefs ]
+    # print(UserRefs)
+    # print("\n\n")
+    previousStructs = [None] * len(givenRefs)
+    startIndexes = None
+    refs = []
+    jMax = len(FinalStructs[UserStructs[0]]["components"][UserRefs[0][1][0]].keys()) - 1
+    prevPropName = None
+    for j, propName in enumerate(FinalStructs[UserStructs[0]]["components"][UserRefs[0][1][0]].keys()):
+        if prevPropName is None:
+            prevPropName = propName
+        fortStructs = [FinalStructs[UserStructs[i]]["components"][UserRefs[i][1][0]][propName][0] for i in range(len(givenRefs))]
+        if startIndexes is None:
+            startIndexes = [ FinalStructs[UserStructs[i]]["FortranStructs"][fortStructs[i]]["components"][UserRefs[i][1][0]][propName]["startIndex"] for i in range(len(givenRefs))]
+        
+        # print(str(j) + " " + propName)
+        # print(list(zip(previousStructs, startIndexes)))
+        swappedArrays = [previousStructs[i] != fortStructs[i] for i in range(len(givenRefs))]
+        if any(swappedArrays):
+            if previousStructs[0] is not None:
+                endIndexes = [ FinalStructs[UserStructs[i]]["FortranStructs"][previousStructs[i]]["components"][UserRefs[i][1][0]][prevPropName]["startIndex"] + FinalStructs[UserStructs[i]]["FortranStructs"][previousStructs[i]]["components"][UserRefs[i][1][0]][prevPropName]["len"] -1 for i in range(len(givenRefs))]
+                runLen = endIndexes[0] - startIndexes[0] + 1
+                # print("swapped runlen(" +  str(runLen) + ") " + str(list(zip(swappedArrays, startIndexes, endIndexes))))
+                refs.append([runLen])
+                for i in range(len(givenRefs)):
+                    refStr = UserRefs[i][0][0] + "__" + previousStructs[i] + (UserRefs[i][0][1] if len(UserRefs[i][0]) > 1 else "")
+                    refStr += "%" + UserRefs[i][1][0]
+                    refs[-1] += [refStr, startIndexes[i] - 1]
+                # print('added ref')
+                # print(refs[-1])
+                startIndexes = [ FinalStructs[UserStructs[i]]["FortranStructs"][fortStructs[i]]["components"][UserRefs[i][1][0]][propName]["startIndex"] for i in range(len(givenRefs))]
 
-
-def Loop_All_RealArrays():    
-    return [(struct["ppiclfArrayName"], array[0], arrayLens[array[1]]) for struct in layout for array in struct["arrays"] if arrayLens[array[1]] != 0 and array[1] in ["pos", "real_sol", "real_sol_wpos", "real_prop", "proj"]]
-
-def Loop_All_IntArrays():    
-    return [(struct["ppiclfArrayName"], array[0], arrayLens[array[1]]) for struct in layout for array in struct["arrays"] if arrayLens[array[1]] != 0 and array[1] in ["int_sol", "int_prop"]]
-
-def Loop_All_SlnArrays():
-    return [(struct["ppiclfArrayName"], array[0], arrayLens[array[1]]) for struct in layout for array in struct["arrays"] if arrayLens[array[1]] != 0 and array[0] in ["y_real", "pos"]]
-
-def Loop_All_StructArrays():
-    return [(struct["StructName"], struct["ppiclfArrayName"]) for struct in layout]
-
-def Loop_All_SLNProps():
-    return [p for p in Mapping["real_sol_wpos"]["map"].keys()]
-
-
-def GenerateArraySlice(*args):
-    particleIndex = args[0]
-    startProp = args[1].lower()
-    endProp = args[2].lower()
-    if startProp[0] in "[(":
-        startProp = [s.strip() for s in startProp[1:-1].split(",")]
-    else:
-        startProp = (startProp,)
-    if endProp[0] in "[(":
-        endProp = [s.strip() for s in endProp[1:-1].split(",")]
-    else:
-        endProp = (endProp,)
-
-    startPropRef = DetermineReferences(propName=startProp[-1], substructures=startProp[0:-1])[0]
-    endPropRef = DetermineReferences(propName=endProp[-1], substructures=endProp[0:-1])[0]
-
-    expectedElements = int(args[3]) if len(args) == 4 else None
+        prevPropName = propName
+        previousStructs = fortStructs
     
-    # print(startPropRef)
-    # print(startProp)
-    # print(endPropRef)
-    # print(endProp)
-    # print(expectedElements)
-
-    if startPropRef[0] != endPropRef[0] or startPropRef[1] != endPropRef[1]:
-        raise RuntimeError("Trying to slice between two elements not in the same array")
-
-    startIndex = Mapping[startPropRef[2]]["map"][startProp[-1]]
-    endIndex = Mapping[endPropRef[2]]["map"][endProp[-1]]
-
-    if expectedElements is not None and (endIndex - startIndex + 1) != expectedElements:
-        raise RuntimeError("Didn't generate a slice with the expected number of elements")
-
-    # return str(startIndex) + ":" + str(endIndex)
-    return startPropRef[0]["ppiclfArrayName"] + "(" + str(particleIndex) + ")%" + startPropRef[1] + "(" + str(startIndex) + ":" + str(endIndex) + ")"
+    # add the last ref
+    endIndexes = [ FinalStructs[UserStructs[i]]["FortranStructs"][previousStructs[i]]["components"][UserRefs[i][1][0]][prevPropName]["startIndex"] + FinalStructs[UserStructs[i]]["FortranStructs"][previousStructs[i]]["components"][UserRefs[i][1][0]][prevPropName]["len"] -1 for i in range(len(givenRefs))]
+    runLen = endIndexes[0] - startIndexes[0] + 1
+    refs.append([runLen])
+    for i in range(len(givenRefs)):
+        refStr = UserRefs[i][0][0] + "__" + previousStructs[i] + (UserRefs[i][0][1] if len(UserRefs[i][0]) > 1 else "")
+        refStr += "%" + UserRefs[i][1][0]
+        refs[-1] += [refStr, startIndexes[i] - 1]
+    
+    startIndexes = [ FinalStructs[UserStructs[i]]["FortranStructs"][fortStructs[i]]["components"][UserRefs[i][1][0]][propName]["startIndex"] for i in range(len(givenRefs))]
 
 
-def CountRealGhostProps():
-    total = 0
-    for struct in layout:
-        for a in struct["arrays"]:
-            if a[1] not in ["pos", "real_sol", "real_sol_wpos", "real_prop", "proj"]:
+    for r in refs:
+        print(r)
+            
+
+    
+
+    return refs
+
+def Loop_All_Reals_SingleRef(givenRef):
+    UserReference = DetermineReferences(givenRef)
+    UserStruct = definedVars[UserReference[0][0]]
+    realArrays = []
+    # print(UserReference)
+    for fortStructName, fortStruct in FinalStructs[UserStruct]["FortranStructs"].items():
+        for arrayName, array in fortStruct["components"].items():
+            if array[1] != "real": # array's data type
                 continue
-            total += Mapping[a[1]]["lastGhostIndex"] - Mapping[a[1]]["firstGhostIndex"] + 1
-            # print(a[1] + " " + str(total))
+            if len(UserReference) > 1 and arrayName != UserReference[1][0]:
+                continue
+            realArrays.append((fortStructName, arrayName, array[0]))
+    # print(realArrays)
+    retVals = []
+    for fortStructName, arrayName, n in realArrays:
+        fortRefs = []
+        fortRefs.append((UserReference[0][0] + "__" + fortStructName + (UserReference[0][1] if len(UserReference[0]) > 1 else "")))
+        fortRefs.append(arrayName)
+        retVals.append(("%".join(fortRefs), n))
+    return retVals
+
+def Loop_All_Ints(givenRef):
+    UserReference = DetermineReferences(givenRef)
+    UserStruct = definedVars[UserReference[0][0]]
+    realArrays = []
+    for fortStructName, fortStruct in FinalStructs[UserStruct]["FortranStructs"].items():
+        for arrayName, array in fortStruct["components"].items():
+            if array[1] != "int": # array's data type
+                continue
+            realArrays.append((fortStructName, arrayName, array[0]))
+    # print(realArrays)
+    retVals = []
+    for fortStructName, arrayName, n in realArrays:
+        fortRefs = []
+        fortRefs.append((UserReference[0][0] + "__" + fortStructName + (UserReference[0][1] if len(UserReference[0]) > 1 else "")))
+        fortRefs.append(arrayName)
+        retVals.append(("%".join(fortRefs), n))
+    return retVals
+
+def Loop_All_Real_Overlaps(givenRef, overlapStruct):
+    UserReference = DetermineReferences(givenRef)
+    UserStruct = definedVars[UserReference[0][0]]
+    refs = []
+    for arrayName, array in FinalStructs[UserStruct]["components"].items():
+        sharedProps = []
+        if arrayName not in FinalStructs[overlapStruct]["components"].keys():
+            continue
+        if FinalStructs[UserStruct]["FortranStructs"][list(array.values())[0][0]]["components"][arrayName][1] != "real":
+            continue
+        for propName, propLoc in array.items():
+            if propName not in FinalStructs[overlapStruct]["components"][arrayName].keys():
+                continue
+            sharedProps.append((propName, propLoc))
+
+        skip = None
+        sharedPropsFortStructs = {fortStructName : [p for p in sharedProps if p[1][0] == fortStructName] for fortStructName in FinalStructs[UserStruct]["FortranStructs"].keys()}
+        # print(sharedPropsFortStructs)
+        for fortStructName, sharedProps in sharedPropsFortStructs.items():
+            # print(sharedProps)
+            i = 0
+            startIndex = None
+            startProp = None
+            currLen = 0
+            # print(len(sharedProps))
+            while i < len(sharedProps):
+                if startIndex is None:
+                    startIndex = FinalStructs[UserStruct]["FortranStructs"][fortStructName]["components"][arrayName][sharedProps[i][0]]["startIndex"]
+                    startProp = sharedProps[i][0]
+                    # print("started " + startProp + " " + str(startIndex))
+
+                currLen += FinalStructs[UserStruct]["FortranStructs"][fortStructName]["components"][arrayName][sharedProps[i][0]]["len"]
+
+                # print("continued " + startProp + " " + str(startIndex) + " " + sharedProps[i][0] + " " + str(currLen))
+
+                if i + 1 == len(sharedProps) or sharedProps[i][1][1] + 1 != sharedProps[i+1][1][1]:
+                    # print("ended " + startProp + " " + str(startIndex) + " " + sharedProps[i][0] + " " + str(currLen))
+                    refStr = (UserReference[0][0] + "__" + fortStructName + (UserReference[0][1] if len(UserReference[0]) > 1 else ""))
+                    refStr += "%" + arrayName + "(" + str(startIndex) + ":" + str(startIndex + currLen - 1) + ")"
+                    refs.append((refStr, currLen))
+                    # print(refStr)
+                    if i + 1 == len(sharedProps):
+                        break
+                    startIndex = None
+                    currLen = 0
+                i += 1
+
+    return refs
+
+        # print(array)
+    # print(UserStruct)
+    # print(overlapStruct)
+
+
+    return [("", "")]
+# def Loop_All_RealArrays(givenRef):
+#     UserReference = DetermineReferences(givenRef)
+#     UserStruct = definedVars[UserReference[0][0]]
+#     realArrays = []
+#     # print(UserReference)
+#     for fortStructName, fortStruct in FinalStructs[UserStruct]["FortranStructs"].items():
+#         for arrayName, array in fortStruct["components"].items():
+#             if array[1] != "real": # array's data type
+#                 continue
+#             if len(UserReference) > 1 and arrayName != UserReference[1][0]:
+#                 continue
+#             realArrays.append((fortStructName, arrayName, array[0]))
+#     # print(realArrays)
+#     retVals = []
+#     for fortStructName, arrayName, n in realArrays:
+#         fortRefs = []
+#         fortRefs.append((UserReference[0][0] + "__" + fortStructName + (UserReference[0][1] if len(UserReference[0]) > 1 else "")))
+#         fortRefs.append(arrayName)
+#         retVals.append(("%".join(fortRefs), n))
+#     return retVals
+
+# def Loop_All_StructArrays():
+#     return [(struct["StructName"], struct["ppiclfArrayName"]) for struct in layout]
+
+# def Loop_All_SLNProps():
+#     return [p for p in Mapping["real_sol_wpos"]["map"].keys()]
+
+
+# def GenerateArraySlice(*args):
+#     particleIndex = args[0]
+#     startProp = args[1].lower()
+#     endProp = args[2].lower()
+#     if startProp[0] in "[(":
+#         startProp = [s.strip() for s in startProp[1:-1].split(",")]
+#     else:
+#         startProp = (startProp,)
+#     if endProp[0] in "[(":
+#         endProp = [s.strip() for s in endProp[1:-1].split(",")]
+#     else:
+#         endProp = (endProp,)
+
+#     startPropRef = DetermineReferences(propName=startProp[-1], substructures=startProp[0:-1])[0]
+#     endPropRef = DetermineReferences(propName=endProp[-1], substructures=endProp[0:-1])[0]
+
+#     expectedElements = int(args[3]) if len(args) == 4 else None
+    
+#     # print(startPropRef)
+#     # print(startProp)
+#     # print(endPropRef)
+#     # print(endProp)
+#     # print(expectedElements)
+
+#     if startPropRef[0] != endPropRef[0] or startPropRef[1] != endPropRef[1]:
+#         raise RuntimeError("Trying to slice between two elements not in the same array")
+
+#     startIndex = Mapping[startPropRef[2]]["map"][startProp[-1]]
+#     endIndex = Mapping[endPropRef[2]]["map"][endProp[-1]]
+
+#     if expectedElements is not None and (endIndex - startIndex + 1) != expectedElements:
+#         raise RuntimeError("Didn't generate a slice with the expected number of elements")
+
+#     # return str(startIndex) + ":" + str(endIndex)
+#     return startPropRef[0]["ppiclfArrayName"] + "(" + str(particleIndex) + ")%" + startPropRef[1] + "(" + str(startIndex) + ":" + str(endIndex) + ")"
+
+
+def CountReals(structType):
+    total = 0
+    for fortStructName, fortStruct in FinalStructs[structType]["FortranStructs"].items():
+        for arrayName, array in fortStruct["components"].items():
+            if array[1] == "real":
+                total += array[0]
     
     return str(total)
 
-
-def CountIntGhostProps():
+def CountInts(structType):
     total = 0
-    for struct in layout:
-        for a in struct["arrays"]:
-            if a[1] not in ["int_sol", "int_prop"]:
-                continue
-            if a[1] not in Mapping:
-                continue
-            total += Mapping[a[1]]["lastGhostIndex"] - Mapping[a[1]]["firstGhostIndex"] + 1
-            # print(a[1] + " " + str(total))
+    for fortStructName, fortStruct in FinalStructs[structType]["FortranStructs"].items():
+        for arrayName, array in fortStruct["components"].items():
+            if array[1] == "int":
+                total += array[0]
     
     return str(total)
 
+# def CountIntGhostProps():
+#     total = 0
+#     for struct in layout:
+#         for a in struct["arrays"]:
+#             if a[1] not in ["int_sol", "int_prop"]:
+#                 continue
+#             if a[1] not in Mapping:
+#                 continue
+#             total += Mapping[a[1]]["lastGhostIndex"] - Mapping[a[1]]["firstGhostIndex"] + 1
+#             # print(a[1] + " " + str(total))
+    
+#     return str(total)
 
-def Loop_All_Ghost_Real():
-    return [(struct["ppiclfArrayName"], array[0], Mapping[array[1]]["firstGhostIndex"], Mapping[array[1]]["lastGhostIndex"], arrayLens[array[1]]) for struct in layout for array in struct["arrays"] if arrayLens[array[1]] != 0 and Mapping[array[1]]["lastGhostIndex"] != 0 and array[1] in ["pos", "real_sol", "real_sol_wpos", "real_prop", "proj"]]
+
+# def Loop_All_Ghost_Real():
+#     return [(struct["ppiclfArrayName"], array[0], Mapping[array[1]]["firstGhostIndex"], Mapping[array[1]]["lastGhostIndex"], arrayLens[array[1]]) for struct in layout for array in struct["arrays"] if arrayLens[array[1]] != 0 and Mapping[array[1]]["lastGhostIndex"] != 0 and array[1] in ["pos", "real_sol", "real_sol_wpos", "real_prop", "proj"]]
 
 
-def Loop_All_Ghost_Int():
-    return [(struct["ppiclfArrayName"], array[0], Mapping[array[1]]["firstGhostIndex"], Mapping[array[1]]["lastGhostIndex"], arrayLens[array[1]]) for struct in layout for array in struct["arrays"] if arrayLens[array[1]] != 0 and Mapping[array[1]]["lastGhostIndex"] != 0 and array[1] in ["int_sol", "int_prop"]]
+# def Loop_All_Ghost_Int():
+#     return [(struct["ppiclfArrayName"], array[0], Mapping[array[1]]["firstGhostIndex"], Mapping[array[1]]["lastGhostIndex"], arrayLens[array[1]]) for struct in layout for array in struct["arrays"] if arrayLens[array[1]] != 0 and Mapping[array[1]]["lastGhostIndex"] != 0 and array[1] in ["int_sol", "int_prop"]]

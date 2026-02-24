@@ -1,5 +1,8 @@
 #include "PPICLF_STD.h"
+#:include 'PPICLF_PARTMACROS.fypp'
 module ppiclf_user
+
+    use ppiclf_m_types, only: @{LISTCOMPONENTS(PPICLF_t_ghostParticle)}@
     implicit none
     interface
         module subroutine ppiclf_user_SetYdot
@@ -16,9 +19,10 @@ module ppiclf_user
         module subroutine ppiclf_user_NearestNeighbor(i)
             integer*4 i
         end subroutine ppiclf_user_NearestNeighbor
-        module subroutine ppiclf_user_EvalNearestNeighbor(i,j)!,yi,rpropi,yj,rpropj)
+        module subroutine ppiclf_user_EvalNearestNeighbor(i,j, @{LISTCOMPONENTS(PPICLF_t_ghostParticle, neighbor)}@)!,yi,rpropi,yj,rpropj)
             integer*4 i
             integer*4 j
+            @:DECLAREPARTVAR(PPICLF_t_ghostParticle, neighbor)
             ! removed the extra parameters, because now i and j can be used to index into the particle array, regardless of ghost or not.
             ! real*8 yi    (PPICLF_LRS)    
             ! real*8 rpropi(PPICLF_LRP)
@@ -29,3 +33,5 @@ module ppiclf_user
         end subroutine ppiclf_user_InitZero
     end interface
 end module ppiclf_user
+
+

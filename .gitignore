@@ -10,8 +10,10 @@ build_lib/*.o
 ## ppiclF
 libpicl/ppiclf/source/*.swp
 libpicl/user_files/*.swp
-libpicl/ppiclF/3rd_party/gslib/gslib/src/*.swp
+libpicl/ppiclF/3rd_party/gslib/*
+!libpicl/ppiclF/3rd_party/gslib/install
 libpicl/ppiclF/build/*
 # leftover files from F90 migration
 libpicl/ppiclF/sourceF77/*
 libpicl/user_files_F77/*
+libpicl/ppiclF/tools/fyppmacros copy.py

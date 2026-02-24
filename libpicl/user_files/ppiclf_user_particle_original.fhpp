@@ -2,14 +2,11 @@
 
 ! particle position
 @:ADDPROP(pos, vec_real, solution, ghost)
-
-
 ! x velocity
 @:ADDPROP(vel, vec_real, solution, ghost)
-
-
 ! angular velocity (?)
 @:ADDPROP(ang_vel, vec_real, solution, ghost)
+
 
 @:ADDPROP(t, real, solution, ghost)
 @:ADDPROP(metal, real, solution, ghost)
@@ -19,74 +16,91 @@
 
 ! rprop: PPICLF_LRP
 ! rho p
-@:ADDPROP(RHOp, real, prop, ghost)
+@:ADDPROP(RHOp, real, ghost, prop)
 
 ! rho f (rho fluid, interpolated ?)
-@:ADDPROP(RHOf, real, interp)
+@:ADDPROP(RHOf, real, ghost, prop)
 
 ! particle diameter(?)
-@:ADDPROP(Dp, real, prop, ghost)
+@:ADDPROP(Dp, real, ghost, prop)
 
-! particle volume
-@:ADDPROP(VOLp, real, prop, ghost)
-
-@:ADDPROP(PHIp, real, interp)
+@:ADDPROP(VOLp, real, ghost, prop)
+@:ADDPROP(PHIp, real, ghost, prop)
 
 ! gas velocity vector
-@:ADDPROP(U, vec_real, interp)
+@:ADDPROP(U, vec_real, prop)
 
-! speed of sound in gas
-@:ADDPROP(CS, real, interp)
+@:ADDPROP(CS, real, ghost, prop)
 
 ! gas pressure derivative
-@:ADDPROP(DPDX, vec_real, interp)
-
+@:ADDPROP(DPDX, vec_real, prop)
 
 ! Du/Dt (?) Gas substantial derivative
-@:ADDPROP(SDR, vec_real, interp)
-! gas density time derivative
-@:ADDPROP(RHSR, real, interp)
+@:ADDPROP(SDR, vec_real, prop)
+
+@:ADDPROP(RHSR, real, ghost, prop)
 
 ! gas density velocity vector
-@:ADDPROP(JPGC, vec_real, interp)
+@:ADDPROP(PGC, vec_real, prop)
 
-! fluid temperature
-@:ADDPROP(JT, real, interp)
+@:ADDPROP(JDPi, real, ghost, prop)
+@:ADDPROP(JDPe, real, ghost, prop)
+@:ADDPROP(JSPL, real, ghost, prop)
+@:ADDPROP(JSPT, real, ghost, prop)
+
+@:ADDPROP(JT, real, ghost, prop)
 
 ! fluctuating QS force vector
 @:ADDPROP(FLUCTF, vec_real, prop)
 
-
 ! relative acceleration
 @:ADDPROP(WDOT, vec_real, prop, ghost)
 
-
 ! gas-phase vorticity (interpolated)
-@:ADDPROP(VOR, vec_real, interp)
+@:ADDPROP(VOR, vec_real, prop)
 
 ! initial particle diameter ?
-@:ADDPROP(IDp, real, prop)
+@:ADDPROP(IDp, real, ghost, prop)
 
 ! total burn time
-@:ADDPROP(BRNT, real, prop)
+@:ADDPROP(BRNT, real, ghost, prop)
 
-! pressure (?) (interpolated from fluid?)
-@:ADDPROP(Pf, real, interp)
+! pressure (?) (interpolated from fluid?, prop)
+@:ADDPROP(Pf, real, ghost, prop)
 
 ! grad of rho^g (fluid)
-@:ADDPROP(RHOG, vec_real, interp)
-
+@:ADDPROP(RHOG, vec_real, prop)
 
 ! ?????? 
-@:ADDPROP(DPVDX, vec_real, interp)
-
+@:ADDPROP(DPVDX, vec_real, prop)
 
 ! DOmega/Dt (?)
-@:ADDPROP(SDO, vec_real, interp)
+@:ADDPROP(SDO, vec_real, prop)
 
-@:ADDPROP(XIPAR, real, prop)
-@:ADDPROP(XIPERP, real, prop)
-@:ADDPROP(XIT, real, prop)
+@:ADDPROP(XIPAR, real, ghost, prop)
+@:ADDPROP(XIPERP, real, ghost, prop)
+@:ADDPROP(XIT, real, ghost, prop)
+
+
+!:ADDPROP(FQSX, real, ghost, prop)
+!:ADDPROP(FQSY, real, ghost, prop)
+!:ADDPROP(FQSZ, real, ghost, prop)
+!:ADDPROP(FAMX, real, ghost, prop)
+!:ADDPROP(FAMY, real, ghost, prop)
+!:ADDPROP(FAMZ, real, ghost, prop)
+!:ADDPROP(FAMBX, real, ghost, prop)
+!:ADDPROP(FAMBY, real, ghost, prop)
+!:ADDPROP(FAMBZ, real, ghost, prop)
+!:ADDPROP(FCX, real, ghost, prop)
+!:ADDPROP(FCY, real, ghost, prop)
+!:ADDPROP(FCZ, real, ghost, prop)
+!:ADDPROP(FVUX, real, ghost, prop)
+!:ADDPROP(FVUY, real, ghost, prop)
+!:ADDPROP(FVUZ, real, ghost, prop)
+!:ADDPROP(QQ, real, ghost, prop)
+!:ADDPROP(FPGX, real, ghost, prop) 
+!:ADDPROP(FPGY, real, ghost, prop) 
+!:ADDPROP(FPGZ, real, ghost, prop) 
 
 
 

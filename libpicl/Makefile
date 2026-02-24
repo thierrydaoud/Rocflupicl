@@ -76,7 +76,7 @@ POS = $(SOURCE_ROOT_PPICLF)/PPICLF
 
 
 default: libppicl
-# default: $(BUILD_ROOT_PPICLF)/testfile.f90
+test: $(BUILD_ROOT_PPICLF)/ppiclf_user.f90
 # default: $(BUILD_ROOT_USER)/ppiclf_user_imp.o
 
 libppicl: $(BUILD_ROOT_PPICLF)/libppiclF.a
@@ -112,6 +112,8 @@ $(BUILD_ROOT_PPICLF)/ppiclf_initsolve.o: $(BUILD_ROOT_PPICLF)/ppiclf_user.o
 $(BUILD_ROOT_PPICLF)/ppiclf_initsolve.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_particledata.o
 
 $(BUILD_ROOT_PPICLF)/ppiclf_m_particledata.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_types.o
+
+$(BUILD_ROOT_PPICLF)/ppiclf_user.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_types.o
 
 # user file dependencies
 $(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_m_user_ForceModels.o

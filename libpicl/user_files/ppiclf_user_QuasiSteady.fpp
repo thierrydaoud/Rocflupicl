@@ -24,7 +24,7 @@
 submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_QS
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:

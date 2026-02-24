@@ -25,7 +25,7 @@
 submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Torque
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -111,9 +111,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Torque
         !
         ! Compute relative angular velocity components
         !    and magnitude
-        omgrx = 0.5d0*(@{USEPARTICLE(i, JXVOR)}@) - (@{USEPARTICLE(i, y, OX)}@)
-        omgry = 0.5d0*(@{USEPARTICLE(i, JYVOR)}@) - (@{USEPARTICLE(i, y, OY)}@)
-        omgrz = 0.5d0*(@{USEPARTICLE(i, JZVOR)}@) - (@{USEPARTICLE(i, y, OZ)}@)
+        omgrx = 0.5d0*(@{USEPARTICLE(ppiclf_parts(i)%rprop%VOR%X)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%X)}@)
+        omgry = 0.5d0*(@{USEPARTICLE(ppiclf_parts(i)%rprop%VOR%Y)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Y)}@)
+        omgrz = 0.5d0*(@{USEPARTICLE(ppiclf_parts(i)%rprop%VOR%Z)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Z)}@)
         omgr_mag = sqrt(omgrx*omgrx + omgry*omgry + omgrz*omgrz)
 
         ! Particle rotational Reynolds number
@@ -186,13 +186,13 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Torque
         !
 
         ! Moment of interia with respect to gas
-        rIf = rhof*dp*dp*(@{USEPARTICLE(i, JVOLP)}@)/10.0d0
+        rIf = rhof*dp*dp*(@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@)/10.0d0
 
         ! Undisturbed torque component
         ! Written using angular velocity = 0.5*vorticity
-        taux_undist = 0.5d0*rIf*(@{USEPARTICLE(i, JSDOX)}@)
-        tauy_undist = 0.5d0*rIf*(@{USEPARTICLE(i, JSDOY)}@)
-        tauz_undist = 0.5d0*rIf*(@{USEPARTICLE(i, JSDOZ)}@)
+        taux_undist = 0.5d0*rIf*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDO%X)}@)
+        tauy_undist = 0.5d0*rIf*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDO%Y)}@)
+        tauz_undist = 0.5d0*rIf*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDO%Z)}@)
 
 
         return

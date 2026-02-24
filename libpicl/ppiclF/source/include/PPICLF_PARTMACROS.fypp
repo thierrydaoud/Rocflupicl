@@ -11,11 +11,26 @@ $:fyppmacros.GenStructs()
 
 $:fyppmacros.setvar("ndim", NDIM)
 
-#:include 'ppiclf_user_particle.fhpp'
+#:include 'ppiclf_user_particle_original.fhpp'
 
 #:endmute
 
 $:fyppmacros.FinalizeParticleStruct()
+
+
+#:def DECLAREPARTVAR(*args)
+$:fyppmacros.DeclarePartVar(*args)
+#:enddef DECLAREPARTVAR
+
+
+
+#:def USEMODVAR(PPICLF_t_particle, ppiclf_parts)
+$:fyppmacros.ImportModVar(PPICLF_t_particle, ppiclf_parts)
+#:enddef USEMODVAR
+
+#:def LISTCOMPONENTS(*args)
+$:", ".join(fyppmacros.ListComponents(*args))
+#:enddef LISTCOMPONENTS
 
 #:def USEPARTICLE(*args)
 $:fyppmacros.GenPropAccess(*args)

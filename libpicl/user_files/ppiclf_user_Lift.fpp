@@ -17,7 +17,7 @@
 submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Lift
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -104,9 +104,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Lift
         if (vmag .lt. 1.d-8) return
 
         ! Compute gas-phase vorticity components and magnitude
-        omgx = @{USEPARTICLE(i, JXVOR)}@
-        omgy = @{USEPARTICLE(i, JYVOR)}@
-        omgz = @{USEPARTICLE(i, JZVOR)}@
+        omgx = @{USEPARTICLE(ppiclf_parts(i)%rprop%VOR%X)}@
+        omgy = @{USEPARTICLE(ppiclf_parts(i)%rprop%VOR%Y)}@
+        omgz = @{USEPARTICLE(ppiclf_parts(i)%rprop%VOR%Z)}@
         omg_mag = sqrt(omgx*omgx + omgy*omgy + omgz*omgz)
 
         ! Compute Mei correction
@@ -174,9 +174,9 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_Lift
         if (vmag .lt. 1.d-8) return
 
         ! Compute particle angular velocity
-        omgx = @{USEPARTICLE(i, y, OX)}@
-        omgy = @{USEPARTICLE(i, y, OY)}@
-        omgz = @{USEPARTICLE(i, y, OZ)}@
+        omgx = @{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%X)}@
+        omgy = @{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Y)}@
+        omgz = @{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Z)}@
         omg_mag = sqrt(omgx*omgx + omgy*omgy + omgz*omgz)
 
         ! Correction to lift

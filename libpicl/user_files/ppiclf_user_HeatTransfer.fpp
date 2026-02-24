@@ -19,7 +19,7 @@
 submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_HeatTransfer
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -57,7 +57,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_HeatTransfer
         !
         ! Code:
         !
-        Q_conv = rpi*rkappa*dp*((@{USEPARTICLE(i, JT)}@) - (@{USEPARTICLE(i, y, T)}@) )
+        Q_conv = rpi*rkappa*dp*((@{USEPARTICLE(ppiclf_parts(i)%rprop%JT)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%T)}@) )
 
         Nuss = 0.0d0
         if (heattransfer_flag == 1) then

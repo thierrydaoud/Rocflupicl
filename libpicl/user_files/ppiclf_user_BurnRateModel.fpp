@@ -17,7 +17,7 @@
 submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_BurnRate
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -110,16 +110,16 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_BurnRate
         !     PARTICLE PROPERTIES
         !===============================================================
 
-        T_part = @{USEPARTICLE(i, y, T)}@
-        Pres   = @{USEPARTICLE(i, JP)}@ ! PPICLF_RPROP(PPICLF_R_JP,i)
+        T_part = @{USEPARTICLE(ppiclf_parts(i)%y%T)}@
+        Pres   = @{USEPARTICLE(ppiclf_parts(i)%rprop%Pf)}@ ! PPICLF_RPROP(PPICLF_R_JP,i)
 
-        m_me = @{USEPARTICLE(i, y, METAL)}@
-        m_ox = @{USEPARTICLE(i, y, OXIDE)}@
+        m_me = @{USEPARTICLE(ppiclf_parts(i)%y%METAL)}@
+        m_ox = @{USEPARTICLE(ppiclf_parts(i)%y%OXIDE)}@
 
-        Dia    = @{USEPARTICLE(i, JDP)}@
-        V_p    = @{USEPARTICLE(i, JVOLP)}@
+        Dia    = @{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@
+        V_p    = @{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@
 
-        D0 = @{USEPARTICLE(i, JIDP)}@
+        D0 = @{USEPARTICLE(ppiclf_parts(i)%rprop%IDP)}@
 
         V_me = m_me / rho_me
         psi_me = V_me / V_p
@@ -214,14 +214,14 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_BurnRate
         !----Updating PPICLF_RPOP values---------------------------------
 
         ! TEMP FIX
-        if (Dia .gt. @{USEPARTICLE(i, JIDP)}@) then
+        if (Dia .gt. @{USEPARTICLE(ppiclf_parts(i)%rprop%IDP)}@) then
             !         print*,'Warning Dia too big',
             !     >    i, PPICLF_RPROP(PPICLF_R_JIDP,i),Dia
-            Dia = @{USEPARTICLE(i, JIDP)}@
+            Dia = @{USEPARTICLE(ppiclf_parts(i)%rprop%IDP)}@
         endif
-        @{USEPARTICLE(i, JDP)}@   = Dia
-        @{USEPARTICLE(i, JRHOP)}@ = rho_p
-        @{USEPARTICLE(i, jvolp)}@ = vol_avg
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@   = Dia
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%RHOP)}@ = rho_p
+        @{USEPARTICLE(ppiclf_parts(i)%rprop%volp)}@ = vol_avg
 
         !===============================================================
         !     COMBUSTION HEAT TRANSFER
@@ -316,7 +316,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_BurnRate
 
         !-------------Check if particle is burning-----------------------
 
-        if ((T_part .ge. T_ign .or. @{USEPARTICLE(i, JBRNT)}@ .gt. 0.0) .and. Dp_me .gt. 5.0d-6) then
+        if ((T_part .ge. T_ign .or. @{USEPARTICLE(ppiclf_parts(i)%rprop%BRNT)}@ .gt. 0.0) .and. Dp_me .gt. 5.0d-6) then
 
             !Burn law
             mdot_me = C*rho_me*(Dia**1.2d0) * xi_eff*(T_part**0.2d0) * (pres**0.1d0) * psi_me
@@ -324,7 +324,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_BurnRate
             mdot_ox = 0.25d0 * rpi * Dia**2.0d0 * abs(vmag) * 0.25d0 * Cs
 
             !update total burn time
-            @{USEPARTICLE(i, JBRNT)}@  = @{USEPARTICLE(i, JBRNT)}@ + ppiclf_dt
+            @{USEPARTICLE(ppiclf_parts(i)%rprop%BRNT)}@  = @{USEPARTICLE(ppiclf_parts(i)%rprop%BRNT)}@ + ppiclf_dt
         else
             mdot_me = 0.0d0
             mdot_ox = 0.0d0

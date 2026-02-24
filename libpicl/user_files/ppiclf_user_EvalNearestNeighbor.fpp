@@ -24,7 +24,7 @@
 submodule (ppiclf_user) ppiclf_user_EvalNearestNeighbor_imp
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -72,6 +72,7 @@ module procedure ppiclf_user_EvalNearestNeighbor
     !     >   ViscousUnsteady_flag, ppiclf_nUnsteadyData, ppiclf_nTimeBH,
     !     >   sbNearest_flag, burnrate_flag, flow_model
 
+    ! @{USEMODVAR(PPICLF_t_ghostParticle, neighbor)}@
     !
     ! Internal:
     !
@@ -123,13 +124,13 @@ module procedure ppiclf_user_EvalNearestNeighbor
         !Added spload and radius factor
 
         ! Compute mean particle diameter between i and j; delta_{ij}
-        rthresh  = 0.5d0*(@{USEPARTICLE(i, JDP)}@ + @{USEPARTICLE(j, JDP)}@)
+        rthresh  = 0.5d0*(@{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@ + @{USEPARTICLE(neighbor%rprop%DP)}@)
 
         ! Compute vector components and distance between 
         !    centers of particles i and j; D_{ij}
-        rxdiff = (@{USEPARTICLE(j, y, X)}@) - (@{USEPARTICLE(i, y, X)}@)
-        rydiff = (@{USEPARTICLE(j, y, Y)}@) - (@{USEPARTICLE(i, y, Y)}@)
-        rzdiff = (@{USEPARTICLE(j, y, Z)}@) - (@{USEPARTICLE(i, y, Z)}@)
+        rxdiff = (@{USEPARTICLE(neighbor%y%pos%X)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%pos%X)}@)
+        rydiff = (@{USEPARTICLE(neighbor%y%pos%Y)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%pos%Y)}@)
+        rzdiff = (@{USEPARTICLE(neighbor%y%pos%Z)}@) - (@{USEPARTICLE(ppiclf_parts(i)%y%pos%Z)}@)
         
         rdiff = rxdiff**2 + rydiff**2 + rzdiff**2
         rdiff = sqrt(rdiff)
@@ -169,7 +170,7 @@ module procedure ppiclf_user_EvalNearestNeighbor
             
             ! Compute the resistance matrix
             ! Only valid for monodispersed particles
-            rad = 0.5d0*(@{USEPARTICLE(i, JDP)}@)
+            rad = 0.5d0*(@{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@)
 
             call resistance_pair(rxdiff1, rydiff1, rzdiff1, alpha_local, rad, R_pair)
                 
@@ -178,17 +179,14 @@ module procedure ppiclf_user_EvalNearestNeighbor
                 
             do k=1,3
                 do l=1,3
-                    ! TODO: verify that WDOTX, WDOTY, WDOTZ are actually contiguous
-                    ll = ${fyppmacros.Mapping["real_prop"]["map"]["wdotx"]}$ + (l-1)
                     ! added mass
-                    Fam(k) = Fam(k) + R_pair(k,l)   * ppiclf_parts(i)%rprop(ll)
+                    Fam(k) = Fam(k) + R_pair(k,l)   * @{USEPARTICLE(ppiclf_parts(i)%rprop%WDOT, skipIndex)}@(l)
                     ! induced added mass
-                    Fam(k) = Fam(k) + R_pair(k,l+3) * ppiclf_parts(j)%rprop(ll)
+                    Fam(k) = Fam(k) + R_pair(k,l+3) * @{USEPARTICLE(neighbor%rprop%WDOT, skipIndex)}@(l)
                 end do ! l-loop
 
                 ! accumulate neighbor acceleration
-                kk = ${fyppmacros.Mapping["real_prop"]["map"]["wdotx"]}$ + (k-1)
-                Wdot_neighbor_mean(k) = Wdot_neighbor_mean(k)  + ppiclf_parts(j)%rprop(kk)
+                Wdot_neighbor_mean(k) = Wdot_neighbor_mean(k)  + @{USEPARTICLE(neighbor%rprop%WDOT, skipIndex)}@(k)
             end do ! k-loop
         end if ! am_flag==2 .and. rdiff <= ppiclf_nndist
 
@@ -211,16 +209,16 @@ module procedure ppiclf_user_EvalNearestNeighbor
             nu2 = 0.35d0 ! Assumed value for Poisson's ratio
             Estar = (1.0d0-nu1*nu1)/E1 + (1.0d0-nu2*nu2)/E2
             Estar = 1.0d0/Estar
-            r1 = 0.5d0*(@{USEPARTICLE(i, JDP)}@)
-            r2 = 0.5d0*(@{USEPARTICLE(j, JDP)}@)
+            r1 = 0.5d0*(@{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@)
+            r2 = 0.5d0*(@{USEPARTICLE(neighbor%rprop%DP)}@)
             Rstar = r1*r2/(r1+r2)
             ksp2 = (4.0d0/3.0d0)*Estar*sqrt(Rstar)
             ksp2 = ksp2*sqrt(abs(rdiff-rthresh))
             ! kn = min(k1,k2)
             ksp_min = min(ksp1,ksp2)
 
-            rm1 = (@{USEPARTICLE(i, JRHOP)}@) * (@{USEPARTICLE(i, JVOLP)}@)
-            rm2 = (@{USEPARTICLE(j, JRHOP)}@) * (@{USEPARTICLE(j, JVOLP)}@)
+            rm1 = (@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOP)}@) * (@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@)
+            rm2 = (@{USEPARTICLE(neighbor%rprop%RHOP)}@) * (@{USEPARTICLE(neighbor%rprop%VOLP)}@)
             
             rmult = (rm1*rm2)/(rm1+rm2)
             eta_n = -2.0d0*sqrt(ksp_min)*log(erest)/sqrt(log(erest)**2+pi2)*sqrt(rmult)
@@ -237,17 +235,17 @@ module procedure ppiclf_user_EvalNearestNeighbor
             rn_mag = rdiff
          
             ! Relative velocity in normal direction
-            u12x = (@{USEPARTICLE(i, y, VX)}@) - (@{USEPARTICLE(j, y, VX)}@)
-            u12y = (@{USEPARTICLE(i, y, VY)}@) - (@{USEPARTICLE(j, y, VY)}@)
-            u12z = (@{USEPARTICLE(i, y, VZ)}@) - (@{USEPARTICLE(j, y, VZ)}@)
+            u12x = (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%X)}@) - (@{USEPARTICLE(neighbor%y%Vel%X)}@)
+            u12y = (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@) - (@{USEPARTICLE(neighbor%y%Vel%Y)}@)
+            u12z = (@{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@) - (@{USEPARTICLE(neighbor%y%Vel%Z)}@)
 
             if (collisional_flag>=2) then
                ! Add contribution from angular velocity
-               rad1 = 0.5d0*(@{USEPARTICLE(i, JDP)}@)
-               rad2 = 0.5d0*(@{USEPARTICLE(j, JDP)}@)
-               A12x = rad1 * (@{USEPARTICLE(i, y, OX)}@) + rad2 * (@{USEPARTICLE(j, y, OX)}@)
-               A12y = rad1 * (@{USEPARTICLE(i, y, OY)}@) + rad2 * (@{USEPARTICLE(j, y, OY)}@)
-               A12z = rad1 * (@{USEPARTICLE(i, y, OZ)}@) + rad2 * (@{USEPARTICLE(j, y, OZ)}@)
+               rad1 = 0.5d0*(@{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@)
+               rad2 = 0.5d0*(@{USEPARTICLE(neighbor%rprop%DP)}@)
+               A12x = rad1 * (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%X)}@) + rad2 * (@{USEPARTICLE(neighbor%y%ang_vel%X)}@)
+               A12y = rad1 * (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Y)}@) + rad2 * (@{USEPARTICLE(neighbor%y%ang_vel%Y)}@)
+               A12z = rad1 * (@{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Z)}@) + rad2 * (@{USEPARTICLE(neighbor%y%ang_vel%Z)}@)
 
                u12x = u12x + (A12y*rn_12z - A12z*rn_12y)
                u12y = u12y + (A12z*rn_12x - A12x*rn_12z)
@@ -300,7 +298,7 @@ module procedure ppiclf_user_EvalNearestNeighbor
                Ftx = Ftmin*rt_12x
                Fty = Ftmin*rt_12y
                Ftz = Ftmin*rt_12z
-               rad1 = 0.5d0* (@{USEPARTICLE(i, JDP)}@) ! rpropi(PPICLF_R_JDP)
+               rad1 = 0.5d0* (@{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@) ! rpropi(PPICLF_R_JDP)
                tcx = rad1*(rn_12y*Ftz - rn_12z*Fty)
                tcy = rad1*(rn_12z*Ftx - rn_12x*Ftz)
                tcz = rad1*(rn_12x*Fty - rn_12y*Ftx)
@@ -308,12 +306,12 @@ module procedure ppiclf_user_EvalNearestNeighbor
                if (collisional_flag>=3) then
                   ! Add Rolling torque contribution
                   thetar = 0.06  ! Needs to be calibrated
-                  dp1 = @{USEPARTICLE(i, JDP)}@
-                  dp2 = @{USEPARTICLE(j, JDP)}@
+                  dp1 = @{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@
+                  dp2 = @{USEPARTICLE(neighbor%rprop%DP)}@
                   r12 = 0.5d0*(dp1*dp2)/(dp1+dp2)
-                  omgrx = @{USEPARTICLE(i, y, OX)}@ - @{USEPARTICLE(j, y, OX)}@
-                  omgry = @{USEPARTICLE(i, y, OY)}@ - @{USEPARTICLE(j, y, OY)}@
-                  omgrz = @{USEPARTICLE(i, y, OZ)}@ - @{USEPARTICLE(j, y, OZ)}@
+                  omgrx = @{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%X)}@ - @{USEPARTICLE(neighbor%y%ang_vel%X)}@
+                  omgry = @{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Y)}@ - @{USEPARTICLE(neighbor%y%ang_vel%Y)}@
+                  omgrz = @{USEPARTICLE(ppiclf_parts(i)%y%ang_vel%Z)}@ - @{USEPARTICLE(neighbor%y%ang_vel%Z)}@
                   omgr_mag = sqrt(omgrx*omgrx+omgry*omgry+omgrz*omgrz)
                   omgr_mag = max(omgr_mag,1.d-8)
                   trx = -thetar*Fn_mag*r12*omgrx/omgr_mag
@@ -327,14 +325,14 @@ module procedure ppiclf_user_EvalNearestNeighbor
             !   that involve nearest neighbors
 
             ! Particle velocities
-            @{USEPARTICLE(i, ydotc, VX)}@ = @{USEPARTICLE(i, ydotc, VX)}@ + rnmag*rn_12x + Ftmin*rt_12x
-            @{USEPARTICLE(i, ydotc, VY)}@ = @{USEPARTICLE(i, ydotc, VY)}@ + rnmag*rn_12y + Ftmin*rt_12y
-            @{USEPARTICLE(i, ydotc, VZ)}@ = @{USEPARTICLE(i, ydotc, VZ)}@ + rnmag*rn_12z + Ftmin*rt_12z
+            @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%X)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%X)}@ + rnmag*rn_12x + Ftmin*rt_12x
+            @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%Y)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%Y)}@ + rnmag*rn_12y + Ftmin*rt_12y
+            @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%Z)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%Z)}@ + rnmag*rn_12z + Ftmin*rt_12z
 
             ! Particle angular velocities
-            @{USEPARTICLE(i, ydotc, OX)}@ = @{USEPARTICLE(i, ydotc, OX)}@ + tcx + trx
-            @{USEPARTICLE(i, ydotc, OY)}@ = @{USEPARTICLE(i, ydotc, OY)}@ + tcy + try
-            @{USEPARTICLE(i, ydotc, OZ)}@ = @{USEPARTICLE(i, ydotc, OZ)}@ + tcz + trz
+            @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%X)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%X)}@ + tcx + trx
+            @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%Y)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%Y)}@ + tcy + try
+            @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%Z)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%ang_vel%Z)}@ + tcz + trz
 
         end if ! rdiff lt rthresh
 
@@ -348,22 +346,22 @@ module procedure ppiclf_user_EvalNearestNeighbor
         IF(qs_fluct_filter_adapt_flag.NE.0) THEN
             ! Adaptive filter defined wrt particle i
             ! Used for adaptive box or gaussian
-            dpl = @{USEPARTICLE(i, JDP)}@
-            phip = @{USEPARTICLE(i, JPHIP)}@
+            dpl = @{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@
+            phip = @{USEPARTICLE(ppiclf_parts(i)%rprop%PHIP)}@
             adptfilter = ( 10.*(dpl**3)/max(1.e-4,phip) )**(1./3.)
             adptfilter = adptfilter/2.0
             IF(adptfilter .GT. dist2) dist2 = adptfilter
         END IF
 
         ! Check if particle lies inside box or gaussian filter
-        xdist2 = abs((@{USEPARTICLE(i, y, X)}@) - (@{USEPARTICLE(j, y, X)}@))
+        xdist2 = abs((@{USEPARTICLE(ppiclf_parts(i)%y%pos%X)}@) - (@{USEPARTICLE(neighbor%y%pos%X)}@))
         if (xdist2 .gt. dist2) return
 
-        ydist2 = abs((@{USEPARTICLE(i, y, Y)}@) - (@{USEPARTICLE(j, y, Y)}@))
+        ydist2 = abs((@{USEPARTICLE(ppiclf_parts(i)%y%pos%Y)}@) - (@{USEPARTICLE(neighbor%y%pos%Y)}@))
         if (ydist2 .gt. dist2) return
 
         if (ppiclf_ndim .eq. 3) then
-            zdist2 = abs((@{USEPARTICLE(i, y, Z)}@) - (@{USEPARTICLE(j, y, Z)}@))
+            zdist2 = abs((@{USEPARTICLE(ppiclf_parts(i)%y%pos%Z)}@) - (@{USEPARTICLE(neighbor%y%pos%Z)}@))
             if (zdist2 .gt. dist2) return
         endif
 
@@ -373,25 +371,25 @@ module procedure ppiclf_user_EvalNearestNeighbor
         !
         if (j.ne.0) then
             if (qs_fluct_filter_flag==0) then
-                upmean   = upmean + (@{USEPARTICLE(j, y, VX)}@)
-                vpmean   = vpmean + (@{USEPARTICLE(j, y, VY)}@)
-                wpmean   = wpmean + (@{USEPARTICLE(j, y, VZ)}@)
-                u2pmean  = u2pmean + (@{USEPARTICLE(j, y, VX)}@)**2
-                v2pmean  = v2pmean + (@{USEPARTICLE(j, y, VY)}@)**2
-                w2pmean  = w2pmean + (@{USEPARTICLE(j, y, VZ)}@)**2
+                upmean   = upmean + (@{USEPARTICLE(neighbor%y%vel%X)}@)
+                vpmean   = vpmean + (@{USEPARTICLE(neighbor%y%vel%Y)}@)
+                wpmean   = wpmean + (@{USEPARTICLE(neighbor%y%vel%Z)}@)
+                u2pmean  = u2pmean + (@{USEPARTICLE(neighbor%y%vel%X)}@)**2
+                v2pmean  = v2pmean + (@{USEPARTICLE(neighbor%y%vel%Y)}@)**2
+                w2pmean  = w2pmean + (@{USEPARTICLE(neighbor%y%vel%Z)}@)**2
                 icpmean  = icpmean + 1
             else if (qs_fluct_filter_flag==1) then
                 ! See https://dpzwick.github.io/ppiclF-doc/algorithms/overlap_mesh.html
                 dist = sqrt(xdist2**2 + ydist2**2 + zdist2**2)
                 gkern = sqrt(pi*dist2**2/(4.0d0*log(2.0d0)))**(-ppiclf_ndim) * exp(-dist**2/(dist2**2/(4.0d0*log(2.0d0))))
 
-                phipmean = phipmean + gkern*(@{USEPARTICLE(j, JVOLP)}@)
-                upmean   = upmean + gkern * (@{USEPARTICLE(j, y, VX)}@) * (@{USEPARTICLE(j, JVOLP)}@)
-                vpmean   = vpmean + gkern * (@{USEPARTICLE(j, y, VY)}@) * (@{USEPARTICLE(j, JVOLP)}@)
-                wpmean   = wpmean + gkern * (@{USEPARTICLE(j, y, VZ)}@) * (@{USEPARTICLE(j, JVOLP)}@)
-                u2pmean  = u2pmean + gkern * ((@{USEPARTICLE(j, y, VX)}@)**2) * (@{USEPARTICLE(j, JVOLP)}@)
-                v2pmean  = v2pmean + gkern * ((@{USEPARTICLE(j, y, VY)}@)**2) * (@{USEPARTICLE(j, JVOLP)}@)
-                w2pmean  = w2pmean + gkern * ((@{USEPARTICLE(j, y, VZ)}@)**2) * (@{USEPARTICLE(j, JVOLP)}@)
+                phipmean = phipmean + gkern*(@{USEPARTICLE(neighbor%rprop%VOLP)}@)
+                upmean   = upmean + gkern * (@{USEPARTICLE(neighbor%y%vel%X)}@) * (@{USEPARTICLE(neighbor%rprop%VOLP)}@)
+                vpmean   = vpmean + gkern * (@{USEPARTICLE(neighbor%y%vel%Y)}@) * (@{USEPARTICLE(neighbor%rprop%VOLP)}@)
+                wpmean   = wpmean + gkern * (@{USEPARTICLE(neighbor%y%vel%Z)}@) * (@{USEPARTICLE(neighbor%rprop%VOLP)}@)
+                u2pmean  = u2pmean + gkern * ((@{USEPARTICLE(neighbor%y%vel%X)}@)**2) * (@{USEPARTICLE(neighbor%rprop%VOLP)}@)
+                v2pmean  = v2pmean + gkern * ((@{USEPARTICLE(neighbor%y%vel%Y)}@)**2) * (@{USEPARTICLE(neighbor%rprop%VOLP)}@)
+                w2pmean  = w2pmean + gkern * ((@{USEPARTICLE(neighbor%y%vel%Z)}@)**2) * (@{USEPARTICLE(neighbor%rprop%VOLP)}@)
                 icpmean = icpmean + 1
             end if
         end if
@@ -408,18 +406,18 @@ module procedure ppiclf_user_EvalNearestNeighbor
         ! give a bit larger collision threshold for walls
         rextra   = 0.05d0 !
         ! add sploading and radius factor 
-        rthresh  = (0.5d0+rextra)* (@{USEPARTICLE(i, JDP)}@)
+        rthresh  = (0.5d0+rextra)* (@{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@)
         
-        rxdiff = @{USEPARTICLE(j, y, X)}@ - @{USEPARTICLE(i, y, X)}@
-        rydiff = @{USEPARTICLE(j, y, Y)}@ - @{USEPARTICLE(i, y, Y)}@
-        rzdiff = @{USEPARTICLE(j, y, Z)}@ - @{USEPARTICLE(i, y, Z)}@
+        rxdiff = @{USEPARTICLE(neighbor%y%pos%X)}@ - @{USEPARTICLE(ppiclf_parts(i)%y%pos%X)}@
+        rydiff = @{USEPARTICLE(neighbor%y%pos%Y)}@ - @{USEPARTICLE(ppiclf_parts(i)%y%pos%Y)}@
+        rzdiff = @{USEPARTICLE(neighbor%y%pos%Z)}@ - @{USEPARTICLE(ppiclf_parts(i)%y%pos%Z)}@
         
         rdiff = rxdiff**2 + rydiff**2 + rzdiff**2
         rdiff = sqrt(rdiff)
         
         if (rdiff .gt. rthresh) return
 
-        rm1 = (@{USEPARTICLE(i, JRHOP)}@)*(@{USEPARTICLE(i, JVOLP)}@)
+        rm1 = (@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOP)}@)*(@{USEPARTICLE(ppiclf_parts(i)%rprop%VOLP)}@)
 
         ! Compute spring stiffness constant dynamically, 
         !   which overrides the user defined value
@@ -430,7 +428,7 @@ module procedure ppiclf_user_EvalNearestNeighbor
         E1  = 1.0d9  ! Assumed value for Young's modulus
         nu1 = 0.35d0 ! Assumed value for Poisson's ratio
         Estar = E1/(1.0d0-nu1*nu1)
-        r1 = 0.5d0*@{USEPARTICLE(i, JDP)}@
+        r1 = 0.5d0*@{USEPARTICLE(ppiclf_parts(i)%rprop%DP)}@
         r2 = r1
         Rstar = r1*r2/(r1+r2)
         ksp2 = (2.0d0/3.0d0)*Estar*sqrt(Rstar)
@@ -448,16 +446,16 @@ module procedure ppiclf_user_EvalNearestNeighbor
     
         rdelta12 = rthresh - rdiff
         
-        rv12_mag = - (@{USEPARTICLE(i, y, VX)}@) * rn_12x- (@{USEPARTICLE(i, y, VY)}@) * rn_12y- (@{USEPARTICLE(i, y, VZ)}@) * rn_12z
+        rv12_mag = - (@{USEPARTICLE(ppiclf_parts(i)%y%vel%X)}@) * rn_12x- (@{USEPARTICLE(ppiclf_parts(i)%y%vel%Y)}@) * rn_12y- (@{USEPARTICLE(ppiclf_parts(i)%y%vel%Z)}@) * rn_12z
 
         rv12_mage = rv12_mag*eta_n
         rksp_max  = rksp_wall*rdelta12
         rnmag     = -rksp_max - rv12_mage
 
          
-        @{USEPARTICLE(i, ydotc, VX)}@ = @{USEPARTICLE(i, ydotc, VX)}@ + rnmag*rn_12x
-        @{USEPARTICLE(i, ydotc, VY)}@ = @{USEPARTICLE(i, ydotc, VY)}@ + rnmag*rn_12y
-        @{USEPARTICLE(i, ydotc, VZ)}@ = @{USEPARTICLE(i, ydotc, VZ)}@ + rnmag*rn_12z
+        @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%X)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%X)}@ + rnmag*rn_12x
+        @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Y)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Y)}@ + rnmag*rn_12y
+        @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Z)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Z)}@ + rnmag*rn_12z
         
         !write(*,*) "Wall NEAR",i,ppiclf_ydotc(PPICLF_JVY,i)  
     endif

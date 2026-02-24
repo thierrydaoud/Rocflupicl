@@ -5,7 +5,7 @@ module ppiclf_initsolve
     ! particle data
     use ppiclf_data, only: ppiclf_npart
 
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only: ppiclf_int_fld
     ! particle options variables
@@ -40,15 +40,15 @@ module ppiclf_initsolve
         INTEGER*4 i,j,ie
         !
         ! zero'ing real particle properties
-        DO i=-PPICLF_LPART_GP, PPICLF_LPART
-#:for structArray, memberArray, n in fyppmacros.Loop_All_RealArrays()
+        DO i=1, PPICLF_LPART
+#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)")
             DO j=1, ${n}$
-                ${structArray}$(i)%${memberArray}$(j) = 0.0
+                ${particle}$(j) = 0.0
             END DO
 #:endfor
-#:for structArray, memberArray, n in fyppmacros.Loop_All_IntArrays()
+#:for particle, n in fyppmacros.Loop_All_Ints("ppiclf_parts(i)")
             DO j=1, ${n}$
-                ${structArray}$(i)%${memberArray}$ = 0.0
+                ${particle}$(j) = 0.0
             END DO
 #:endfor
         END DO

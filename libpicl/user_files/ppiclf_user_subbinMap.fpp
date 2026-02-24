@@ -7,10 +7,12 @@
 !
 !-----------------------------------------------------------------------
 !
+#:include 'PPICLF_PARTMACROS.fypp'
+
 module ppiclf_m_user_SubbinMap
     ! particle data
     use ppiclf_data, only: ppiclf_npart
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@, @{USEMODVAR(PPICLF_t_ghostParticle, ppiclf_gparts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -70,7 +72,7 @@ module ppiclf_m_user_SubbinMap
         ! Determine ppiclf bin in each dimension for this processor
         ! All real particles are in the same bin.  Look at 1st r particle
         DO l = 1,3
-            i_Bin(l) = FLOOR((ppiclf_partpos(i)%pos(l) - ppiclf_binb(2*l-1)) /ppiclf_bins_dx(l))
+            i_Bin(l) = FLOOR((@{USEPARTICLE(ppiclf_parts(i)%y%pos, skipIndex)}@(l) - ppiclf_binb(2*l-1)) /ppiclf_bins_dx(l))
             bin_xMin(l) = ppiclf_binb(2*l-1)+i_Bin(l)*ppiclf_bins_dx(l) 
         END DO 
         ! Determine the number of subbins in each dimension
@@ -94,7 +96,7 @@ module ppiclf_m_user_SubbinMap
         DO i = 1 , ppiclf_npart
             DO l = 1,3
                 IF (l .LT. 3 .OR. ppiclf_ndim .GT. 2) THEN
-                    xp(l) = ppiclf_partpos(0 - i)%pos(l)
+                    xp(l) = @{USEPARTICLE(ppiclf_parts(i)%y%pos, skipIndex)}@(l)
                 ELSE
                     xp(l) = 0.0
                 END IF
@@ -117,7 +119,7 @@ module ppiclf_m_user_SubbinMap
         DO i = 1 , ppiclf_npart_gp
             DO l = 1,3
                 IF (l .LT. 3 .OR. ppiclf_ndim .GT. 2) THEN
-                    xp(l) = ppiclf_partpos(i)%pos(l)
+                    xp(l) = @{USEPARTICLE(ppiclf_gparts(i)%y%pos, skipIndex)}@(l)
                 ELSE
                     xp(l) = 0.0
                 END IF

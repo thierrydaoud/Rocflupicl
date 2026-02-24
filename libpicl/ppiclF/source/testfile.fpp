@@ -5,21 +5,12 @@
 @:GENERATESTRUCTS()
 
 
-type(PPICLF_t_particlepos) :: ppiclf_partpos(1000)
-type(PPICLF_t_particle)     :: ppiclf_parts(1000)
+
+@:DECLAREPARTVAR(PPICLF_t_particle, ppiclf_parts, (PPICLF_LPART))
 
 
-@{USEPARTICLE(500, ydot, x)}@
+@{USEPARTICLE(ppiclf_parts(i)%y%pos%x)}@
 
-DO i=1, 1000
-#:for structArray, memberArray, n in fyppmacros.Loop_All_RealArrays()
-    DO j=1, ${n}$
-        ${structArray}$(i)%${memberArray}$ = 0.0
-    END DO
-#:endfor
-#:for structArray, memberArray, n in fyppmacros.Loop_All_IntArrays()
-    DO j=1, ${n}$
-        ${structArray}$(i)%${memberArray}$ = 0.0
-    END DO
-#:endfor
-END DO
+@{USEPARTICLE(ppiclf_parts(i)%yodtc%vel%z)}@
+
+@{USEPARTICLE(ppiclf_parts(i, 1:10)%y%pos%x)}@
