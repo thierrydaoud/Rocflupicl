@@ -19,8 +19,8 @@
 #include "PPICLF_STD.h"
 submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_ViscousUnsteady
     ! particle data
-    use ppiclf_data, only: ppiclf_npart, ppiclf_drudtPlag, ppiclf_drudtMixt
-    use ppiclf_m_particledata, only: ppiclf_partpos, ppiclf_parts
+    use ppiclf_data, only: ppiclf_npart, ppiclf_drudtPlag, ppiclf_drudtMixt, ppiclf_timeBH
+    use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
     use ppiclf_data, only:
     use ppiclf_data, only:
@@ -43,6 +43,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_ViscousUnsteady
 
 
     use ppiclf_m_user_data
+    use ppiclf_m_user_RFLUdata
 
     use ppiclf_op, only: ppiclf_exittr
     implicit none
@@ -181,10 +182,10 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_ViscousUnsteady
         !
         ! Code:
         !
-        SDrho = ppiclf_rprop(PPICLF_R_JRHSR,i)
-        >         + ppiclf_y(PPICLF_JVX,i) * ppiclf_rprop(PPICLF_R_JPGCX,i)
-        >         + ppiclf_y(PPICLF_JVY,i) * ppiclf_rprop(PPICLF_R_JPGCY,i)
-        >         + ppiclf_y(PPICLF_JVZ,i) * ppiclf_rprop(PPICLF_R_JPGCZ,i)
+        SDrho = @{USEPARTICLE(ppiclf_parts(i)%rprop%rhsr)}@                                                      &
+            + @{USEPARTICLE(ppiclf_parts(i)%y%vel%X)}@ * @{USEPARTICLE(ppiclf_parts(i)%rprop%PGC%X)}@   &
+            + @{USEPARTICLE(ppiclf_parts(i)%y%vel%Y)}@ * @{USEPARTICLE(ppiclf_parts(i)%rprop%PGC%Y)}@   &
+            + @{USEPARTICLE(ppiclf_parts(i)%y%vel%Z)}@ * @{USEPARTICLE(ppiclf_parts(i)%rprop%PGC%Z)}@
 
         ! 03/11/2025 - Thierry - substantial derivative from Rocflu is
         !              weighted by \phi^g.
@@ -195,32 +196,26 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_ViscousUnsteady
         SDrho = SDrho / (rphif)
 
         ! 03/23/2025 - TLJ - added extra term involving grad(rhog)
-        vgradrho = vx*ppiclf_rprop(PPICLF_R_JRHOGX,i) +
-        >           vy*ppiclf_rprop(PPICLF_R_JRHOGY,i) +
-        >           vz*ppiclf_rprop(PPICLF_R_JRHOGZ,i)
+        vgradrho =  vx*@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOG%X)}@ +    &
+                    vy*@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOG%Y)}@ +    &
+                    vz*@{USEPARTICLE(ppiclf_parts(i)%rprop%RHOG%Z)}@
 
-        ug = ppiclf_rprop(PPICLF_R_JUX,i)
-        vg = ppiclf_rprop(PPICLF_R_JUY,i)
-        wg = ppiclf_rprop(PPICLF_R_JUZ,i)
-        up = ppiclf_y(PPICLF_JVX,i)
-        vp = ppiclf_y(PPICLF_JVY,i)
-        wp = ppiclf_y(PPICLF_JVZ,i)
+        ug = @{USEPARTICLE(ppiclf_parts(i)%rprop%U%X)}@
+        vg = @{USEPARTICLE(ppiclf_parts(i)%rprop%U%Y)}@
+        wg = @{USEPARTICLE(ppiclf_parts(i)%rprop%U%Z)}@
+        up = @{USEPARTICLE(ppiclf_parts(i)%y%Vel%X)}@
+        vp = @{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@
+        wp = @{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@
 
         ! D(rhog*ug)/Dt
-        ppiclf_drudtMixt(PPICLF_JX,1,i) =
-        >   ug*(SDrho+vgradrho) + rhof*ppiclf_rprop(PPICLF_R_JSDRX,i)
-        ppiclf_drudtMixt(PPICLF_JY,1,i) =
-        >   vg*(SDrho+vgradrho) + rhof*ppiclf_rprop(PPICLF_R_JSDRY,i)
-        ppiclf_drudtMixt(PPICLF_JZ,1,i) =
-        >   wg*(SDrho+vgradrho) + rhof*ppiclf_rprop(PPICLF_R_JSDRZ,i)
+        ppiclf_drudtMixt(PPICLF_JX,1,i) = ug*(SDrho+vgradrho) + rhof*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%X)}@)
+        ppiclf_drudtMixt(PPICLF_JY,1,i) = vg*(SDrho+vgradrho) + rhof*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%Y)}@)
+        ppiclf_drudtMixt(PPICLF_JZ,1,i) = wg*(SDrho+vgradrho) + rhof*(@{USEPARTICLE(ppiclf_parts(i)%rprop%SDR%Z)}@)
 
         ! d(rhog*up)/dt
-        ppiclf_drudtPlag(PPICLF_JX,1,i) =
-        >   up*SDrho + rhof*ppiclf_ydot(PPICLF_JVX,i)
-        ppiclf_drudtPlag(PPICLF_JY,1,i) =
-        >   vp*SDrho + rhof*ppiclf_ydot(PPICLF_JVY,i)
-        ppiclf_drudtPlag(PPICLF_JZ,1,i) =
-        >   wp*SDrho + rhof*ppiclf_ydot(PPICLF_JVZ,i)
+        ppiclf_drudtPlag(PPICLF_JX,1,i) = up*SDrho + rhof*@{USEPARTICLE(ppiclf_parts(i)%ydot%Vel%X)}@
+        ppiclf_drudtPlag(PPICLF_JY,1,i) = vp*SDrho + rhof*@{USEPARTICLE(ppiclf_parts(i)%ydot%Vel%Y)}@
+        ppiclf_drudtPlag(PPICLF_JZ,1,i) = wp*SDrho + rhof*@{USEPARTICLE(ppiclf_parts(i)%ydot%Vel%Z)}@
 
 
         return
@@ -246,6 +241,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_ViscousUnsteady
         !
         ! Code:
         !
+#if PPICLF_LRP3 != 0
         do i=1,ppiclf_npart
             k = 0
             do ic = 1,3
@@ -261,7 +257,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_ViscousUnsteady
                 enddo
             enddo
         enddo
-
+#endif
 
         return
     end procedure ppiclf_user_prop2plag
@@ -281,34 +277,32 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_ViscousUnsteady
 !
 !-----------------------------------------------------------------------
 !
-      subroutine ppiclf_user_plag2prop
-!
-      implicit none
-!
-      include "PPICLF"
-!
-      integer*4 i,k,ic,iT
-!
-! Code:
-!
-      do i=1,ppiclf_npart
-         k = 0
-         do ic = 1,3
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_rprop3(k,i) = ppiclf_drudtMixt(ic,iT,i)
-         enddo
-         enddo
-         do ic = 1,3
-         do iT = 1, ppiclf_nUnsteadyData
-            k = k+1
-            ppiclf_rprop3(k,i) = ppiclf_drudtPlag(ic,iT,i)
-         enddo
-         enddo
-      enddo
+    module procedure ppiclf_user_plag2prop
+        !
+        integer*4 i,k,ic,iT
+        !
+        ! Code:
+        !
+! when rprop3 is 0 len, this function does nothing
+#if PPICLF_LRP3 != 0
+        do i=1,ppiclf_npart
+            k = 0
+            do ic = 1,3
+                do iT = 1, ppiclf_nUnsteadyData
+                    k = k+1
+                    ppiclf_rprop3(k,i) = ppiclf_drudtMixt(ic,iT,i)
+                enddo
+            enddo
+            do ic = 1,3
+                do iT = 1, ppiclf_nUnsteadyData
+                    k = k+1
+                    ppiclf_rprop3(k,i) = ppiclf_drudtPlag(ic,iT,i)
+                enddo
+            enddo
+        enddo
+#endif
 
-
-      return
-      end
+        return
+    end procedure ppiclf_user_plag2prop
 
 end submodule ppiclf_m_user_ForceModels_ViscousUnsteady

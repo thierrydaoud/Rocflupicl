@@ -97,6 +97,7 @@ USE RFLU_ModConvertCv, ONLY: RFLU_ConvertCvCons2Prim, &
 
  USE ModInterfaces, ONLY: RFLU_DecideWrite !BRAD added for picl
  
+ use ppiclf_solve, only: ppiclf_solve_GetProFld, ppiclf_solve_InterpFieldUser, ppiclf_solve_IntegrateParticle
 #endif
 
 

@@ -82,13 +82,14 @@ SUBROUTINE WriteProbe( regions,iReg )
 
   USE ModInterfaces, ONLY : MixtPerf_R_CpG, MixtPerf_T_DPR
   USE RFLU_ModPlottingVars
-  IMPLICIT NONE
 
 
 #ifdef PICL
 #include "PPICLF_STD.h"
+  USE ppiclf_solve, only : ppiclf_solve_GetProFld
 #endif
 
+  IMPLICIT NONE
 
 ! ... parameters
   TYPE(t_region), POINTER :: regions(:)

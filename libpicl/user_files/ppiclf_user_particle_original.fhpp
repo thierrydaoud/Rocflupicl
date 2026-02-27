@@ -28,20 +28,20 @@
 @:ADDPROP(PHIp, real, ghost, prop)
 
 ! gas velocity vector
-@:ADDPROP(U, vec_real, prop)
+@:ADDPROP(U, vec_real, prop, ghost)
 
 @:ADDPROP(CS, real, ghost, prop)
 
 ! gas pressure derivative
-@:ADDPROP(DPDX, vec_real, prop)
+@:ADDPROP(DPDX, vec_real, prop, ghost)
 
 ! Du/Dt (?) Gas substantial derivative
-@:ADDPROP(SDR, vec_real, prop)
+@:ADDPROP(SDR, vec_real, prop, ghost)
 
 @:ADDPROP(RHSR, real, ghost, prop)
 
 ! gas density velocity vector
-@:ADDPROP(PGC, vec_real, prop)
+@:ADDPROP(PGC, vec_real, prop, ghost)
 
 @:ADDPROP(JDPi, real, ghost, prop)
 @:ADDPROP(JDPe, real, ghost, prop)
@@ -57,7 +57,7 @@
 @:ADDPROP(WDOT, vec_real, prop, ghost)
 
 ! gas-phase vorticity (interpolated)
-@:ADDPROP(VOR, vec_real, prop)
+@:ADDPROP(VOR, vec_real, prop, ghost)
 
 ! initial particle diameter ?
 @:ADDPROP(IDp, real, ghost, prop)
@@ -69,13 +69,13 @@
 @:ADDPROP(Pf, real, ghost, prop)
 
 ! grad of rho^g (fluid)
-@:ADDPROP(RHOG, vec_real, prop)
+@:ADDPROP(RHOG, vec_real, prop, ghost)
 
 ! ?????? 
-@:ADDPROP(DPVDX, vec_real, prop)
+@:ADDPROP(DPVDX, vec_real, prop, ghost)
 
 ! DOmega/Dt (?)
-@:ADDPROP(SDO, vec_real, prop)
+@:ADDPROP(SDO, vec_real, prop, ghost)
 
 @:ADDPROP(XIPAR, real, ghost, prop)
 @:ADDPROP(XIPERP, real, ghost, prop)
@@ -148,8 +148,8 @@
 @:ADDPROP(dummyint5, int, prop, ghost)
 @:ADDPROP(dummyint6, int, prop, ghost)
 @:ADDPROP(dummyint7, int, prop, ghost)
-@:ADDPROP(dummyint8, int, prop, ghost)
 @:ADDPROP(RemoveParticle, int, prop, ghost)
+@:ADDPROP(dummyint9, int, prop, ghost)
 @:ADDPROP(dummyint10, int, prop, ghost)
 @:ADDPROP(dummyint11, int, prop, ghost)
 

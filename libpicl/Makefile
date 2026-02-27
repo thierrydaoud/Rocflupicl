@@ -32,6 +32,7 @@ GSLIB_IFLAGS+=-I$(SOURCE_ROOT_GSLIB)/include
 
 SRCUSR =    $(SOURCE_ROOT_USER)/ppiclf_user_MapProjPart.f90    \
 			$(SOURCE_ROOT_USER)/ppiclf_m_user_data.f90 \
+			$(SOURCE_ROOT_USER)/ppiclf_m_user_RFLUdata.f90 \
 			$(SOURCE_ROOT_USER)/ppiclf_user_SetYdot.fpp		\
             $(SOURCE_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.fpp     \
             $(SOURCE_ROOT_USER)/ppiclf_user_InitZero.fpp     \
@@ -44,12 +45,11 @@ SRCUSR =    $(SOURCE_ROOT_USER)/ppiclf_user_MapProjPart.f90    \
             $(SOURCE_ROOT_USER)/ppiclf_user_HeatTransfer.fpp     \
             $(SOURCE_ROOT_USER)/ppiclf_user_Fluctuations.fpp     \
             $(SOURCE_ROOT_USER)/ppiclf_user_QuasiSteady.fpp     \
+            $(SOURCE_ROOT_USER)/ppiclf_user_ViscousUnsteady.fpp     \
+            $(SOURCE_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.fpp   \
+            $(SOURCE_ROOT_USER)/ppiclf_user_AddedMass.fpp     \
 			
 UNUSED=     $(SOURCE_ROOT_USER)/ppiclf_user_unitproblems.fpp     \
-            $(SOURCE_ROOT_USER)/ppiclf_user_ViscousUnsteady.fpp     \
-            $(SOURCE_ROOT_USER)/ppiclf_user_AddedMass.fpp     \
-            $(SOURCE_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.fpp   \
-            $(SOURCE_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_subroutines.fpp   \
             $(SOURCE_ROOT_USER)/ppiclf_user_debug.fpp     \
 
 SRC =       $(SOURCE_ROOT_PPICLF)/ppiclf_data.fpp \
@@ -76,7 +76,7 @@ POS = $(SOURCE_ROOT_PPICLF)/PPICLF
 
 
 default: libppicl
-test: $(BUILD_ROOT_PPICLF)/ppiclf_user.f90
+test: $(BUILD_ROOT_PPICLF)/ppiclf_m_particledata.f90
 # default: $(BUILD_ROOT_USER)/ppiclf_user_imp.o
 
 libppicl: $(BUILD_ROOT_PPICLF)/libppiclF.a
@@ -115,11 +115,35 @@ $(BUILD_ROOT_PPICLF)/ppiclf_m_particledata.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_type
 
 $(BUILD_ROOT_PPICLF)/ppiclf_user.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_types.o
 
-# user file dependencies
+# user file dependencies 
 $(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_m_user_ForceModels.o
 $(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_user_subbinMap.o
+$(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
 
+$(BUILD_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.o: $(BUILD_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.o
+$(BUILD_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
 
+$(BUILD_ROOT_USER)/ppiclf_user_Torque.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_Torque.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_Lift.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_Lift.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_HeatTransfer.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_HeatTransfer.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_Fluctuations.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_Fluctuations.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_ViscousUnsteady.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_ViscousUnsteady.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_AddedMass.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_AddedMass.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_AddedMass.o: $(BUILD_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.o
 
 
 $(BUILD_ROOT_PPICLF)/%.f90 : $(SOURCE_ROOT_PPICLF)/%.fpp
@@ -202,18 +226,19 @@ makeThird: $(SOURCE_ROOT_GSLIB)/install
 	@echo "                       "
 
 clean:             
-	-rm -r $(SOURCE_ROOT_GSLIB)/gslib                       
-	-rm -r $(SOURCE_ROOT_GSLIB)/lib                         
-	-rm -r $(SOURCE_ROOT_GSLIB)/include                     
-	-rm -r $(SOURCE_ROOT_GSLIB)/*.tar.gz                    
-	-rm -r $(INSTALL_LOCATION)/short_tests/*.pyc            
-	-rm -r $(INSTALL_LOCATION)/short_tests/lib/*.pyc        
-	-rm -r $(INSTALL_LOCATION)/short_tests/test1/test1.log*
-	-rm -r $(INSTALL_LOCATION)/short_tests/test1/*.vtu
-	-rm -r $(BUILD_ROOT_PPICLF)
-	mkdir $(BUILD_ROOT_PPICLF)
-	mkdir $(BUILD_ROOT_USER)
-	cd $(INSTALL_LOCATION)/ppiclF/short_tests/test1/; \
+	@rm -rf $(SOURCE_ROOT_GSLIB)/gslib                       
+	@rm -rf $(SOURCE_ROOT_GSLIB)/lib                         
+	@rm -rf $(SOURCE_ROOT_GSLIB)/include                     
+	@rm -rf $(SOURCE_ROOT_GSLIB)/*.tar.gz                    
+	@rm -rf $(INSTALL_LOCATION)/short_tests/*.pyc            
+	@rm -rf $(INSTALL_LOCATION)/short_tests/lib/*.pyc        
+	@rm -rf $(INSTALL_LOCATION)/short_tests/test1/test1.log*
+	@rm -rf $(INSTALL_LOCATION)/short_tests/test1/*.vtu
+	@rm -rf $(BUILD_ROOT_PPICLF)
+	@mkdir $(BUILD_ROOT_PPICLF)
+	@mkdir $(BUILD_ROOT_USER)
+	@mkdir $(BUILD_ROOT_USER)/Added_Mass
+	@cd $(INSTALL_LOCATION)/ppiclF/short_tests/test1/; \
 	make clean
 
 

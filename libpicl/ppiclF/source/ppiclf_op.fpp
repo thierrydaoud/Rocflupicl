@@ -312,13 +312,14 @@ module ppiclf_op
         !
         call ppiclf_blank(stringo,fixed_str_len)
         call ppiclf_chcopy(stringo,stringi,len(stringi))
-        ilen = ppiclf_indx1(stringo,'$')
+        ilen = len(stringi) !ppiclf_indx1(stringo,'$')
         write(s25,25) rdata,idata
         25 format(1x,1p1e14.6,i10)
-        call ppiclf_chcopy(stringo(ilen:),s25,25)
+        call ppiclf_chcopy(stringo(ilen + 1:),s25,25)
 
-        if (ppiclf_nid.eq.0) write(6,1) (stringo,k=1,ilen+24)
-        1 format('PPICLF: ERROR ',132a1)
+        ! changed to always print the error message, not just on rank 0
+        write(6,11) ppiclf_nid, stringo(1:ilen+24)
+        11 format('PPICLF: ERROR on rank ',i2,":",a)
 
         !     call mpi_finalize (ierr)
         call mpi_abort(ppiclf_comm, 1, ierr)
@@ -348,8 +349,8 @@ module ppiclf_op
 
         call mpi_barrier(ppiclf_comm,ierr)
 
-        if (ppiclf_nid.eq.0) write(6,1) (stringo,k=1,ilen+24)
-        1 format('PPICLF: ',132a1)
+        if (ppiclf_nid.eq.0) write(6,12) stringo(1:ilen+24)
+        12 format('PPICLF: ',a)
 
         call mpi_barrier(ppiclf_comm,ierr)
 
@@ -377,8 +378,8 @@ module ppiclf_op
 
         call mpi_barrier(ppiclf_comm,ierr)
 
-        if (ppiclf_nid.eq.0) write(6,1) (stringo,k=1,ilen+9)
-        1 format('PPICLF: ',132a1)
+        if (ppiclf_nid.eq.0) write(6,13) stringo(1:ilen+9)
+        13 format('PPICLF: ',a)
 
         call mpi_barrier(ppiclf_comm,ierr)
 
@@ -407,8 +408,8 @@ module ppiclf_op
 
         call mpi_barrier(ppiclf_comm,ierr)
 
-        if (ppiclf_nid.eq.0) write(6,1) (stringo,k=1,ilen+14)
-        1 format('PPICLF: ',132a1)
+        if (ppiclf_nid.eq.0) write(6,14) stringo(1:ilen+14)
+        14 format('PPICLF: ',a)
 
         call mpi_barrier(ppiclf_comm,ierr)
 
@@ -432,8 +433,8 @@ module ppiclf_op
 
         call mpi_barrier(ppiclf_comm,ierr)
 
-        if (ppiclf_nid.eq.0) write(6,1) (stringo,k=1,ilen-1)
-        1 format('PPICLF: ',132a1)
+        if (ppiclf_nid.eq.0) write(6,21) stringo(1:ilen-1)
+        21 format('PPICLF: ',a)
 
         call mpi_barrier(ppiclf_comm,ierr)
 

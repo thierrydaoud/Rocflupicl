@@ -59,10 +59,31 @@ module ppiclf_m_user_ForceModels
         end subroutine ppiclf_user_VU_Rocflu
         module subroutine ppiclf_user_ShiftUnsteadyData
         end subroutine ppiclf_user_ShiftUnsteadyData
+
         module subroutine ppiclf_user_UpdatePlag(i)
             integer*4 i
         end subroutine ppiclf_user_UpdatePlag
         module subroutine ppiclf_user_prop2plag
         end subroutine ppiclf_user_prop2plag
+
+        module subroutine ppiclf_user_plag2prop
+        end subroutine ppiclf_user_plag2prop
+
+        ! Added mass functions
+        module subroutine ppiclf_user_AM_Parmar(i,iStage,famx,famy,famz,rmass_add)
+            integer*4 i, iStage
+            real*8 famx, famy, famz, rmass_add
+        end subroutine ppiclf_user_AM_Parmar
+        module subroutine ppiclf_user_AM_Briney_Unary(i,iStage, famx,famy,famz,rmass_add)
+            integer i
+            integer*4 iStage
+            real*8 famx, famy, famz, rmass_add
+        end subroutine ppiclf_user_AM_Briney_Unary
+
+        module subroutine ppiclf_user_AM_Briney_Binary(i,iStage,famx,famy,famz,rmass_add)
+            integer i
+            integer*4 iStage
+            real*8 famx, famy, famz, rmass_add
+        end subroutine ppiclf_user_AM_Briney_Binary
     end interface
 end module ppiclf_m_user_ForceModels

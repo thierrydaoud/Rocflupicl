@@ -306,7 +306,7 @@ module ppiclf_m_comm
         DO i = 1,3
             MaxPotentialBins(i) = FLOOR(binb_length(i)/BinMinLen(i))
             IF(MaxPotentialBins(i) .LT. 1) THEN
-                CALL ppiclf_exittr('BinMinLen() criteria violated.',0.0D0,0)
+                CALL ppiclf_exittr('BinMinLen() criteria violated.',0.0D0,i)
             END IF
         END DO
 
@@ -681,6 +681,7 @@ module ppiclf_m_comm
             CALL ppiclf_copy(${particle}$(1), rtemp(icount, i), ${n}$)
             icount = icount + ${n}$
 #:endfor
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@ = itemp(:,i)
         END DO
         
         RETURN

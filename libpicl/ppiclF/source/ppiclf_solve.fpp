@@ -671,10 +671,6 @@ module ppiclf_solve
         !   Research Briefs, 1991.
 
         DO i = 1,PPICLF_NPART
-!:for slnVar in fyppmacros.Loop_All_SLNProps()
-                !{USEPARTICLE(i, y, {slnVar}$)}@ =  0.0d0 - ppiclf_rk3coef(1,istage)*({USEPARTICLE(i, y1, {slnVar}$)}@)  + ppiclf_rk3coef(2,istage)*{USEPARTICLE(i, y, {slnVar}$)}@ + ppiclf_rk3coef(3,istage)*{USEPARTICLE(i, ydot, {slnVar}$)}@
-                ! ppiclf_y(j,i) =  0.0d0 - ppiclf_rk3coef(1,istage)*ppiclf_y1(j,i)  + ppiclf_rk3coef(2,istage)*ppiclf_y(j,i) + ppiclf_rk3coef(3,istage)*ppiclf_ydot(j,i)
-!:endfor
 #:for n, y_ref, y_off, ydot_ref, ydot_off, y1_ref, y1_off in fyppmacros.Loop_All_Reals("ppiclf_parts(i)%y", "ppiclf_parts(i)%ydot", "ppiclf_parts(i)%y1")
             DO j = 1, ${n}$
                 ${y_ref}$(j + ${y_off}$) = 0.0d0 - ppiclf_rk3coef(1,istage)*${y1_ref}$(j + ${y1_off}$) + ppiclf_rk3coef(2,istage)*${y_ref}$(j + ${y_off}$) + ppiclf_rk3coef(3,istage)*${ydot_ref}$(j + ${ydot_off}$)
@@ -1201,6 +1197,7 @@ module ppiclf_solve
         END DO !ie
         partCount = 0
         DO ip=1,ppiclf_npart !Loop all particles in this bin
+            remove = .FALSE.
             nnearest = 0 ! number of nearest elements
             DO ie = 1,28
                 CellID_nearest(ie) = -1 ! index of nearest elements
@@ -1299,8 +1296,7 @@ module ppiclf_solve
                 ! from ppiclf_y & ppiclf_rprop, rprop2, rprop3, rprop4, rprop5
                 @{USEPARTICLE(ppiclf_parts(ip)%iprop%RemoveParticle)}@ = -1
                 ppiclf_remove_particle = .TRUE.
-                PRINT*, 'part # on proc # removed.', @{USEPARTICLE(ppiclf_parts(ip)%iprop)}@(1),ppiclf_nid
-                remove = .FALSE.
+                PRINT*, 'part # on proc # removed with postion of:',@{USEPARTICLE(ppiclf_parts(ip)%iprop)}@(1),ppiclf_nid,xp(1),xp(2),xp(3) 
             ELSE
                 partCount = partCount + 1
                 ! use partCount since ip includes possible removed particles
@@ -1322,6 +1318,8 @@ module ppiclf_solve
         RETURN
     END SUBROUTINE ppiclf_solve_SBParticleToCellMap
 
+
+    ! NOT USED
     SUBROUTINE ppiclf_solve_ParticleToCellMap
         ! Local Variables
         INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, CellID_nearest(28), partCount
@@ -1532,7 +1530,7 @@ module ppiclf_solve
             ppiclf_feedbk(2,ip) = SIN(2*PI*x_norm) + SIN(2*PI*y_norm) + SIN(2*PI*z_norm)
 #endif     
 
-#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)%y")
+#:for particle, n in fyppmacros.Loop_All_Reals("ppiclf_parts(i)%feedback")
             DO j=1,${n}$
                 ! Loop through cells to apply feedback     
                 DO i = 1,nCellProj

@@ -168,6 +168,7 @@ SUBROUTINE RFLU_InitFlowSolver(casename,verbLevel,global,levels)
  
 #ifdef PICL
   USE PICL_ModInterfaces, ONLY: PICL_TEMP_InitSolver
+  use ppiclf_m_comm, only: ppiclf_comm_InitMPI, ppiclf_comm_InitOverlapGrid
 #endif
 
 #ifdef PICL

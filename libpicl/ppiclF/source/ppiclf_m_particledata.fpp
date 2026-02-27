@@ -16,7 +16,11 @@ module ppiclf_m_particledata
     subroutine CopyRealToGhost(@{LISTCOMPONENTS(PPICLF_t_particle, particle)}@, @{LISTCOMPONENTS(PPICLF_t_ghostParticle, ghost)}@)
         @:DECLAREPARTVAR(PPICLF_t_particle, particle)
         @:DECLAREPARTVAR(PPICLF_t_ghostParticle, ghost)
-        
 
+#:for n, real_ref, real_off, ghost_ref, ghost_off in fyppmacros.Loop_All_Reals("particle", "ghost", sameArrays=True)
+        ${ghost_ref}$(${ghost_off + 1}$: ${ghost_off + n}$)  = ${real_ref}$(${real_off + 1}$: ${real_off + n}$)
+#:endfor
+
+        @{USEPARTICLE(ghost%iprop)}@ = @{USEPARTICLE(particle%iprop)}@
     end subroutine CopyRealToGhost
 end module ppiclf_m_particledata

@@ -50,6 +50,7 @@ endif
 ifdef PICL
   vpath PICL_Mod%.F90   ../rocpicl
   vpath PICL%.F90       ../rocpicl
+  vpath ppiclf_solve.o  ../libpicl/ppiclF/build
 endif
 
 ifdef RADI

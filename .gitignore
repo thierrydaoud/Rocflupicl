@@ -2,6 +2,29 @@
 build_lib/*.f90
 build_lib/*.d
 build_lib/*.o
+build_lib/*.mod
+build_lib/*.a
+
+build_std/*.f90
+build_std/*.d
+build_std/*.o
+build_std/*.mod
+
+build_util/**/*.f90
+build_util/**/*.d
+build_util/**/*.o
+build_util/**/*.mod
+
+
+rfluclone
+rfluconv
+rfluextr
+rfluinit
+rflumap
+rflump
+rflupart
+rflupick
+rflupost
 
 # Vim swap files
 ## RocfluMP

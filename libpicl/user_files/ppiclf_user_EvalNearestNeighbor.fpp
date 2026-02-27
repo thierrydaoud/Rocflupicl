@@ -47,7 +47,9 @@ submodule (ppiclf_user) ppiclf_user_EvalNearestNeighbor_imp
 
 
     use ppiclf_m_user_data
+    use ppiclf_m_user_RFLUdata
 
+    use ppiclf_user_AM_functions, only: resistance_pair
     use ppiclf_op, only: ppiclf_exittr
     implicit none
     contains

@@ -64,6 +64,7 @@ submodule (ppiclf_user) ppiclf_user_SetYdot_imp
 
 
     use ppiclf_m_user_data
+    use ppiclf_m_user_RFLUdata
 
     use ppiclf_op, only: ppiclf_exittr
     use ppiclf_solve, only: ppiclf_solve_NearestNeighborSB
@@ -71,6 +72,8 @@ submodule (ppiclf_user) ppiclf_user_SetYdot_imp
     use ppiclf_m_user_ForceModels, only: ppiclf_user_BR_driver, ppiclf_user_Lift_driver, ppiclf_user_Torque_driver, ppiclf_user_HT_driver
     use ppiclf_m_user_ForceModels, only: ppiclf_user_QS_Parmar, ppiclf_user_QS_ModifiedParmar, ppiclf_user_QS_Osnes, ppiclf_user_QS_Gidaspow
     use ppiclf_m_user_ForceModels, only: ppiclf_user_QS_fluct_Lattanzi, ppiclf_user_QS_fluct_Osnes
+    use ppiclf_m_user_ForceModels, only: ppiclf_user_VU_Rocflu, ppiclf_user_UpdatePlag, ppiclf_user_ShiftUnsteadyData, ppiclf_user_plag2prop, ppiclf_user_prop2plag
+    use ppiclf_m_user_ForceModels, only: ppiclf_user_AM_Briney_Unary, ppiclf_user_AM_Briney_Binary, ppiclf_user_AM_Parmar
     use ppiclf_m_user_SubbinMap, only: ppiclf_user_subbinMap
     implicit none
     contains
@@ -458,7 +461,7 @@ module procedure ppiclf_user_SetYdot
             call ppiclf_user_QS_Gidaspow(i,beta,cd)
         else
             print*, "***PPICLF: Error in QS Model Selection!"   
-            call ppiclf_exittr('Wrong QS Model Choice$', 0.0d0, 0)
+            call ppiclf_exittr('Wrong QS Model Choice$', 0.0d0, qs_flag)
         endif
 
         fqsx = beta*vx
@@ -986,4 +989,12 @@ module procedure ppiclf_user_SetYdot
     return
 end procedure ppiclf_user_SetYdot
     
+subroutine ppiclf_user_unit_tests(i,iStage,famx,famy,famz)
+    integer*4 i, iStage
+    real*8 famx, famy, famz
+end subroutine ppiclf_user_unit_tests
+
+subroutine ppiclf_user_debug
+end subroutine ppiclf_user_debug
+
 end submodule ppiclf_user_SetYdot_imp

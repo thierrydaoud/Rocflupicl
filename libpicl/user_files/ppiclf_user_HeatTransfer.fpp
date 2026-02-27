@@ -42,6 +42,7 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_HeatTransfer
 
 
     use ppiclf_m_user_data
+    use ppiclf_m_user_RFLUdata
 
     use ppiclf_op, only: ppiclf_exittr
     implicit none

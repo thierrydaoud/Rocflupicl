@@ -86,10 +86,15 @@ SUBROUTINE PICL_TEMP_InitSolver( pRegion)
   USE ModMixture, ONLY: t_mixt
 
 !PICL
-  use ppiclf_solve, only: ppiclf_solve_InitParticle, ppiclf_solve_Initialize
+  use ppiclf_solve, only: ppiclf_solve_InitParticle, ppiclf_solve_Initialize, ppiclf_solve_InitSolve, ppiclf_solve_GetProFld
+  use ppiclf_io, only: ppiclf_io_ReadWallVTK, ppiclf_io_ReadParticleVTU
   use ppiclf_m_comm, only: ppiclf_comm_InitOverlapGrid
   USE ModRandom, ONLY: Rand1Uniform,Rand1Normal
   USE RFLU_ModInCellTest
+
+  use ppiclf_m_user_RFLUdata
+  ! use ppiclf_data, only: ang_per_angle, ang_per_flag, x_per_min, x_per_max,y_per_min, y_per_max, z_per_min, z_per_max
+  ! use ppiclf_data, only: x_per_flag, y_per_flag, z_per_flag, ang_case, ang_per_xangle,ang_per_rin, ang_per_rout,xrot(3) , vrot(3)
 
   IMPLICIT NONE
 #ifdef PICL
@@ -136,21 +141,7 @@ INTEGER :: errorFlag,icg
 
    INTEGER :: seed(33), isize, CellVertices
 
-   INTEGER :: stationary, qs_flag, am_flag, pg_flag, &
-        collisional_flag, heattransfer_flag, feedback_flag, &
-        qs_fluct_flag, ppiclf_debug, rmu_flag, &
-        rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
-        qs_fluct_filter_adapt_flag, &
-        ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
-        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
-   REAL(RFREAL) :: rmu_ref, tref, suth, ksp, erest
-   COMMON /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag, &
-        collisional_flag, heattransfer_flag, feedback_flag, &
-        qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth, &
-        rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
-        qs_fluct_filter_adapt_flag, ksp, erest, &
-        ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
-        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
+  
    REAL(RFREAL) :: ppiclf_rcp_part
    CHARACTER(12) :: ppiclf_matname
    COMMON /RFLU_ppiclf_misc01/ ppiclf_rcp_part
@@ -560,6 +551,7 @@ DO i = 1, nCells
   END IF
 END DO
 ! Find cell lengths
+Max_Celllen = 0.0d0
 DO i = 1,nCells
   IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
     ! Tetrahedral Cell
@@ -572,12 +564,12 @@ DO i = 1,nCells
     WRITE(*,*) 'ERROR: Rocflupicl only support tetrahedral and hexahedral cell types.'
     CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'PPICLF:CellLen')
   END IF
-  ! Initialize as zero for each element
+  ! Initialize as zero for each cell
   DO l = 1,3
     MaxPoint(l) = -1.0D10 
     MinPoint(l) =  1.0D10 
     CellLen(l)   =  0.0D0   
-    Max_CellLen(l)  = 0.0D0
+
   END DO !l
   ! Add all x,y,z cell corners for centroid and find extremes
   DO k = 1,CellVertices
