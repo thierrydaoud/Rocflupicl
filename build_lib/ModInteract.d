@@ -1,3 +1,0 @@
-ModInteract.o: \
- ModDataTypes.o \
-

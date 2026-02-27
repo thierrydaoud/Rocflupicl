@@ -1,3 +1,0 @@
-FaceCentroid.o: \
- ModDataTypes.o \
-
