@@ -261,22 +261,22 @@ submodule (ppiclf_m_user_ForceModels) ppiclf_m_user_ForceModels_ViscousUnsteady
 
         return
     end procedure ppiclf_user_prop2plag
-!
-!
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-!
-! Created Feb. 1, 2024
-!
-! Sets rprop3 from drudtMixt and drudtPlag
-! Needed for proper particle tracking
-! Load particle data into communication buffers rprop3
-! See rocpart/PLAG_RFLU_ModComm.F90:
-!     SUBROUTINE PLAG_RFLU_UnloadBuffersRecv(pRegion)
-!
-!-----------------------------------------------------------------------
-!
+    !
+    !
+    !-----------------------------------------------------------------------
+    !-----------------------------------------------------------------------
+    !-----------------------------------------------------------------------
+    !
+    ! Created Feb. 1, 2024
+    !
+    ! Sets rprop3 from drudtMixt and drudtPlag
+    ! Needed for proper particle tracking
+    ! Load particle data into communication buffers rprop3
+    ! See rocpart/PLAG_RFLU_ModComm.F90:
+    !     SUBROUTINE PLAG_RFLU_UnloadBuffersRecv(pRegion)
+    !
+    !-----------------------------------------------------------------------
+    !
     module procedure ppiclf_user_plag2prop
         !
         integer*4 i,k,ic,iT

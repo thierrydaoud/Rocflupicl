@@ -155,9 +155,8 @@ module ppiclf_m_comm
             binNegBound, binPosBound, binIterations
        
         REAL*8    xmin, ymin, zmin, xmax, ymax, zmax, temp1, temp2,     &
-            binb_length(3), BinMinLen(3), periodicDistCheck,            &
-            BinBuffer(3), binsReal(3), binError, minBinError,           &
-            increaseRatio
+            BinMinLen(3), periodicDistCheck, BinBuffer(3), binsReal(3), &
+            binError, minBinError,  increaseRatio
 
         LOGICAL   MaxBinsAchieved(3), TwoSmallBins
         !
@@ -313,19 +312,19 @@ module ppiclf_m_comm
         ! Number of bins calculated based on bin surface
         ! area minimization and bin aspect ratio close to 1
         binsReal(1) = (targetTotBin**(1.0D0/3.0D0))*    &
-            (binb_length(1)**(2.0D0/3.0D0))/            &
-            ((binb_length(2)**(1.0D0/3.0D0))*           &
-            (binb_length(3))**(1.0D0/3.0D0))     
+            (ppiclf_BinDomLen(1)**(2.0D0/3.0D0))/            &
+            ((ppiclf_BinDomLen(2)**(1.0D0/3.0D0))*           &
+            (ppiclf_BinDomLen(3))**(1.0D0/3.0D0))     
         
         binsReal(2) = (targetTotBin**(1.0D0/3.0D0))*    &
-            (binb_length(2)**(2.0D0/3.0D0))/            &
-            ((binb_length(1)**(1.0D0/3.0D0))*           &
-            (binb_length(3))**(1.0D0/3.0D0)) 
+            (ppiclf_BinDomLen(2)**(2.0D0/3.0D0))/            &
+            ((ppiclf_BinDomLen(1)**(1.0D0/3.0D0))*           &
+            (ppiclf_BinDomLen(3))**(1.0D0/3.0D0)) 
         
         binsReal(3) = (targetTotBin**(1.0D0/3.0D0))*    &
-            (binb_length(3)**(2.0D0/3.0D0))/            &
-            ((binb_length(2)**(1.0D0/3.0D0))*           &
-            (binb_length(1))**(1.0D0/3.0D0)) 
+            (ppiclf_BinDomLen(3)**(2.0D0/3.0D0))/            &
+            ((ppiclf_BinDomLen(2)**(1.0D0/3.0D0))*           &
+            (ppiclf_BinDomLen(1))**(1.0D0/3.0D0)) 
 
         ! The loop below ensures bins don't exceed number of
         ! processors or minimum bin length criteria, while
@@ -381,10 +380,10 @@ module ppiclf_m_comm
                     binsReal(smallBin) = 0.51D0
                     ppiclf_n_bins(smallBin) = 1
 
-                    binsReal(medBin) = SQRT(REAL(targetTotBin)) * binb_length(medBin)/binb_length(largeBin)
+                    binsReal(medBin) = SQRT(REAL(targetTotBin)) * ppiclf_BinDomLen(medBin)/ppiclf_BinDomLen(largeBin)
                     ppiclf_n_bins(medBin) = INT(binsReal(medBin)+0.5D0)
 
-                    binsReal(largeBin) = SQRT(REAL(targetTotBin)) * binb_length(largeBin)/binb_length(medBin)
+                    binsReal(largeBin) = SQRT(REAL(targetTotBin)) * ppiclf_BinDomLen(largeBin)/ppiclf_BinDomLen(medBin)
                     ppiclf_n_bins(largeBin) = INT(binsReal(largeBin)+0.5D0)
                 END IF 
             END IF
@@ -435,18 +434,18 @@ module ppiclf_m_comm
         ideal_bin_index = 0
         DO ix = 0,binIterations
             iBin(1) = ppiclf_n_bins(1) + (ix-binNegBound)
-            ppiclf_bins_dx(1) = binb_length(1)/iBin(1)
+            ppiclf_bins_dx(1) = ppiclf_BinDomLen(1)/iBin(1)
             IF(ppiclf_bins_dx(1) .LT. BinMinLen(1) .OR. iBin(1) .LT. 1) CYCLE
-            DO iy = 0,binIterations
-                iBin(2) = ppiclf_n_bins(2) + (iy-binNegBound)
-                ppiclf_bins_dx(2) = binb_length(2)/iBin(2)
-                IF(ppiclf_bins_dx(2) .LT. BinMinLen(2) .OR. iBin(2) .LT. 1) CYCLE
-                DO iz = 0,binIterations
-                    iBin(3) = ppiclf_n_bins(3) + (iz-binNegBound)
-                    ppiclf_bins_dx(3) = binb_length(3)/iBin(3)
-                    IF(ppiclf_bins_dx(3) .LT. BinMinLen(3) .OR. iBin(3) .LT. 1) CYCLE
-                    iBinTot = iBin(1)*iBin(2)*iBin(3)
-                    IF(iBinTot .GE. total_bin .AND. iBinTot .GT. 0 .AND. iBinTot .LE. targetTotBin) THEN
+                DO iy = 0,binIterations
+                    iBin(2) = ppiclf_n_bins(2) + (iy-binNegBound)
+                    ppiclf_bins_dx(2) = ppiclf_BinDomLen(2)/iBin(2)
+                    IF(ppiclf_bins_dx(2) .LT. BinMinLen(2) .OR. iBin(2) .LT. 1) CYCLE
+                    DO iz = 0,binIterations
+                        iBin(3) = ppiclf_n_bins(3) + (iz-binNegBound)
+                        ppiclf_bins_dx(3) = ppiclf_BinDomLen(3)/iBin(3)
+                        IF(ppiclf_bins_dx(3) .LT. BinMinLen(3) .OR. iBin(3) .LT. 1) CYCLE
+                        iBinTot = iBin(1)*iBin(2)*iBin(3)
+                        IF(iBinTot .GE. total_bin .AND. iBinTot .GT. 0 .AND. iBinTot .LE. targetTotBin) THEN
                         ! This resets the error min when a larger amount of
                         ! total bins are found.
                         IF(iBinTot .GT. total_bin) THEN
@@ -480,7 +479,7 @@ module ppiclf_m_comm
             ! same number of bin equation as in above loops with best
             ! indices
             ppiclf_n_bins(i) = INT(binsReal(i)+0.5D0) + (ideal_bin_index(i) - binNegBound)
-            ppiclf_bins_dx(i) = binb_length(i)/ppiclf_n_bins(i)
+            ppiclf_bins_dx(i) = ppiclf_BinDomLen(i)/ppiclf_n_bins(i)
             total_bin = total_bin*ppiclf_n_bins(i)
             IF(total_bin .GT. ppiclf_np) THEN
                 IF(ppiclf_nid .EQ. 0) THEN
@@ -503,11 +502,11 @@ module ppiclf_m_comm
             IF((total_bin/ppiclf_n_bins(NBMax))*(ppiclf_n_bins(NBMax)+1) .LT. targetTotBin) THEN
                 ! Add a bin and set new bin dx length
                 ppiclf_n_bins(NBMax) = ppiclf_n_bins(NBMax)+1
-                ppiclf_bins_dx(NBMax) = binb_length(NBMax)/ppiclf_n_bins(NBMax)
+                ppiclf_bins_dx(NBMax) = ppiclf_BinDomLen(NBMax)/ppiclf_n_bins(NBMax)
                 IF(ppiclf_bins_dx(NBMax) .LT. BinMinLen(NBMax)) THEN
                     ! If BinMinLen criteria violated, return to previous bin configuration
                     ppiclf_n_bins(NBMax) = ppiclf_n_bins(NBMax)-1
-                    ppiclf_bins_dx(NBMax) = binb_length(NBMax)/ppiclf_n_bins(NBMax)
+                    ppiclf_bins_dx(NBMax) = ppiclf_BinDomLen(NBMax)/ppiclf_n_bins(NBMax)
                     EXIT
                 END IF
                 total_bin = 1
@@ -519,10 +518,6 @@ module ppiclf_m_comm
             END IF
         END DO
 
-        ! CALL ActiveBinCounter
-        ! End active bin check loop
-        ! CALL BinToProcessorMap
-        ! *** AVERY
         ! Find this processor's x,y,z bin indicies
         idum = modulo(ppiclf_nid,ppiclf_n_bins(1))
         jdum = modulo(ppiclf_nid/ppiclf_n_bins(1),ppiclf_n_bins(2))
@@ -590,6 +585,11 @@ module ppiclf_m_comm
         PARAMETER(itempLim = PPICLF_LIP)
         REAL*8    rtemp(rtempLim,PPICLF_LPART)
         INTEGER*4 i, icount, j0, itemp(itempLim, PPICLF_LPART)
+
+#ifdef PERF
+        REAL*8    tstart, tfinal
+#endif
+
         !
         ! copy particle y, rprop, rprop2, rprop3 arrays into rtemp
         ! array for communication
@@ -633,12 +633,23 @@ module ppiclf_m_comm
             itemp(:,i) = @{USEPARTICLE(ppiclf_parts(i)%iprop)}@
         END DO
         j0 = 4 ! index of ppiclf_iprop that contains rank to send to
+
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
         CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl  & 
             ,ppiclf_npart,PPICLF_LPART                      & ! Setup
             ,itemp,PPICLF_LIP                               & ! Integer Comm
             ,partl,0                                        & ! Logical Comm
             ,rtemp,rtempLim                                 & ! Real Comm
             ,j0)                                              ! Receiver processor index
+
+
+
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
 
         IF(ppiclf_npart .GT. PPICLF_LPART .OR. ppiclf_npart .LT. 0) THEN
             PRINT*,'Increase LPART. Processor:',ppiclf_nid, 'LPART should be greater than:',ppiclf_npart
@@ -701,8 +712,11 @@ module ppiclf_m_comm
         ! removed a mistyped(?) variable "kkc il" as it isn't valid anymore in f90. in f77 it would just be treated as a single variable kkcil
         INTEGER*4 nkey(2), i, j, k, l, ie, iee, ii, jj, kk, nrank, nl, nii, njj, nrr, iic, jjc, ierr
         INTEGER*4 ix, iy, iz, ixLow, ixHigh, iyLow, iyHigh, izLow, izHigh 
-        REAL*8    rxval, ryval, rzval, EleSizei(3), MaxPoint(3), MinPoint(3), centeri(3), exchCellMultiplier
+        REAL*8    rxval, ryval, rzval, EleSizei(3), MaxPoint(3), MinPoint(3), centeri(3), exchCellMultiplier, Max_CellLen(3)
         LOGICAL   partl, ErrorFound
+#ifdef PERF
+        REAL*8    tstart, tfinal
+#endif
         !
         ! Code Start:
         !
@@ -873,20 +887,46 @@ module ppiclf_m_comm
         nkey(1) = 2
         nkey(2) = 1
 
-        CALL pfgslib_crystal_tuple_transfer(                    &
-            ppiclf_cr_hndl,ppiclf_nCells_FV2PICL,PPICLF_LEE     & !setup
-            ,ppiclf_cell_map,nii                                & ! Integer Comm
-            ,partl,nl                                           & ! Logical Comm
-            ,ppiclf_picl_grid,nrr                               & ! Real Comm
-            ,njj)                                                 ! Receiver processor index
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
 
-        CALL pfgslib_crystal_tuple_sort(                        &
-            ppiclf_cr_hndl,ppiclf_nCells_FV2PICL                & !setup
-            ,ppiclf_cell_map,nii                                & !Integer to sort
-            ,partl,nl                                           & !Logical to sort
-            ,ppiclf_picl_grid,nrr                               & !Real to sort
-            ,nkey,2)                                              !sorting method
+        CALL pfgslib_crystal_tuple_transfer(                 & 
+            ppiclf_cr_hndl,ppiclf_nCells_FV2PICL,PPICLF_LEE  & !setup
+            ,ppiclf_cell_map,nii                             & ! Integer Comm
+            ,partl,nl                                        & ! Logical Comm
+            ,ppiclf_picl_grid,nrr                            & ! Real Comm
+            ,njj)                                              ! Receiver processor index
+        CALL pfgslib_crystal_tuple_sort(                     &
+            ppiclf_cr_hndl,ppiclf_nCells_FV2PICL             & !setup
+            ,ppiclf_cell_map,nii                             & !Integer to sort
+            ,partl,nl                                        & !Logical to sort
+            ,ppiclf_picl_grid,nrr                            & !Real to sort
+            ,nkey,2)                                           !sorting method
 
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
+
+
+        ! Find distance check for interpolation.
+        ! This is 1.5*MaxCellLength to ensure that at least
+        ! 27 neighboring cells are mapped.
+        Max_CellLen(1) = 0.0D0
+        Max_CellLen(2) = 0.0D0
+        Max_CellLen(3) = 0.0D0
+        DO ie = 1,ppiclf_nCells_FV2PICL ! Loop through cells mapped to bin
+            DO l = 1,3
+            ! Find max cell lengths in all dimensions
+            IF(ppiclf_picl_grid(3+l,ie) .GT. Max_CellLen(l))Max_CellLen(l) = ppiclf_picl_grid(3+l,ie)
+            END DO !l
+        END DO !ie
+        DO l = 1,3
+            ! Multiply by 1.5 so particle near face will
+            ! find center one cell over in farthest direction
+            ppiclf_interp_dchk(l) = Max_CellLen(l)*1.5D0
+        END DO
 
         IF (icalld .EQ. 0) THEN 
             icalld = icalld + 1
@@ -1087,27 +1127,6 @@ module ppiclf_m_comm
         RETURN
     END SUBROUTINE ppiclf_comm_LinearPeriodicityGhost
 
-    SUBROUTINE ppiclf_comm_MoveGhostOLD
-        !
-        ! Internal:
-        !
-        INTEGER*4 iprop_proc_index
-        LOGICAL   partl  ! Dummy variable       
-        !
-        iprop_proc_index = 4    ! since ppiclf_iprop(4,np) contains processor
-                                ! that should receive ghost particle
-        ! CALL pfgslib_crystal_tuple_transfer(    & 
-        !     ppiclf_cr_hndl                      & 
-        !     ,ppiclf_npart_gp,PPICLF_LPART_GP    & ! Setup
-        !     ,ppiclf_iprop_gp,PPICLF_LIP_GP      & ! Integer Comm
-        !     ,partl,0                            & ! Logical Comm
-        !     ,ppiclf_rprop_gp,PPICLF_LRP_GP      & ! Real Comm
-        !     ,iprop_proc_index)                    ! Receiver processor index
-
-        RETURN
-    END SUBROUTINE ppiclf_comm_MoveGhostOLD
-
-
     SUBROUTINE ppiclf_comm_MoveGhost
         !
         ! Internal:
@@ -1116,7 +1135,13 @@ module ppiclf_m_comm
         integer*4, parameter :: iprop_proc_index = 4
         integer*4, parameter :: LRP_GP = ${fyppmacros.CountReals("PPICLF_t_ghostParticle")}$
         integer*4 i, i_rprop
+#ifdef PERF
+        REAL*8    tstart, tfinal
+#endif
 
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
         !
         ! pack the particle data we need into the transfer arrays
         !
@@ -1150,778 +1175,1055 @@ module ppiclf_m_comm
             @{USEPARTICLE(ppiclf_gparts(i)%iprop)}@(1:8) = iprop_transfer(:, i)
         end do
 
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
+
     END SUBROUTINE ppiclf_comm_MoveGhost
 
-    !----------------------------------------------------------------------
-        !      subroutine ppiclf_comm_AngularCreateGhost
-        !!
-        !      implicit none
-        !!
-        !      include "PPICLF"
-        !!
-        !! Internal:
-        !!
-        !      real*8 xdlen,ydlen,zdlen,rxdrng(3),rxnew(3), rfac, rxval, ryval,
-        !     >       rzval, rxl, ryl, rzl, rxr, ryr, rzr, distchk, dist, gFilt
-        !      integer*4 iadd(3),gpsave(27)
-        !      real*8 map(PPICLF_LRP_PRO)
-        !      integer*4  el_face_num(18),el_edge_num(36),el_corner_num(24),
-        !     >           nfacegp, nedgegp, ncornergp, iperiodicx, iperiodicy,
-        !     >           iperiodicz, jx, jy, jz, ip, idum, iip, jjp, kkp, ii1,
-        !     >           jj1, kk1, iig, jjg, kkg, iflgx, iflgy, iflgz,
-        !     >           isave, iflgsum, ndumn, nrank, ibctype, i, ifc, ist, j,
-        !     >           k
-        !      ! 08/27/24 - Thierry - added for angular periodicty starts here
-        !      real*8 alpha
-        !      integer*4 xrank, yrank, zrank
-        !      ! 08/27/24 - Thierry - added for angular periodicty ends here
-        !      ! 09/26/24 - Thierry - added for angular periodicty starts here
-        !      real*8 dist1, dist2
-        !      ! 09/26/24 - Thierry - added for angular periodicty ends here
-        !!
+    SUBROUTINE ppiclf_comm_MoveGhostOLD
         !
-        !c     face, edge, and corner number, x,y,z are all inline, so stride=3
-        !      el_face_num = (/ -1,0,0, 1,0,0, 0,-1,0, 0,1,0, 0,0,-1, 0,0,1 /)
-        !      el_edge_num = (/ -1,-1,0 , 1,-1,0, 1,1,0 , -1,1,0 ,
-        !     >                  0,-1,-1, 1,0,-1, 0,1,-1, -1,0,-1,
-        !     >                  0,-1,1 , 1,0,1 , 0,1,1 , -1,0,1  /)
-        !      el_corner_num = (/ -1,-1,-1, 1,-1,-1, 1,1,-1, -1,1,-1,
-        !     >                   -1,-1,1,  1,-1,1,  1,1,1,  -1,1,1 /)
+        ! Internal:
         !
-        !      nfacegp   = 4  ! number of faces
-        !      nedgegp   = 4  ! number of edges
-        !      ncornergp = 0  ! number of corners
-        !
-        !      if (ppiclf_ndim .gt. 2) then
-        !         nfacegp   = 6  ! number of faces
-        !         nedgegp   = 12 ! number of edges
-        !         ncornergp = 8  ! number of corners
-        !      endif
-        !
-        !      iperiodicx = ppiclf_iperiodic(1)
-        !      iperiodicy = ppiclf_iperiodic(2)
-        !      iperiodicz = ppiclf_iperiodic(3)
-        !
-        !! ------------------------
-        !c CREATING GHOST PARTICLES
-        !! ------------------------
-        !      jx    = 1
-        !      jy    = 2
-        !      jz    = 3
-        !
-        !      ! Thierry - we dont use xdlen and ydlen in this algorithm. no need to modify them.
-        !      xdlen = ppiclf_binb(2) - ppiclf_binb(1)
-        !      ydlen = ppiclf_binb(4) - ppiclf_binb(3)
-        !      zdlen = -1.
-        !      if (ppiclf_ndim .gt. 2) 
-        !!     >   zdlen = ppiclf_binb(6) - ppiclf_binb(5)
-        !     >   zdlen = ppiclf_xdrange(2,3) - ppiclf_xdrange(1,3)
-        !      if (iperiodicx .ne. 0) xdlen = -1
-        !      if (iperiodicy .ne. 0) ydlen = -1
-        !      if (iperiodicz .ne. 0) zdlen = -1
-        !
-        !      rxdrng(1) = xdlen
-        !      rxdrng(2) = ydlen
-        !      rxdrng(3) = zdlen
-        !
-        !      ppiclf_npart_gp = 0
-        !
-        !      rfac = 1.0d0
-        !      gFilt = MAX(ppiclf_nndist,ppiclf_filter(1),
-        !     >            ppiclf_filter(2),ppiclf_filter(3))
-        !
-        !
-        !      do ip=1,ppiclf_npart
-        !
-        !         call ppiclf_user_MapProjPart(map,ppiclf_y(1,ip)
-        !     >         ,ppiclf_ydot(1,ip),ppiclf_ydotc(1,ip),ppiclf_rprop(1,ip))
-        !
-        !c        idum = 1
-        !c        ppiclf_cp_map(idum,ip) = ppiclf_y(idum,ip)
-        !c        idum = 2
-        !c        ppiclf_cp_map(idum,ip) = ppiclf_y(idum,ip)
-        !c        idum = 3
-        !c        ppiclf_cp_map(idum,ip) = ppiclf_y(idum,ip)
-        !
-        !         idum = 0
-        !         do j=1,PPICLF_LRS
-        !            idum = idum + 1
-        !            ppiclf_cp_map(idum,ip) = ppiclf_y(j,ip) ! ppiclf_y(PPICLF_JX/ JY/ JZ/ JVX/ JVY/ JVZ/ JT, ip)
-        !         enddo
-        !         idum = PPICLF_LRS
-        !         do j=1,PPICLF_LRP
-        !            idum = idum + 1
-        !            ppiclf_cp_map(idum,ip) = ppiclf_rprop(j,ip) ! ppiclf_rprop(PPICLF_R_JRHOP/ R_JRHOF/ .../ R_WDOTZ, ip)
-        !         enddo
-        !         idum = PPICLF_LRS+PPICLF_LRP
-        !         do j=1,PPICLF_LRP_PRO
-        !            idum = idum + 1
-        !            ppiclf_cp_map(idum,ip) = map(j) ! map(PPICLF_P_JPHIP/ JFX/ .../ JPHIPW) - these are found in ppiclf_user_MapProjPart
-        !         enddo
-        !
-        !         rxval = ppiclf_cp_map(1,ip) ! ppiclf_y(PPICLF_JX,ip)
-        !         ryval = ppiclf_cp_map(2,ip) ! ppiclf_y(PPICLF_JY,ip)
-        !         rzval = 0.0d0
-        !         if (ppiclf_ndim .gt. 2) rzval = ppiclf_cp_map(3,ip) ! ppiclf_y(PPICLF_JZ,ip)
-        !
-        !         iip    = ppiclf_iprop(4,ip) ! ith coordinate of bin
-        !         jjp    = ppiclf_iprop(5,ip) ! jth coordinate of bin
-        !         kkp    = ppiclf_iprop(6,ip) ! kth coordinate of bin
-        !
-        !         rxl = ppiclf_binb(1) + ppiclf_bins_dx(1)*iip ! min x of bin
-        !         rxr = rxl + ppiclf_bins_dx(1)                ! max x of bin
-        !         ryl = ppiclf_binb(3) + ppiclf_bins_dx(2)*jjp
-        !         ryr = ryl + ppiclf_bins_dx(2)
-        !         rzl = 0.0d0
-        !         rzr = 0.0d0
-        !         if (ppiclf_ndim .gt. 2) then
-        !            rzl = ppiclf_binb(5) + ppiclf_bins_dx(3)*kkp
-        !            rzr = rzl + ppiclf_bins_dx(3)
-        !         endif
-        !
-        !         isave = 0
-        !
-        !         ! faces
-        !         do ifc=1,nfacegp
-        !            ist = (ifc-1)*3
-        !            ii1 = iip + el_face_num(ist+1) 
-        !            jj1 = jjp + el_face_num(ist+2)
-        !            kk1 = kkp + el_face_num(ist+3)
-        !
-        !            iig = ii1
-        !            jjg = jj1
-        !            kkg = kk1
-        !
-        !            distchk = 0.0d0
-        !            dist = 0.0d0
-        !            if (ii1-iip .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (ii1-iip .lt. 0) dist = dist +(rxval - rxl)**2
-        !               if (ii1-iip .gt. 0) dist = dist +(rxval - rxr)**2
-        !            endif
-        !            if (jj1-jjp .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (jj1-jjp .lt. 0) dist = dist +(ryval - ryl)**2
-        !               if (jj1-jjp .gt. 0) dist = dist +(ryval - ryr)**2
-        !            endif
-        !            if (ppiclf_ndim .gt. 2) then
-        !            if (kk1-kkp .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (kk1-kkp .lt. 0) dist = dist +(rzval - rzl)**2
-        !               if (kk1-kkp .gt. 0) dist = dist +(rzval - rzr)**2
-        !            endif
-        !            endif
-        !            distchk = sqrt(distchk)
-        !            dist = sqrt(dist)
-        !
-        !            if (ang_case==1) then  ! for wedge geometry
-        !
-        !               ! Thierry - I dont think it's code efficient to call this subroutine
-        !               !           for every particle, every ghost face, at every time step
-        !               !           I'm wondering if it's better if we make the plane values 
-        !               !           as global values that are initialized in the beginning 
-        !            
-        !               call ppiclf_solve_InitAngularPlane(ip,
-        !     >                                 ang_per_rin  , ang_per_rout  ,
-        !     >                                 ang_per_angle, ang_per_xangle,
-        !     >                                 dist1, dist2)
-        !               if ((dist .gt. distchk).and.(dist1.gt.distchk)
-        !     >           .and.(dist2.gt.distchk)) cycle
-        !            else
-        !               if (dist .gt. distchk) cycle
-        !            endif
-        !
-        !            iflgx = 0
-        !            iflgy = 0
-        !            iflgz = 0
-        !!-----------------------------------------------------------------------
-        !            ! 08/27/24 - Thierry - modification for angular periodicty starts here
-        !
-        !               ! angle between particle and x-axis
-        !                alpha = atan2(ppiclf_y(PPICLF_JY,ip), 
-        !     >                        ppiclf_y(PPICLF_JX,ip))
-        !                
-        !
-        !                call ppiclf_solve_InvokeAngularPeriodic(ip, 
-        !     >                                                  ang_per_flag,
-        !     >                                                  alpha,         
-        !     >                                                  ang_per_angle,  
-        !     >                                                  ang_per_xangle, 
-        !     >                                                  0)
-        !
-        !              ! Thierry - this is how FindParticle implements it
-        !              ! need to find a way to make the code deal with negative xrot values
-        !
-        !            xrank = iig ; yrank=jjg; zrank = kkg
-        !            ! Thierry - previously placed before the CheckPeriodicBC call, had to move them for the periodic check
-        !            iadd(1) = ii1
-        !            iadd(2) = jj1
-        !            iadd(3) = kk1
-        !            rxnew(1) = rxval
-        !            rxnew(2) = ryval
-        !            rxnew(3) = rzval ! z-coordinate does not change when angular periodicity is invoked
-        !            
-        !            ! Angular periodicity check in x- and y-directions
-        !            if (iig .lt. 0 .or. iig .gt. ppiclf_n_bins(1)-1) then
-        !              iflgx = 1
-        !              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
-        !              if (iperiodicx .ne. 0) cycle
-        !              iig = xrank
-        !              jjg = yrank
-        !            end if
-        !            
-        !            if (jjg .lt. 0 .or. jjg .gt. ppiclf_n_bins(2)-1) then
-        !              iflgy = 1
-        !              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
-        !              if (iperiodicy .ne. 0) cycle
-        !              iig = xrank
-        !              jjg = yrank
-        !            end if
-        !            
-        !            ! Linear periodicity check in z-direction
-        !            if (kkg .lt. 0 .or. kkg .gt. ppiclf_n_bins(3)-1) then
-        !              iflgz = 1
-        !              kkg =modulo(kkg,ppiclf_n_bins(3))
-        !              if (iperiodicz .ne. 0) cycle
-        !              ! rxdrng(3) = ppiclf_xdrange(2,3) - ppiclf_xdrange(1,3)
-        !              ! rxdrng(3) = -1.0  if not periodic in Z
-        !              if (rxdrng(3) .gt. 0) then 
-        !                if (iadd(3) .ge. ppiclf_n_bins(3)) then ! particle leaving from max z-face
-        !                  rxnew(3) = rxnew(3) - rxdrng(3)
-        !                elseif (iadd(3) .lt. 0) then ! particle leaving from min z-face
-        !                  rxnew(3) = rxnew(3) + rxdrng(3)
-        !                end if ! iadd
-        !              end if ! rxrdrng
-        !            else ! z-linear periodicity not applicable
-        !              kkg = zrank
-        !            end if ! kkg
-        !            
-        !            iflgsum = iflgx + iflgy + iflgz
-        !            ndumn  = iig + ppiclf_n_bins(1)*jjg + 
-        !     >                ppiclf_n_bins(1)*ppiclf_n_bins(2)*kkg
-        !             nrank = ndumn
-        !
-        !            if (nrank .eq. ppiclf_nid .and. iflgsum .eq. 0) cycle
-        !
-        !            ! 08/27/24 - Thierry - modification for angular periodicty ends here
-        !!-----------------------------------------------------------------------
-        !
-        !            do i=1,isave
-        !               if (gpsave(i) .eq. nrank .and. iflgsum .eq.0) goto 111
-        !            enddo
-        !            isave = isave + 1
-        !            gpsave(isave) = nrank
-        !
-        !            ibctype = iflgx+iflgy+iflgz
-        !            
-        !            rxnew(1) = xrot(1)
-        !            rxnew(2) = xrot(2)
-        !            ppiclf_cp_map(4,ip) = vrot(1)
-        !            ppiclf_cp_map(5,ip) = vrot(2)
-        !                 
-        !            ppiclf_npart_gp = ppiclf_npart_gp + 1
-        !            ppiclf_iprop_gp(1,ppiclf_npart_gp) = ppiclf_iprop(1,ip)
-        !            ppiclf_iprop_gp(2,ppiclf_npart_gp) = ppiclf_iprop(2,ip)
-        !            ppiclf_iprop_gp(3,ppiclf_npart_gp) = nrank
-        !            ppiclf_iprop_gp(4,ppiclf_npart_gp) = iig
-        !            ppiclf_iprop_gp(5,ppiclf_npart_gp) = jjg
-        !            ppiclf_iprop_gp(6,ppiclf_npart_gp) = kkg
-        !            ppiclf_iprop_gp(7,ppiclf_npart_gp) = nrank
-        !
-        !            ! Thierry - we don't need ppiclf_comm_CheckPeriodicBC anymore for the angular periodic ghost algorithm
-        !            !           as this is now taken care of when anticipating where the particle might be when calling
-        !            !           ppiclf_comm_InvokeAngularPeriodic
-        !            !           we only need to assign xr and vr to ppiclf_rprop_gp
-        !
-        !            ppiclf_rprop_gp(1,ppiclf_npart_gp) = rxnew(1) ! ppiclf_y(PPICLF_JX, ip) for the periodic ghost particle
-        !            ppiclf_rprop_gp(2,ppiclf_npart_gp) = rxnew(2) ! JY
-        !            ppiclf_rprop_gp(3,ppiclf_npart_gp) = rxnew(3) ! JZ
-        !            
-        !            do k=4,PPICLF_LRP_GP
-        !               ppiclf_rprop_gp(k,ppiclf_npart_gp) = ppiclf_cp_map(k,ip)
-        !            enddo
-        !  111 continue
-        !         enddo
-        !
-        !         ! edges
-        !         do ifc=1,nedgegp
-        !            ist = (ifc-1)*3
-        !            ii1 = iip + el_edge_num(ist+1) 
-        !            jj1 = jjp + el_edge_num(ist+2)
-        !            kk1 = kkp + el_edge_num(ist+3)
-        !
-        !            iig = ii1
-        !            jjg = jj1
-        !            kkg = kk1
-        !
-        !            distchk = 0.0d0
-        !            dist = 0.0d0
-        !            if (ii1-iip .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (ii1-iip .lt. 0) dist = dist +(rxval - rxl)**2
-        !               if (ii1-iip .gt. 0) dist = dist +(rxval - rxr)**2
-        !            endif
-        !            if (jj1-jjp .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (jj1-jjp .lt. 0) dist = dist +(ryval - ryl)**2
-        !               if (jj1-jjp .gt. 0) dist = dist +(ryval - ryr)**2
-        !            endif
-        !            if (ppiclf_ndim .gt. 2) then
-        !            if (kk1-kkp .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (kk1-kkp .lt. 0) dist = dist +(rzval - rzl)**2
-        !               if (kk1-kkp .gt. 0) dist = dist +(rzval - rzr)**2
-        !            endif
-        !            endif
-        !            distchk = sqrt(distchk)
-        !            dist = sqrt(dist)
-        !
-        !            if (ang_case==1) then  ! for wedge geometry
-        !
-        !               call ppiclf_solve_InitAngularPlane(ip,
-        !     >                                 ang_per_rin  , ang_per_rout  ,
-        !     >                                 ang_per_angle, ang_per_xangle,
-        !     >                                 dist1, dist2)
-        !               if ((dist .gt. distchk).and.(dist1.gt.distchk)
-        !     >           .and.(dist2.gt.distchk)) cycle
-        !            else
-        !               if (dist .gt. distchk) cycle
-        !            endif
-        !
-        !            iflgx = 0
-        !            iflgy = 0
-        !            iflgz = 0
-        !            ! periodic if out of domain - add some ifsss
-        !!-----------------------------------------------------------------------
-        !            ! 08/27/24 - Thierry - modification for angular periodicty starts here
-        !
-        !               ! angle between particle and x-axis
-        !                alpha = atan2(ppiclf_y(PPICLF_JY,ip), 
-        !     >                        ppiclf_y(PPICLF_JX,ip))
-        !                
-        !
-        !                call ppiclf_solve_InvokeAngularPeriodic(ip, 
-        !     >                                                  ang_per_flag,
-        !     >                                                  alpha,         
-        !     >                                                  ang_per_angle,  
-        !     >                                                  ang_per_xangle, 
-        !     >                                                  0)
-        !
-        !              ! Thierry - this is how FindParticle implements it
-        !              ! need to find a way to make the code deal with negative xrot values
-        !
-        !            xrank = iig ; yrank=jjg; zrank = kkg
-        !            ! Thierry - previously placed before the CheckPeriodicBC call, had to move them for the periodic check
-        !            iadd(1) = ii1
-        !            iadd(2) = jj1
-        !            iadd(3) = kk1
-        !            rxnew(1) = rxval
-        !            rxnew(2) = ryval
-        !            rxnew(3) = rzval ! z-coordinate does not change when angular periodicity is invoked
-        !            
-        !            ! Angular periodicity check in x- and y-directions
-        !            if (iig .lt. 0 .or. iig .gt. ppiclf_n_bins(1)-1) then
-        !              iflgx = 1
-        !              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
-        !              if (iperiodicx .ne. 0) cycle
-        !              iig = xrank
-        !              jjg = yrank
-        !            end if
-        !            
-        !            if (jjg .lt. 0 .or. jjg .gt. ppiclf_n_bins(2)-1) then
-        !              iflgy = 1
-        !              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
-        !              if (iperiodicy .ne. 0) cycle
-        !              iig = xrank
-        !              jjg = yrank
-        !            end if
-        !            
-        !            ! Linear periodicity check in z-direction
-        !            if (kkg .lt. 0 .or. kkg .gt. ppiclf_n_bins(3)-1) then
-        !              iflgz = 1
-        !              kkg =modulo(kkg,ppiclf_n_bins(3))
-        !              if (iperiodicz .ne. 0) cycle
-        !              ! rxdrng(3) = ppiclf_xdrange(2,3) - ppiclf_xdrange(1,3)
-        !              ! rxdrng(3) = -1.0  if not periodic in Z
-        !              if (rxdrng(3) .gt. 0) then ! particle leaving from max z-face
-        !                if (iadd(3) .ge. ppiclf_n_bins(3)) then
-        !                  rxnew(3) = rxnew(3) - rxdrng(3)
-        !                elseif (iadd(3) .lt. 0) then
-        !                  rxnew(3) = rxnew(3) + rxdrng(3)
-        !                end if ! iadd
-        !              end if ! rxrdrng
-        !            else ! z-linear periodicity not applicable
-        !              kkg = zrank
-        !            end if ! kkg
-        !            
-        !            iflgsum = iflgx + iflgy + iflgz
-        !            ndumn  = iig + ppiclf_n_bins(1)*jjg + 
-        !     >                ppiclf_n_bins(1)*ppiclf_n_bins(2)*kkg
-        !             nrank = ndumn
-        !
-        !            if (nrank .eq. ppiclf_nid .and. iflgsum .eq. 0) cycle
-        !
-        !            ! 08/27/24 - Thierry - modification for angular periodicty ends here
-        !!-----------------------------------------------------------------------
-        !
-        !            do i=1,isave
-        !               if (gpsave(i) .eq. nrank .and. iflgsum .eq.0) goto 222
-        !            enddo
-        !            isave = isave + 1
-        !            gpsave(isave) = nrank
-        !
-        !            ibctype = iflgx+iflgy+iflgz
-        !
-        !            rxnew(1) = xrot(1)
-        !            rxnew(2) = xrot(2)
-        !            ppiclf_cp_map(4,ip) = vrot(1)
-        !            ppiclf_cp_map(5,ip) = vrot(2)
-        !                 
-        !            ppiclf_npart_gp = ppiclf_npart_gp + 1
-        !
-        !            ppiclf_iprop_gp(1,ppiclf_npart_gp) = ppiclf_iprop(1,ip)
-        !            ppiclf_iprop_gp(2,ppiclf_npart_gp) = ppiclf_iprop(2,ip)
-        !            ppiclf_iprop_gp(3,ppiclf_npart_gp) = nrank
-        !            ppiclf_iprop_gp(4,ppiclf_npart_gp) = iig
-        !            ppiclf_iprop_gp(5,ppiclf_npart_gp) = jjg
-        !            ppiclf_iprop_gp(6,ppiclf_npart_gp) = kkg
-        !            ppiclf_iprop_gp(7,ppiclf_npart_gp) = nrank
-        !
-        !            ! Thierry - we don't need ppiclf_comm_CheckPeriodicBC anymore for the angular periodic ghost algorithm
-        !            !           as this is now taken care of when anticipating where the particle might be when calling
-        !            !           ppiclf_comm_InvokeAngularPeriodic
-        !            !           we only need to assign xr and vr to ppiclf_rprop_gp
-        !
-        !            ppiclf_rprop_gp(1,ppiclf_npart_gp) = rxnew(1) ! ppiclf_y(PPICLF_JX, ip) for the periodic ghost particle
-        !            ppiclf_rprop_gp(2,ppiclf_npart_gp) = rxnew(2) ! JY
-        !            ppiclf_rprop_gp(3,ppiclf_npart_gp) = rxnew(3) ! JZ
-        !            
-        !            do k=4,PPICLF_LRP_GP
-        !               ppiclf_rprop_gp(k,ppiclf_npart_gp) = ppiclf_cp_map(k,ip)
-        !            enddo
-        !  222 continue
-        !         enddo
-        !
-        !         ! corners
-        !         do ifc=1,ncornergp
-        !            ist = (ifc-1)*3
-        !            ii1 = iip + el_corner_num(ist+1) 
-        !            jj1 = jjp + el_corner_num(ist+2)
-        !            kk1 = kkp + el_corner_num(ist+3)
-        !
-        !            iig = ii1
-        !            jjg = jj1
-        !            kkg = kk1
-        !
-        !            distchk = 0.0d0
-        !            dist = 0.0d0
-        !            if (ii1-iip .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (ii1-iip .lt. 0) dist = dist +(rxval - rxl)**2
-        !               if (ii1-iip .gt. 0) dist = dist +(rxval - rxr)**2
-        !            endif
-        !            if (jj1-jjp .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (jj1-jjp .lt. 0) dist = dist +(ryval - ryl)**2
-        !               if (jj1-jjp .gt. 0) dist = dist +(ryval - ryr)**2
-        !            endif
-        !            if (ppiclf_ndim .gt. 2) then
-        !            if (kk1-kkp .ne. 0) then
-        !               distchk = distchk + (rfac*gFilt)**2
-        !               if (kk1-kkp .lt. 0) dist = dist +(rzval - rzl)**2
-        !               if (kk1-kkp .gt. 0) dist = dist +(rzval - rzr)**2
-        !            endif
-        !            endif
-        !            distchk = sqrt(distchk)
-        !            dist = sqrt(dist)
-        !
-        !            if (ang_case==1) then  ! for wedge geometry
-        !            
-        !               call ppiclf_solve_InitAngularPlane(ip,
-        !     >                                 ang_per_rin  , ang_per_rout  ,
-        !     >                                 ang_per_angle, ang_per_xangle,
-        !     >                                 dist1, dist2)
-        !               if ((dist .gt. distchk).and.(dist1.gt.distchk)
-        !     >           .and.(dist2.gt.distchk)) cycle
-        !            else
-        !               if (dist .gt. distchk) cycle
-        !            endif
-        !
-        !            iflgx = 0
-        !            iflgy = 0
-        !            iflgz = 0
-        !
-        !!-----------------------------------------------------------------------
-        !            ! 08/27/24 - Thierry - modification for angular periodicty starts here
-        !
-        !               ! angle between particle and x-axis
-        !                alpha = atan2(ppiclf_y(PPICLF_JY,ip), 
-        !     >                        ppiclf_y(PPICLF_JX,ip))
-        !                
-        !
-        !                call ppiclf_solve_InvokeAngularPeriodic(ip, 
-        !     >                                                  ang_per_flag,
-        !     >                                                  alpha,         
-        !     >                                                  ang_per_angle,  
-        !     >                                                  ang_per_xangle, 
-        !     >                                                  0)
-        !
-        !              ! Thierry - this is how FindParticle implements it
-        !              ! need to find a way to make the code deal with negative xrot values
-        !
-        !            xrank = iig ; yrank=jjg; zrank = kkg
-        !            ! Thierry - previously placed before the CheckPeriodicBC call, had to move them for the periodic check
-        !            iadd(1) = ii1
-        !            iadd(2) = jj1
-        !            iadd(3) = kk1
-        !            rxnew(1) = rxval
-        !            rxnew(2) = ryval
-        !            rxnew(3) = rzval ! z-coordinate does not change when angular periodicity is invoked
-        !            
-        !            ! Angular periodicity check in x- and y-directions
-        !            if (iig .lt. 0 .or. iig .gt. ppiclf_n_bins(1)-1) then
-        !              iflgx = 1
-        !              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
-        !              if (iperiodicx .ne. 0) cycle
-        !              iig = xrank
-        !              jjg = yrank
-        !            end if
-        !            
-        !            if (jjg .lt. 0 .or. jjg .gt. ppiclf_n_bins(2)-1) then
-        !              iflgy = 1
-        !              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
-        !              if (iperiodicy .ne. 0) cycle
-        !              iig = xrank
-        !              jjg = yrank
-        !            end if
-        !            
-        !            ! Linear periodicity check in z-direction
-        !            if (kkg .lt. 0 .or. kkg .gt. ppiclf_n_bins(3)-1) then
-        !              iflgz = 1
-        !              kkg =modulo(kkg,ppiclf_n_bins(3))
-        !              if (iperiodicz .ne. 0) cycle
-        !              ! rxdrng(3) = ppiclf_xdrange(2,3) - ppiclf_xdrange(1,3)
-        !              ! rxdrng(3) = -1.0  if not periodic in Z
-        !              if (rxdrng(3) .gt. 0) then ! particle leaving from max z-face
-        !                if (iadd(3) .ge. ppiclf_n_bins(3)) then
-        !                  rxnew(3) = rxnew(3) - rxdrng(3)
-        !                elseif (iadd(3) .lt. 0) then
-        !                  rxnew(3) = rxnew(3) + rxdrng(3)
-        !                end if ! iadd
-        !              end if ! rxrdrng
-        !            else ! z-linear periodicity not applicable
-        !              kkg = zrank
-        !            end if ! kkg
-        !            
-        !            iflgsum = iflgx + iflgy + iflgz
-        !            ndumn  = iig + ppiclf_n_bins(1)*jjg + 
-        !     >                ppiclf_n_bins(1)*ppiclf_n_bins(2)*kkg
-        !             nrank = ndumn
-        !
-        !            if (nrank .eq. ppiclf_nid .and. iflgsum .eq. 0) cycle
-        !
-        !            ! 08/27/24 - Thierry - modification for angular periodicty ends here
-        !!-----------------------------------------------------------------------
-        !            do i=1,isave
-        !               if (gpsave(i) .eq. nrank .and. iflgsum .eq.0) goto 333
-        !            enddo
-        !            isave = isave + 1
-        !            gpsave(isave) = nrank
-        !
-        !            ibctype = iflgx+iflgy+iflgz
-        !
-        !            rxnew(1) = xrot(1)
-        !            rxnew(2) = xrot(2)
-        !            ppiclf_cp_map(4,ip) = vrot(1)
-        !            ppiclf_cp_map(5,ip) = vrot(2)
-        !
-        !            ppiclf_npart_gp = ppiclf_npart_gp + 1
-        !
-        !            ppiclf_iprop_gp(1,ppiclf_npart_gp) = ppiclf_iprop(1,ip)
-        !            ppiclf_iprop_gp(2,ppiclf_npart_gp) = ppiclf_iprop(2,ip)
-        !            ppiclf_iprop_gp(3,ppiclf_npart_gp) = nrank
-        !            ppiclf_iprop_gp(4,ppiclf_npart_gp) = iig
-        !            ppiclf_iprop_gp(5,ppiclf_npart_gp) = jjg
-        !            ppiclf_iprop_gp(6,ppiclf_npart_gp) = kkg
-        !            ppiclf_iprop_gp(7,ppiclf_npart_gp) = nrank
-        !
-        !            ! Thierry - we don't need ppiclf_comm_CheckPeriodicBC anymore for the angular periodic ghost algorithm
-        !            !           as this is now taken care of when anticipating where the particle might be when calling
-        !            !           ppiclf_comm_InvokeAngularPeriodic
-        !            !           we only need to assign xr and vr to ppiclf_rprop_gp
-        !
-        !            ppiclf_rprop_gp(1,ppiclf_npart_gp) = rxnew(1) ! ppiclf_y(PPICLF_JX, ip) for the periodic ghost particle
-        !            ppiclf_rprop_gp(2,ppiclf_npart_gp) = rxnew(2) ! JY
-        !            ppiclf_rprop_gp(3,ppiclf_npart_gp) = rxnew(3) ! JZ
-        !
-        !            do k=4,PPICLF_LRP_GP
-        !               ppiclf_rprop_gp(k,ppiclf_npart_gp) = ppiclf_cp_map(k,ip)
-        !            enddo
-        !  333 continue
-        !         enddo
-        !
-        !      enddo ! ip 
-        !
-        !      return
-        !      end
-        !!----------------------------------------------------------------------
-        !      subroutine ppiclf_comm_CheckAngularBC(xrank, yrank, zrank)
-        !!
-        !      implicit none
-        !!
-        !      include "PPICLF"
-        !!
-        !! Local:
-        !!
-        !      integer*4 xrank, yrank, zrank
-        !!
-        !! Output:
-        !!
-        !
-        !      SELECT CASE (ang_case)
-        !        CASE(1) ! general wedge ; 0 <= angle < 90
-        !!          print*, "Wedge CheckAngularBC"
-        !          xrank  = FLOOR((xrot(1)-ppiclf_binb(1))/ppiclf_bins_dx(1)) 
-        !          yrank  = FLOOR((xrot(2)-ppiclf_binb(3))/ppiclf_bins_dx(2)) 
-        !          zrank  = FLOOR((xrot(3)-ppiclf_binb(5))/ppiclf_bins_dx(3))
-        !
-        !        CASE(2) ! quarter cylinder ; angle = 90
-        !!          print*, "Quarter Cylinder CheckAngularBC"
-        !          xrank  = FLOOR((abs(xrot(1))-ppiclf_binb(1))
-        !     >                    /ppiclf_bins_dx(1)) 
-        !          yrank  = FLOOR((abs(xrot(2))-ppiclf_binb(3))
-        !     >                   /ppiclf_bins_dx(2)) 
-        !          zrank  = FLOOR((xrot(3)-ppiclf_binb(5))/ppiclf_bins_dx(3))
-        !
-        !        CASE(3) ! half cylinder ; angle = 180
-        !          print*, "Half Cylinder CheckAngularBC"
-        !
-        !        CASE DEFAULT
-        !            call ppiclf_exittr('Invalid Ghost Rotational Case!$',
-        !     >       0.0d0 ,ppiclf_nid)
-        !          END SELECT
-        !
-        !      return
-        !      end
-        !
-        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        ! David's old binning method left below for now
-        !      finished(1) = 0
-        !      finished(2) = 0
-        !      finished(3) = 0
-        !      total_bin = 1 
-        !
-        !      BinMinLen(1) = MAX(BinMinLen(1),BinMinLen(2),BinMinLen(3))
-        !      do i=1,ppiclf_ndim
-        !         finished(i) = 0
-        !         exit_1_array(i) = ppiclf_bins_set(i)
-        !         exit_2_array(i) = 0
-        !         if (ppiclf_bins_set(i) .ne. 1) ppiclf_n_bins(i) = 1
-        !         ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
-        !     >                        ppiclf_binb(2*(i-1)+1)  ) / 
-        !     >                       ppiclf_n_bins(i)
-        !         ! Make sure exit_2 is not violated by user input
-        !         if (ppiclf_bins_dx(i) .lt. BinMinLen(1)) then
-        !            do while (ppiclf_bins_dx(i) .lt. BinMinLen(1))
-        !               ppiclf_n_bins(i) = max(1, ppiclf_n_bins(i)-1)
-        !               ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
-        !     >                              ppiclf_binb(2*(i-1)+1)  ) / 
-        !     >                             ppiclf_n_bins(i)
-        !         WRITE(*,*) "Inf. loop in CreateBin", i, 
-        !     >              ppiclf_bins_dx(i), BinMinLen(1)
-        !         call ppiclf_exittr('Inf. loop in CreateBin$',0.0,0)
-        !            enddo
-        !         endif
-        !         total_bin = total_bin*ppiclf_n_bins(i)
-        !      enddo
-        !
-        !      ! Make sure exit_1 is not violated by user input
-        !      count = 0
-        !      do while (total_bin > ppiclf_np)
-        !          count = count + 1;
-        !          i = modulo((ppiclf_ndim-1)+count,ppiclf_ndim)+1
-        !          ppiclf_n_bins(i) = max(ppiclf_n_bins(i)-1,1)
-        !          ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
-        !     >                         ppiclf_binb(2*(i-1)+1)  ) / 
-        !     >                        ppiclf_n_bins(i)
-        !          total_bin = 1
-        !          do j=1,ppiclf_ndim
-        !             total_bin = total_bin*ppiclf_n_bins(j)
-        !          enddo
-        !          if (total_bin .le. ppiclf_np) exit
-        !       enddo
-        !
-        !       exit_1 = .false.
-        !       exit_2 = .false.
-        !
-        !       do while (.not. exit_1 .and. .not. exit_2)
-        !          do i=1,ppiclf_ndim
-        !             if (exit_1_array(i) .eq. 0) then
-        !                ppiclf_n_bins(i) = ppiclf_n_bins(i) + 1
-        !                ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
-        !     >                               ppiclf_binb(2*(i-1)+1)  ) / 
-        !     >                              ppiclf_n_bins(i)
-        !
-        !                ! Check conditions
-        !                ! exit_1
-        !                total_bin = 1
-        !                do j=1,ppiclf_ndim
-        !                   total_bin = total_bin*ppiclf_n_bins(j)
-        !                enddo
-        !                if (total_bin .gt. ppiclf_np) then
-        !                   ! two exit arrays aren't necessary for now, but
-        !                   ! to make sure exit_2 doesn't slip through, we
-        !                   ! set both for now
-        !                   exit_1_array(i) = 1
-        !                   exit_2_array(i) = 1
-        !                   ppiclf_n_bins(i) = ppiclf_n_bins(i) - 1
-        !                   ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
-        !     >                                  ppiclf_binb(2*(i-1)+1)  ) / 
-        !     >                                  ppiclf_n_bins(i)
-        !                   exit
-        !                endif
-        !                
-        !                ! exit_2
-        !                if (ppiclf_bins_dx(i) .lt. BinMinLen(1)) then
-        !                   ! two exit arrays aren't necessary for now, but
-        !                   ! to make sure exit_2 doesn't slip through, we
-        !                   ! set both for now
-        !                   exit_1_array(i) = 1
-        !                   exit_2_array(i) = 1
-        !                   ppiclf_n_bins(i) = ppiclf_n_bins(i) - 1
-        !                   ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
-        !     >                                  ppiclf_binb(2*(i-1)+1)  ) / 
-        !     >                                  ppiclf_n_bins(i)
-        !                   exit
-        !                endif
-        !             endif
-        !          enddo
-        !
-        !          ! full exit_1
-        !          sum_value = 0
-        !          do i=1,ppiclf_ndim
-        !             sum_value = sum_value + exit_1_array(i)
-        !          enddo
-        !          if (sum_value .eq. ppiclf_ndim) then
-        !             exit_1 = .true.
-        !          endif
-        !
-        !          ! full exit_2
-        !          sum_value = 0
-        !          do i=1,ppiclf_ndim
-        !             sum_value = sum_value + exit_2_array(i)
-        !          enddo
-        !          if (sum_value .eq. ppiclf_ndim) then
-        !             exit_2 = .true.
-        !          endif
-        !       enddo
-        !      ! Check for too small bins 
-        !      rthresh = 1E-12
-        !      total_bin = 1
-        !      do i=1,ppiclf_ndim
-        !         total_bin = total_bin*ppiclf_n_bins(i)
-        !         if (ppiclf_bins_dx(i) .lt. rthresh) ppiclf_bins_dx(i) = 1.0
-        !      enddo
+        INTEGER*4 iprop_proc_index
+        LOGICAL   partl  ! Dummy variable       
 
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#ifdef PERF
+        REAL*8    tstart, tfinal
+#endif
+
+        !
+        iprop_proc_index = 4 ! since ppiclf_iprop(4,np) contains processor
+                             ! that should receive ghost particle
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
+        CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl  & 
+            ,ppiclf_npart_gp,PPICLF_LPART_GP                & ! Setup
+            ,ppiclf_iprop_gp,PPICLF_LIP_GP                  & ! Integer Comm
+            ,partl,0                                        & ! Logical Comm
+            ,ppiclf_rprop_gp,PPICLF_LRP_GP                  & ! Real Comm
+            ,iprop_proc_index)                                ! Receiver processor index
+
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
+
+        RETURN
+    END SUBROUTINE ppiclf_comm_MoveGhostOLD
+
+    !-----------------------------------------------------------------------
+    ! The following subroutines are for the new particle-based load balance
+    ! approach. The goal is to make ppiclf_npart approximately equal per
+    ! processor.
+    !-----------------------------------------------------------------------
+
+    SUBROUTINE ppiclf_comm_CreateBinPartLB
+        INTEGER*4 i, j, ierr
+
+        REAL*8    BinMinLen(3), local_extremes(6),BinBuffer(3), temp1, temp2, periodicDistCheck,idum, jdum, kdum
+
+        CALL MPI_ALLREDUCE(ppiclf_npart,ppiclf_glnpart,1,MPI_INTEGER4, MPI_SUM,ppiclf_comm, ierr)
+
+        ! Bin must be larger than nearest neighbor search distance
+        ! and the ppiclf_filter(1:3).  This makes a buffer around the bin
+        ! domain. Increase if you desire to bin less frequently.
+        ! ppiclf_filter is 2x cell length in each direction
+        DO i = 1,3
+            BinMinLen(i) = MAX(ppiclf_filter(i),ppiclf_nndist)
+            ! For buffer: need ppiclf_filter to make sure you have 1 layer
+            ! of outer fluid cells
+            ! Need ppiclf_nndist/2 to ensure BinMinLen is never violated
+            BinBuffer(i) = MAX(ppiclf_filter(i)/2,ppiclf_nndist/2)
+        END DO
+
+        ! Looping through particles on this processor
+        ! to find bin boundary locations
+        DO i = 1,3
+            local_extremes(2*i) = -1.0D10
+            local_extremes(2*i-1) = 1.0D10
+        END DO
+        DO i=1,ppiclf_npart
+            DO j = 1,3
+                ! Finding min/max particle extremes.
+                ! Add buffer so that layers of outer cells 
+                ! are available for interpolation/projection.
+                temp1 = ppiclf_y(j,i) - BinBuffer(j)
+                temp2 = ppiclf_y(j,i) + BinBuffer(j)
+                IF(temp1 .LT. local_extremes(2*j-1)) local_extremes(2*j-1) = temp1
+                IF(temp2 .GT. local_extremes(2*j))   local_extremes(2*j) = temp2
+            END DO
+        END DO
+
+        ! Finds global bin domain boundaries across MPI ranks
+        DO i = 1,3
+            CALL MPI_ALLREDUCE(local_extremes(2*i-1),ppiclf_binb(2*i-1), 1,MPI_DOUBLE_PRECISION, MPI_MIN,ppiclf_comm, ierr)
+
+            CALL MPI_ALLREDUCE(local_extremes(2*i),ppiclf_binb(2*i), 1,MPI_DOUBLE_PRECISION, MPI_MAX,ppiclf_comm, ierr)
+            ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
+        END DO
+
+        ! Ensuring ppiclf_binb not greater than 
+        ! cartesian fluid domain extremes.
+        ! If dist within ppiclf_nndist, set ppiclf_binb
+        ! equal to fluid domain for periodic ghost particles.
+        ! Needed to know when to use linear periodic
+      
+        ppiclf_EqualDomain(1) = .FALSE.
+        ppiclf_EqualDomain(2) = .FALSE.
+        ppiclf_EqualDomain(3) = .FALSE.
+
+        DO i = 1,3
+            ! Check bin min domain
+            periodicDistCheck = MAX(ppiclf_nndist,ppiclf_filter(i))
+            IF(ppiclf_binb(i*2-1) - periodicDistCheck .LE. ppiclf_xdrange(1,i)) THEN
+                ppiclf_binb(i*2-1) = ppiclf_xdrange(1,i)
+                ppiclf_EqualDomain(i) = .TRUE.
+            END IF
+            ! Check bin max domain
+            IF(ppiclf_binb(i*2)+periodicDistCheck .GE. ppiclf_xdrange(2,i)) THEN
+                ppiclf_binb(i*2) = ppiclf_xdrange(2,i)
+            ELSE
+                ppiclf_EqualDomain(i) = .FALSE.
+            END IF
+        END DO
+
+        ppiclf_totalBins = 1
+        DO i = 1,3
+            ppiclf_n_bins(i) = INT( (ppiclf_binb(2*i)-ppiclf_binb(2*i-1)) /  BinMinLen(i) )
+            ppiclf_bins_dx(i) = (ppiclf_binb(2*i) - ppiclf_binb(2*i-1)) / ppiclf_n_bins(i)
+            ppiclf_totalBins = ppiclf_totalBins*ppiclf_n_bins(i)
+        END DO
+
+        RETURN
+    END SUBROUTINE ppiclf_comm_CreateBinPartLB
+
+    SUBROUTINE ppiclf_comm_FindParticlePartLB
+
+        INTEGER*4  i, ii, jj, kk, nbin, ierr, partcheck, NumBins,ParticleCount(0:ppiclf_totalBins-1),BinToRankMapping(0:ppiclf_totalBins-1)
+
+        DO i = 0,(ppiclf_totalBins - 1)
+            ParticleCount(i) = 0
+        END DO
+
+        DO i=1,ppiclf_npart
+            ! Calculates particle's bin index
+            ii  = FLOOR((@{USEPARTICLE(ppiclf_parts(i)%y%pos%x)}@-ppiclf_binb(1))/ppiclf_bins_dx(1))
+            jj  = FLOOR((@{USEPARTICLE(ppiclf_parts(i)%y%pos%y)}@-ppiclf_binb(3))/ppiclf_bins_dx(2)) 
+            kk  = FLOOR((@{USEPARTICLE(ppiclf_parts(i)%y%pos%z)}@-ppiclf_binb(5))/ppiclf_bins_dx(3)) 
+        
+            ! Calculates particle's bin
+            nbin = ii + ppiclf_n_bins(1)*jj + ppiclf_n_bins(1)*ppiclf_n_bins(2)*kk
+
+            ! Maps particle to correct processor based on active bin number
+            !ppiclf_iprop(4,i) = nrank ! Processor to send to
+            ppiclf_iprop(5,i) = ii    ! x bin #
+            ppiclf_iprop(6,i) = jj    ! y bin #
+            ppiclf_iprop(7,i) = kk    ! z bin #
+            ppiclf_iprop(8,i) = nbin ! total bin number
+            ParticleCount(nbin) = ParticleCount(nbin) + 1
+        END DO
+
+        ! Now sum particles per bin across MPI Ranks
+        CALL MPI_ALLREDUCE(MPI_IN_PLACE, ParticleCount, ppiclf_totalBins,MPI_INTEGER4, MPI_SUM,ppiclf_comm, ierr)
+
+
+        CALL ppiclf_comm_partLoadBalance(ParticleCount,BinToRankMapping)
+
+        RETURN
+    END SUBROUTINE ppiclf_comm_FindParticlePartLB
+
+    SUBROUTINE ppiclf_comm_partLoadBalance(PC,BTRM)
+
+        INTEGER*4  PC(0:ppiclf_totalBins-1), ierr, i,       &
+            BTRM(0:ppiclf_totalBins-1), targetParticleCnt,  &
+            particleSum, irank, dL, dM, dS, bin, d2, d3,    &
+            ii, jj, kk, nb1, nb2, nb3, iloop, jloop, kloop  
+        REAL*8     rankBounds(6)
+
+        ! Find the order to loop through dimensions. 
+        ! Using largest dimension minimizes surface area between 
+        ! processors, which likely minimizes ghost particle and
+        ! overlap cell communication
+
+        ! Sorting the domain lengths: dL = largest dimension,
+        ! dM = medium dimension, dS = smallest dimension
+        dL = MAXLOC(ppiclf_BinDomLen, DIM=1)
+        dS = MINLOC(ppiclf_BinDomLen, DIM=1)
+        dM = 6 - dL - dS
+
+        nb1 = ppiclf_n_bins(1)
+        nb2 = ppiclf_n_bins(2)
+        nb3 = ppiclf_n_bins(3)
+
+        ! This rounds up for integer divison (truncation)
+        targetParticleCnt = ppiclf_glnpart/ppiclf_np + 1
+
+        particleSum   = 0
+        irank = 0
+        ! Save min rank boundary
+        IF(irank .EQ. ppiclf_nid) THEN
+            ppiclf_bin_pos(1,dL) = ppiclf_binb(2*dL-1) + (0)*ppiclf_bins_dx(dL)
+            ppiclf_ILarSlice(1)  = 0
+            ppiclf_RMedSlice(1)  = ppiclf_binb(2*dM-1)  + (0)*ppiclf_bins_dx(dM)
+            ppiclf_IMedSlice(1)  = 0
+            ppiclf_bin_pos(2,dM) = ppiclf_binb(2*dM-1)  
+            ppiclf_bin_pos(1,dS) = ppiclf_binb(2*dS-1)   
+        END IF
+        ! Iterate through loops of largest dimension.
+        ! Increment loops by one and loop through all other dimensions.
+        DO iloop = 0,(ppiclf_n_bins(dL) - 1)
+            IF(dL .EQ. 1) THEN
+                ii = iloop
+            ELSEIF(dL .EQ. 2) THEN
+                jj = iloop
+            ELSEIF(dL .EQ. 3) THEN
+                kk = iloop
+            ELSE
+                PRINT*, 'ERROR in ppiclf_comm_partLoadBalance'
+                RETURN
+            END IF
+            DO jloop = 0,(ppiclf_n_bins(dM) - 1)
+                IF(dM .EQ. 1) THEN
+                    ii = jloop
+                ELSEIF(dM .EQ. 2) THEN
+                    jj = jloop
+                ELSEIF(dM .EQ. 3) THEN
+                    kk = jloop
+                ELSE
+                    PRINT*, 'ERROR in ppiclf_comm_partLoadBalance'
+                    RETURN
+                END IF
+                DO kloop = 0,(ppiclf_n_bins(dS) - 1)
+                    IF(dS .EQ. 1) THEN
+                        ii = kloop
+                    ELSEIF(dS .EQ. 2) THEN
+                        jj = kloop
+                    ELSEIF(dS .EQ. 3) THEN
+                        kk = kloop
+                    ELSE
+                        PRINT*, 'ERROR in ppiclf_comm_partLoadBalance'
+                        RETURN
+                    END IF
+                    bin  = ii + nb1*jj + nb1*nb2*kk
+                    particleSum = particleSum + PC(bin)
+                    ! This maps the bin to the MPI-rank
+                    BTRM(bin) = irank 
+                END DO
+                ! The position of the following IF determines particle
+                ! domain shape.
+                ! inside first loop - rectangle with full slices in dL
+                ! inside second loop - composite rectangles with uneven
+                !                      slices in dM and full slices in dL
+                IF(particleSum .GE. targetParticleCnt) THEN
+                    ! Save max rank boundary
+                    IF(irank .EQ. ppiclf_nid) THEN
+                        ppiclf_bin_pos(2,dL) = ppiclf_binb(2*dL-1) + (iloop+1)*ppiclf_bins_dx(dL)
+                        ppiclf_ILarSlice(2)  = iloop
+                        ppiclf_RMedSlice(2)  = ppiclf_binb(2*dM-1) + (jloop+1)*ppiclf_bins_dx(dM)
+                        ppiclf_IMedSlice(2)  = jloop
+                        ppiclf_bin_pos(2,dM) = ppiclf_binb(2*dM)  
+                        ppiclf_bin_pos(2,dS) = ppiclf_binb(2*dS) 
+                    END IF
+
+                    ! Reset Particle counter and advance MPI rank iteration
+                    particleSum = 0
+                    irank = irank + 1
+
+                    ! Save min rank boundary
+                    IF(irank .EQ. ppiclf_nid) THEN
+                        ppiclf_bin_pos(1,dL) = ppiclf_binb(2*dL-1) + (iloop+1)*ppiclf_bins_dx(dL)
+                        ppiclf_ILarSlice(1)  = iloop
+                        ppiclf_RMedSlice(1) = ppiclf_binb(2*dM-1)  + (jloop+1)*ppiclf_bins_dx(dM)
+                        ppiclf_IMedSlice(1) = jloop
+                        ppiclf_bin_pos(1,dM) = ppiclf_binb(2*dM-1)  
+                        ppiclf_bin_pos(1,dS) = ppiclf_binb(2*dS-1)   
+                    END IF
+                    irank = MIN(irank,ppiclf_np-1)
+                END IF
+            END DO
+        END DO
+
+        RETURN
+    END
+
 end module ppiclf_m_comm
+
+!----------------------------------------------------------------------
+!      subroutine ppiclf_comm_AngularCreateGhost
+!!
+!      implicit none
+!!
+!      include "PPICLF"
+!!
+!! Internal:
+!!
+!      real*8 xdlen,ydlen,zdlen,rxdrng(3),rxnew(3), rfac, rxval, ryval,
+!     >       rzval, rxl, ryl, rzl, rxr, ryr, rzr, distchk, dist, gFilt
+!      integer*4 iadd(3),gpsave(27)
+!      real*8 map(PPICLF_LRP_PRO)
+!      integer*4  el_face_num(18),el_edge_num(36),el_corner_num(24),
+!     >           nfacegp, nedgegp, ncornergp, iperiodicx, iperiodicy,
+!     >           iperiodicz, jx, jy, jz, ip, idum, iip, jjp, kkp, ii1,
+!     >           jj1, kk1, iig, jjg, kkg, iflgx, iflgy, iflgz,
+!     >           isave, iflgsum, ndumn, nrank, ibctype, i, ifc, ist, j,
+!     >           k
+!      ! 08/27/24 - Thierry - added for angular periodicty starts here
+!      real*8 alpha
+!      integer*4 xrank, yrank, zrank
+!      ! 08/27/24 - Thierry - added for angular periodicty ends here
+!      ! 09/26/24 - Thierry - added for angular periodicty starts here
+!      real*8 dist1, dist2
+!      ! 09/26/24 - Thierry - added for angular periodicty ends here
+!!
+!
+!c     face, edge, and corner number, x,y,z are all inline, so stride=3
+!      el_face_num = (/ -1,0,0, 1,0,0, 0,-1,0, 0,1,0, 0,0,-1, 0,0,1 /)
+!      el_edge_num = (/ -1,-1,0 , 1,-1,0, 1,1,0 , -1,1,0 ,
+!     >                  0,-1,-1, 1,0,-1, 0,1,-1, -1,0,-1,
+!     >                  0,-1,1 , 1,0,1 , 0,1,1 , -1,0,1  /)
+!      el_corner_num = (/ -1,-1,-1, 1,-1,-1, 1,1,-1, -1,1,-1,
+!     >                   -1,-1,1,  1,-1,1,  1,1,1,  -1,1,1 /)
+!
+!      nfacegp   = 4  ! number of faces
+!      nedgegp   = 4  ! number of edges
+!      ncornergp = 0  ! number of corners
+!
+!      if (ppiclf_ndim .gt. 2) then
+!         nfacegp   = 6  ! number of faces
+!         nedgegp   = 12 ! number of edges
+!         ncornergp = 8  ! number of corners
+!      endif
+!
+!      iperiodicx = ppiclf_iperiodic(1)
+!      iperiodicy = ppiclf_iperiodic(2)
+!      iperiodicz = ppiclf_iperiodic(3)
+!
+!! ------------------------
+!c CREATING GHOST PARTICLES
+!! ------------------------
+!      jx    = 1
+!      jy    = 2
+!      jz    = 3
+!
+!      ! Thierry - we dont use xdlen and ydlen in this algorithm. no need to modify them.
+!      xdlen = ppiclf_binb(2) - ppiclf_binb(1)
+!      ydlen = ppiclf_binb(4) - ppiclf_binb(3)
+!      zdlen = -1.
+!      if (ppiclf_ndim .gt. 2) 
+!!     >   zdlen = ppiclf_binb(6) - ppiclf_binb(5)
+!     >   zdlen = ppiclf_xdrange(2,3) - ppiclf_xdrange(1,3)
+!      if (iperiodicx .ne. 0) xdlen = -1
+!      if (iperiodicy .ne. 0) ydlen = -1
+!      if (iperiodicz .ne. 0) zdlen = -1
+!
+!      rxdrng(1) = xdlen
+!      rxdrng(2) = ydlen
+!      rxdrng(3) = zdlen
+!
+!      ppiclf_npart_gp = 0
+!
+!      rfac = 1.0d0
+!      gFilt = MAX(ppiclf_nndist,ppiclf_filter(1),
+!     >            ppiclf_filter(2),ppiclf_filter(3))
+!
+!
+!      do ip=1,ppiclf_npart
+!
+!         call ppiclf_user_MapProjPart(map,ppiclf_y(1,ip)
+!     >         ,ppiclf_ydot(1,ip),ppiclf_ydotc(1,ip),ppiclf_rprop(1,ip))
+!
+!c        idum = 1
+!c        ppiclf_cp_map(idum,ip) = ppiclf_y(idum,ip)
+!c        idum = 2
+!c        ppiclf_cp_map(idum,ip) = ppiclf_y(idum,ip)
+!c        idum = 3
+!c        ppiclf_cp_map(idum,ip) = ppiclf_y(idum,ip)
+!
+!         idum = 0
+!         do j=1,PPICLF_LRS
+!            idum = idum + 1
+!            ppiclf_cp_map(idum,ip) = ppiclf_y(j,ip) ! ppiclf_y(PPICLF_JX/ JY/ JZ/ JVX/ JVY/ JVZ/ JT, ip)
+!         enddo
+!         idum = PPICLF_LRS
+!         do j=1,PPICLF_LRP
+!            idum = idum + 1
+!            ppiclf_cp_map(idum,ip) = ppiclf_rprop(j,ip) ! ppiclf_rprop(PPICLF_R_JRHOP/ R_JRHOF/ .../ R_WDOTZ, ip)
+!         enddo
+!         idum = PPICLF_LRS+PPICLF_LRP
+!         do j=1,PPICLF_LRP_PRO
+!            idum = idum + 1
+!            ppiclf_cp_map(idum,ip) = map(j) ! map(PPICLF_P_JPHIP/ JFX/ .../ JPHIPW) - these are found in ppiclf_user_MapProjPart
+!         enddo
+!
+!         rxval = ppiclf_cp_map(1,ip) ! ppiclf_y(PPICLF_JX,ip)
+!         ryval = ppiclf_cp_map(2,ip) ! ppiclf_y(PPICLF_JY,ip)
+!         rzval = 0.0d0
+!         if (ppiclf_ndim .gt. 2) rzval = ppiclf_cp_map(3,ip) ! ppiclf_y(PPICLF_JZ,ip)
+!
+!         iip    = ppiclf_iprop(4,ip) ! ith coordinate of bin
+!         jjp    = ppiclf_iprop(5,ip) ! jth coordinate of bin
+!         kkp    = ppiclf_iprop(6,ip) ! kth coordinate of bin
+!
+!         rxl = ppiclf_binb(1) + ppiclf_bins_dx(1)*iip ! min x of bin
+!         rxr = rxl + ppiclf_bins_dx(1)                ! max x of bin
+!         ryl = ppiclf_binb(3) + ppiclf_bins_dx(2)*jjp
+!         ryr = ryl + ppiclf_bins_dx(2)
+!         rzl = 0.0d0
+!         rzr = 0.0d0
+!         if (ppiclf_ndim .gt. 2) then
+!            rzl = ppiclf_binb(5) + ppiclf_bins_dx(3)*kkp
+!            rzr = rzl + ppiclf_bins_dx(3)
+!         endif
+!
+!         isave = 0
+!
+!         ! faces
+!         do ifc=1,nfacegp
+!            ist = (ifc-1)*3
+!            ii1 = iip + el_face_num(ist+1) 
+!            jj1 = jjp + el_face_num(ist+2)
+!            kk1 = kkp + el_face_num(ist+3)
+!
+!            iig = ii1
+!            jjg = jj1
+!            kkg = kk1
+!
+!            distchk = 0.0d0
+!            dist = 0.0d0
+!            if (ii1-iip .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (ii1-iip .lt. 0) dist = dist +(rxval - rxl)**2
+!               if (ii1-iip .gt. 0) dist = dist +(rxval - rxr)**2
+!            endif
+!            if (jj1-jjp .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (jj1-jjp .lt. 0) dist = dist +(ryval - ryl)**2
+!               if (jj1-jjp .gt. 0) dist = dist +(ryval - ryr)**2
+!            endif
+!            if (ppiclf_ndim .gt. 2) then
+!            if (kk1-kkp .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (kk1-kkp .lt. 0) dist = dist +(rzval - rzl)**2
+!               if (kk1-kkp .gt. 0) dist = dist +(rzval - rzr)**2
+!            endif
+!            endif
+!            distchk = sqrt(distchk)
+!            dist = sqrt(dist)
+!
+!            if (ang_case==1) then  ! for wedge geometry
+!
+!               ! Thierry - I dont think it's code efficient to call this subroutine
+!               !           for every particle, every ghost face, at every time step
+!               !           I'm wondering if it's better if we make the plane values 
+!               !           as global values that are initialized in the beginning 
+!            
+!               call ppiclf_solve_InitAngularPlane(ip,
+!     >                                 ang_per_rin  , ang_per_rout  ,
+!     >                                 ang_per_angle, ang_per_xangle,
+!     >                                 dist1, dist2)
+!               if ((dist .gt. distchk).and.(dist1.gt.distchk)
+!     >           .and.(dist2.gt.distchk)) cycle
+!            else
+!               if (dist .gt. distchk) cycle
+!            endif
+!
+!            iflgx = 0
+!            iflgy = 0
+!            iflgz = 0
+!!-----------------------------------------------------------------------
+!            ! 08/27/24 - Thierry - modification for angular periodicty starts here
+!
+!               ! angle between particle and x-axis
+!                alpha = atan2(ppiclf_y(PPICLF_JY,ip), 
+!     >                        ppiclf_y(PPICLF_JX,ip))
+!                
+!
+!                call ppiclf_solve_InvokeAngularPeriodic(ip, 
+!     >                                                  ang_per_flag,
+!     >                                                  alpha,         
+!     >                                                  ang_per_angle,  
+!     >                                                  ang_per_xangle, 
+!     >                                                  0)
+!
+!              ! Thierry - this is how FindParticle implements it
+!              ! need to find a way to make the code deal with negative xrot values
+!
+!            xrank = iig ; yrank=jjg; zrank = kkg
+!            ! Thierry - previously placed before the CheckPeriodicBC call, had to move them for the periodic check
+!            iadd(1) = ii1
+!            iadd(2) = jj1
+!            iadd(3) = kk1
+!            rxnew(1) = rxval
+!            rxnew(2) = ryval
+!            rxnew(3) = rzval ! z-coordinate does not change when angular periodicity is invoked
+!            
+!            ! Angular periodicity check in x- and y-directions
+!            if (iig .lt. 0 .or. iig .gt. ppiclf_n_bins(1)-1) then
+!              iflgx = 1
+!              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
+!              if (iperiodicx .ne. 0) cycle
+!              iig = xrank
+!              jjg = yrank
+!            end if
+!            
+!            if (jjg .lt. 0 .or. jjg .gt. ppiclf_n_bins(2)-1) then
+!              iflgy = 1
+!              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
+!              if (iperiodicy .ne. 0) cycle
+!              iig = xrank
+!              jjg = yrank
+!            end if
+!            
+!            ! Linear periodicity check in z-direction
+!            if (kkg .lt. 0 .or. kkg .gt. ppiclf_n_bins(3)-1) then
+!              iflgz = 1
+!              kkg =modulo(kkg,ppiclf_n_bins(3))
+!              if (iperiodicz .ne. 0) cycle
+!              ! rxdrng(3) = ppiclf_xdrange(2,3) - ppiclf_xdrange(1,3)
+!              ! rxdrng(3) = -1.0  if not periodic in Z
+!              if (rxdrng(3) .gt. 0) then 
+!                if (iadd(3) .ge. ppiclf_n_bins(3)) then ! particle leaving from max z-face
+!                  rxnew(3) = rxnew(3) - rxdrng(3)
+!                elseif (iadd(3) .lt. 0) then ! particle leaving from min z-face
+!                  rxnew(3) = rxnew(3) + rxdrng(3)
+!                end if ! iadd
+!              end if ! rxrdrng
+!            else ! z-linear periodicity not applicable
+!              kkg = zrank
+!            end if ! kkg
+!            
+!            iflgsum = iflgx + iflgy + iflgz
+!            ndumn  = iig + ppiclf_n_bins(1)*jjg + 
+!     >                ppiclf_n_bins(1)*ppiclf_n_bins(2)*kkg
+!             nrank = ndumn
+!
+!            if (nrank .eq. ppiclf_nid .and. iflgsum .eq. 0) cycle
+!
+!            ! 08/27/24 - Thierry - modification for angular periodicty ends here
+!!-----------------------------------------------------------------------
+!
+!            do i=1,isave
+!               if (gpsave(i) .eq. nrank .and. iflgsum .eq.0) goto 111
+!            enddo
+!            isave = isave + 1
+!            gpsave(isave) = nrank
+!
+!            ibctype = iflgx+iflgy+iflgz
+!            
+!            rxnew(1) = xrot(1)
+!            rxnew(2) = xrot(2)
+!            ppiclf_cp_map(4,ip) = vrot(1)
+!            ppiclf_cp_map(5,ip) = vrot(2)
+!                 
+!            ppiclf_npart_gp = ppiclf_npart_gp + 1
+!            ppiclf_iprop_gp(1,ppiclf_npart_gp) = ppiclf_iprop(1,ip)
+!            ppiclf_iprop_gp(2,ppiclf_npart_gp) = ppiclf_iprop(2,ip)
+!            ppiclf_iprop_gp(3,ppiclf_npart_gp) = nrank
+!            ppiclf_iprop_gp(4,ppiclf_npart_gp) = iig
+!            ppiclf_iprop_gp(5,ppiclf_npart_gp) = jjg
+!            ppiclf_iprop_gp(6,ppiclf_npart_gp) = kkg
+!            ppiclf_iprop_gp(7,ppiclf_npart_gp) = nrank
+!
+!            ! Thierry - we don't need ppiclf_comm_CheckPeriodicBC anymore for the angular periodic ghost algorithm
+!            !           as this is now taken care of when anticipating where the particle might be when calling
+!            !           ppiclf_comm_InvokeAngularPeriodic
+!            !           we only need to assign xr and vr to ppiclf_rprop_gp
+!
+!            ppiclf_rprop_gp(1,ppiclf_npart_gp) = rxnew(1) ! ppiclf_y(PPICLF_JX, ip) for the periodic ghost particle
+!            ppiclf_rprop_gp(2,ppiclf_npart_gp) = rxnew(2) ! JY
+!            ppiclf_rprop_gp(3,ppiclf_npart_gp) = rxnew(3) ! JZ
+!            
+!            do k=4,PPICLF_LRP_GP
+!               ppiclf_rprop_gp(k,ppiclf_npart_gp) = ppiclf_cp_map(k,ip)
+!            enddo
+!  111 continue
+!         enddo
+!
+!         ! edges
+!         do ifc=1,nedgegp
+!            ist = (ifc-1)*3
+!            ii1 = iip + el_edge_num(ist+1) 
+!            jj1 = jjp + el_edge_num(ist+2)
+!            kk1 = kkp + el_edge_num(ist+3)
+!
+!            iig = ii1
+!            jjg = jj1
+!            kkg = kk1
+!
+!            distchk = 0.0d0
+!            dist = 0.0d0
+!            if (ii1-iip .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (ii1-iip .lt. 0) dist = dist +(rxval - rxl)**2
+!               if (ii1-iip .gt. 0) dist = dist +(rxval - rxr)**2
+!            endif
+!            if (jj1-jjp .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (jj1-jjp .lt. 0) dist = dist +(ryval - ryl)**2
+!               if (jj1-jjp .gt. 0) dist = dist +(ryval - ryr)**2
+!            endif
+!            if (ppiclf_ndim .gt. 2) then
+!            if (kk1-kkp .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (kk1-kkp .lt. 0) dist = dist +(rzval - rzl)**2
+!               if (kk1-kkp .gt. 0) dist = dist +(rzval - rzr)**2
+!            endif
+!            endif
+!            distchk = sqrt(distchk)
+!            dist = sqrt(dist)
+!
+!            if (ang_case==1) then  ! for wedge geometry
+!
+!               call ppiclf_solve_InitAngularPlane(ip,
+!     >                                 ang_per_rin  , ang_per_rout  ,
+!     >                                 ang_per_angle, ang_per_xangle,
+!     >                                 dist1, dist2)
+!               if ((dist .gt. distchk).and.(dist1.gt.distchk)
+!     >           .and.(dist2.gt.distchk)) cycle
+!            else
+!               if (dist .gt. distchk) cycle
+!            endif
+!
+!            iflgx = 0
+!            iflgy = 0
+!            iflgz = 0
+!            ! periodic if out of domain - add some ifsss
+!!-----------------------------------------------------------------------
+!            ! 08/27/24 - Thierry - modification for angular periodicty starts here
+!
+!               ! angle between particle and x-axis
+!                alpha = atan2(ppiclf_y(PPICLF_JY,ip), 
+!     >                        ppiclf_y(PPICLF_JX,ip))
+!                
+!
+!                call ppiclf_solve_InvokeAngularPeriodic(ip, 
+!     >                                                  ang_per_flag,
+!     >                                                  alpha,         
+!     >                                                  ang_per_angle,  
+!     >                                                  ang_per_xangle, 
+!     >                                                  0)
+!
+!              ! Thierry - this is how FindParticle implements it
+!              ! need to find a way to make the code deal with negative xrot values
+!
+!            xrank = iig ; yrank=jjg; zrank = kkg
+!            ! Thierry - previously placed before the CheckPeriodicBC call, had to move them for the periodic check
+!            iadd(1) = ii1
+!            iadd(2) = jj1
+!            iadd(3) = kk1
+!            rxnew(1) = rxval
+!            rxnew(2) = ryval
+!            rxnew(3) = rzval ! z-coordinate does not change when angular periodicity is invoked
+!            
+!            ! Angular periodicity check in x- and y-directions
+!            if (iig .lt. 0 .or. iig .gt. ppiclf_n_bins(1)-1) then
+!              iflgx = 1
+!              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
+!              if (iperiodicx .ne. 0) cycle
+!              iig = xrank
+!              jjg = yrank
+!            end if
+!            
+!            if (jjg .lt. 0 .or. jjg .gt. ppiclf_n_bins(2)-1) then
+!              iflgy = 1
+!              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
+!              if (iperiodicy .ne. 0) cycle
+!              iig = xrank
+!              jjg = yrank
+!            end if
+!            
+!            ! Linear periodicity check in z-direction
+!            if (kkg .lt. 0 .or. kkg .gt. ppiclf_n_bins(3)-1) then
+!              iflgz = 1
+!              kkg =modulo(kkg,ppiclf_n_bins(3))
+!              if (iperiodicz .ne. 0) cycle
+!              ! rxdrng(3) = ppiclf_xdrange(2,3) - ppiclf_xdrange(1,3)
+!              ! rxdrng(3) = -1.0  if not periodic in Z
+!              if (rxdrng(3) .gt. 0) then ! particle leaving from max z-face
+!                if (iadd(3) .ge. ppiclf_n_bins(3)) then
+!                  rxnew(3) = rxnew(3) - rxdrng(3)
+!                elseif (iadd(3) .lt. 0) then
+!                  rxnew(3) = rxnew(3) + rxdrng(3)
+!                end if ! iadd
+!              end if ! rxrdrng
+!            else ! z-linear periodicity not applicable
+!              kkg = zrank
+!            end if ! kkg
+!            
+!            iflgsum = iflgx + iflgy + iflgz
+!            ndumn  = iig + ppiclf_n_bins(1)*jjg + 
+!     >                ppiclf_n_bins(1)*ppiclf_n_bins(2)*kkg
+!             nrank = ndumn
+!
+!            if (nrank .eq. ppiclf_nid .and. iflgsum .eq. 0) cycle
+!
+!            ! 08/27/24 - Thierry - modification for angular periodicty ends here
+!!-----------------------------------------------------------------------
+!
+!            do i=1,isave
+!               if (gpsave(i) .eq. nrank .and. iflgsum .eq.0) goto 222
+!            enddo
+!            isave = isave + 1
+!            gpsave(isave) = nrank
+!
+!            ibctype = iflgx+iflgy+iflgz
+!
+!            rxnew(1) = xrot(1)
+!            rxnew(2) = xrot(2)
+!            ppiclf_cp_map(4,ip) = vrot(1)
+!            ppiclf_cp_map(5,ip) = vrot(2)
+!                 
+!            ppiclf_npart_gp = ppiclf_npart_gp + 1
+!
+!            ppiclf_iprop_gp(1,ppiclf_npart_gp) = ppiclf_iprop(1,ip)
+!            ppiclf_iprop_gp(2,ppiclf_npart_gp) = ppiclf_iprop(2,ip)
+!            ppiclf_iprop_gp(3,ppiclf_npart_gp) = nrank
+!            ppiclf_iprop_gp(4,ppiclf_npart_gp) = iig
+!            ppiclf_iprop_gp(5,ppiclf_npart_gp) = jjg
+!            ppiclf_iprop_gp(6,ppiclf_npart_gp) = kkg
+!            ppiclf_iprop_gp(7,ppiclf_npart_gp) = nrank
+!
+!            ! Thierry - we don't need ppiclf_comm_CheckPeriodicBC anymore for the angular periodic ghost algorithm
+!            !           as this is now taken care of when anticipating where the particle might be when calling
+!            !           ppiclf_comm_InvokeAngularPeriodic
+!            !           we only need to assign xr and vr to ppiclf_rprop_gp
+!
+!            ppiclf_rprop_gp(1,ppiclf_npart_gp) = rxnew(1) ! ppiclf_y(PPICLF_JX, ip) for the periodic ghost particle
+!            ppiclf_rprop_gp(2,ppiclf_npart_gp) = rxnew(2) ! JY
+!            ppiclf_rprop_gp(3,ppiclf_npart_gp) = rxnew(3) ! JZ
+!            
+!            do k=4,PPICLF_LRP_GP
+!               ppiclf_rprop_gp(k,ppiclf_npart_gp) = ppiclf_cp_map(k,ip)
+!            enddo
+!  222 continue
+!         enddo
+!
+!         ! corners
+!         do ifc=1,ncornergp
+!            ist = (ifc-1)*3
+!            ii1 = iip + el_corner_num(ist+1) 
+!            jj1 = jjp + el_corner_num(ist+2)
+!            kk1 = kkp + el_corner_num(ist+3)
+!
+!            iig = ii1
+!            jjg = jj1
+!            kkg = kk1
+!
+!            distchk = 0.0d0
+!            dist = 0.0d0
+!            if (ii1-iip .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (ii1-iip .lt. 0) dist = dist +(rxval - rxl)**2
+!               if (ii1-iip .gt. 0) dist = dist +(rxval - rxr)**2
+!            endif
+!            if (jj1-jjp .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (jj1-jjp .lt. 0) dist = dist +(ryval - ryl)**2
+!               if (jj1-jjp .gt. 0) dist = dist +(ryval - ryr)**2
+!            endif
+!            if (ppiclf_ndim .gt. 2) then
+!            if (kk1-kkp .ne. 0) then
+!               distchk = distchk + (rfac*gFilt)**2
+!               if (kk1-kkp .lt. 0) dist = dist +(rzval - rzl)**2
+!               if (kk1-kkp .gt. 0) dist = dist +(rzval - rzr)**2
+!            endif
+!            endif
+!            distchk = sqrt(distchk)
+!            dist = sqrt(dist)
+!
+!            if (ang_case==1) then  ! for wedge geometry
+!            
+!               call ppiclf_solve_InitAngularPlane(ip,
+!     >                                 ang_per_rin  , ang_per_rout  ,
+!     >                                 ang_per_angle, ang_per_xangle,
+!     >                                 dist1, dist2)
+!               if ((dist .gt. distchk).and.(dist1.gt.distchk)
+!     >           .and.(dist2.gt.distchk)) cycle
+!            else
+!               if (dist .gt. distchk) cycle
+!            endif
+!
+!            iflgx = 0
+!            iflgy = 0
+!            iflgz = 0
+!
+!!-----------------------------------------------------------------------
+!            ! 08/27/24 - Thierry - modification for angular periodicty starts here
+!
+!               ! angle between particle and x-axis
+!                alpha = atan2(ppiclf_y(PPICLF_JY,ip), 
+!     >                        ppiclf_y(PPICLF_JX,ip))
+!                
+!
+!                call ppiclf_solve_InvokeAngularPeriodic(ip, 
+!     >                                                  ang_per_flag,
+!     >                                                  alpha,         
+!     >                                                  ang_per_angle,  
+!     >                                                  ang_per_xangle, 
+!     >                                                  0)
+!
+!              ! Thierry - this is how FindParticle implements it
+!              ! need to find a way to make the code deal with negative xrot values
+!
+!            xrank = iig ; yrank=jjg; zrank = kkg
+!            ! Thierry - previously placed before the CheckPeriodicBC call, had to move them for the periodic check
+!            iadd(1) = ii1
+!            iadd(2) = jj1
+!            iadd(3) = kk1
+!            rxnew(1) = rxval
+!            rxnew(2) = ryval
+!            rxnew(3) = rzval ! z-coordinate does not change when angular periodicity is invoked
+!            
+!            ! Angular periodicity check in x- and y-directions
+!            if (iig .lt. 0 .or. iig .gt. ppiclf_n_bins(1)-1) then
+!              iflgx = 1
+!              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
+!              if (iperiodicx .ne. 0) cycle
+!              iig = xrank
+!              jjg = yrank
+!            end if
+!            
+!            if (jjg .lt. 0 .or. jjg .gt. ppiclf_n_bins(2)-1) then
+!              iflgy = 1
+!              call ppiclf_comm_CheckAngularBC(xrank,yrank,zrank)
+!              if (iperiodicy .ne. 0) cycle
+!              iig = xrank
+!              jjg = yrank
+!            end if
+!            
+!            ! Linear periodicity check in z-direction
+!            if (kkg .lt. 0 .or. kkg .gt. ppiclf_n_bins(3)-1) then
+!              iflgz = 1
+!              kkg =modulo(kkg,ppiclf_n_bins(3))
+!              if (iperiodicz .ne. 0) cycle
+!              ! rxdrng(3) = ppiclf_xdrange(2,3) - ppiclf_xdrange(1,3)
+!              ! rxdrng(3) = -1.0  if not periodic in Z
+!              if (rxdrng(3) .gt. 0) then ! particle leaving from max z-face
+!                if (iadd(3) .ge. ppiclf_n_bins(3)) then
+!                  rxnew(3) = rxnew(3) - rxdrng(3)
+!                elseif (iadd(3) .lt. 0) then
+!                  rxnew(3) = rxnew(3) + rxdrng(3)
+!                end if ! iadd
+!              end if ! rxrdrng
+!            else ! z-linear periodicity not applicable
+!              kkg = zrank
+!            end if ! kkg
+!            
+!            iflgsum = iflgx + iflgy + iflgz
+!            ndumn  = iig + ppiclf_n_bins(1)*jjg + 
+!     >                ppiclf_n_bins(1)*ppiclf_n_bins(2)*kkg
+!             nrank = ndumn
+!
+!            if (nrank .eq. ppiclf_nid .and. iflgsum .eq. 0) cycle
+!
+!            ! 08/27/24 - Thierry - modification for angular periodicty ends here
+!!-----------------------------------------------------------------------
+!            do i=1,isave
+!               if (gpsave(i) .eq. nrank .and. iflgsum .eq.0) goto 333
+!            enddo
+!            isave = isave + 1
+!            gpsave(isave) = nrank
+!
+!            ibctype = iflgx+iflgy+iflgz
+!
+!            rxnew(1) = xrot(1)
+!            rxnew(2) = xrot(2)
+!            ppiclf_cp_map(4,ip) = vrot(1)
+!            ppiclf_cp_map(5,ip) = vrot(2)
+!
+!            ppiclf_npart_gp = ppiclf_npart_gp + 1
+!
+!            ppiclf_iprop_gp(1,ppiclf_npart_gp) = ppiclf_iprop(1,ip)
+!            ppiclf_iprop_gp(2,ppiclf_npart_gp) = ppiclf_iprop(2,ip)
+!            ppiclf_iprop_gp(3,ppiclf_npart_gp) = nrank
+!            ppiclf_iprop_gp(4,ppiclf_npart_gp) = iig
+!            ppiclf_iprop_gp(5,ppiclf_npart_gp) = jjg
+!            ppiclf_iprop_gp(6,ppiclf_npart_gp) = kkg
+!            ppiclf_iprop_gp(7,ppiclf_npart_gp) = nrank
+!
+!            ! Thierry - we don't need ppiclf_comm_CheckPeriodicBC anymore for the angular periodic ghost algorithm
+!            !           as this is now taken care of when anticipating where the particle might be when calling
+!            !           ppiclf_comm_InvokeAngularPeriodic
+!            !           we only need to assign xr and vr to ppiclf_rprop_gp
+!
+!            ppiclf_rprop_gp(1,ppiclf_npart_gp) = rxnew(1) ! ppiclf_y(PPICLF_JX, ip) for the periodic ghost particle
+!            ppiclf_rprop_gp(2,ppiclf_npart_gp) = rxnew(2) ! JY
+!            ppiclf_rprop_gp(3,ppiclf_npart_gp) = rxnew(3) ! JZ
+!
+!            do k=4,PPICLF_LRP_GP
+!               ppiclf_rprop_gp(k,ppiclf_npart_gp) = ppiclf_cp_map(k,ip)
+!            enddo
+!  333 continue
+!         enddo
+!
+!      enddo ! ip 
+!
+!      return
+!      end
+!!----------------------------------------------------------------------
+!      subroutine ppiclf_comm_CheckAngularBC(xrank, yrank, zrank)
+!!
+!      implicit none
+!!
+!      include "PPICLF"
+!!
+!! Local:
+!!
+!      integer*4 xrank, yrank, zrank
+!!
+!! Output:
+!!
+!
+!      SELECT CASE (ang_case)
+!        CASE(1) ! general wedge ; 0 <= angle < 90
+!!          print*, "Wedge CheckAngularBC"
+!          xrank  = FLOOR((xrot(1)-ppiclf_binb(1))/ppiclf_bins_dx(1)) 
+!          yrank  = FLOOR((xrot(2)-ppiclf_binb(3))/ppiclf_bins_dx(2)) 
+!          zrank  = FLOOR((xrot(3)-ppiclf_binb(5))/ppiclf_bins_dx(3))
+!
+!        CASE(2) ! quarter cylinder ; angle = 90
+!!          print*, "Quarter Cylinder CheckAngularBC"
+!          xrank  = FLOOR((abs(xrot(1))-ppiclf_binb(1))
+!     >                    /ppiclf_bins_dx(1)) 
+!          yrank  = FLOOR((abs(xrot(2))-ppiclf_binb(3))
+!     >                   /ppiclf_bins_dx(2)) 
+!          zrank  = FLOOR((xrot(3)-ppiclf_binb(5))/ppiclf_bins_dx(3))
+!
+!        CASE(3) ! half cylinder ; angle = 180
+!          print*, "Half Cylinder CheckAngularBC"
+!
+!        CASE DEFAULT
+!            call ppiclf_exittr('Invalid Ghost Rotational Case!$',
+!     >       0.0d0 ,ppiclf_nid)
+!          END SELECT
+!
+!      return
+!      end
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! David's old binning method left below for now
+!      finished(1) = 0
+!      finished(2) = 0
+!      finished(3) = 0
+!      total_bin = 1 
+!
+!      BinMinLen(1) = MAX(BinMinLen(1),BinMinLen(2),BinMinLen(3))
+!      do i=1,ppiclf_ndim
+!         finished(i) = 0
+!         exit_1_array(i) = ppiclf_bins_set(i)
+!         exit_2_array(i) = 0
+!         if (ppiclf_bins_set(i) .ne. 1) ppiclf_n_bins(i) = 1
+!         ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
+!     >                        ppiclf_binb(2*(i-1)+1)  ) / 
+!     >                       ppiclf_n_bins(i)
+!         ! Make sure exit_2 is not violated by user input
+!         if (ppiclf_bins_dx(i) .lt. BinMinLen(1)) then
+!            do while (ppiclf_bins_dx(i) .lt. BinMinLen(1))
+!               ppiclf_n_bins(i) = max(1, ppiclf_n_bins(i)-1)
+!               ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
+!     >                              ppiclf_binb(2*(i-1)+1)  ) / 
+!     >                             ppiclf_n_bins(i)
+!         WRITE(*,*) "Inf. loop in CreateBin", i, 
+!     >              ppiclf_bins_dx(i), BinMinLen(1)
+!         call ppiclf_exittr('Inf. loop in CreateBin$',0.0,0)
+!            enddo
+!         endif
+!         total_bin = total_bin*ppiclf_n_bins(i)
+!      enddo
+!
+!      ! Make sure exit_1 is not violated by user input
+!      count = 0
+!      do while (total_bin > ppiclf_np)
+!          count = count + 1;
+!          i = modulo((ppiclf_ndim-1)+count,ppiclf_ndim)+1
+!          ppiclf_n_bins(i) = max(ppiclf_n_bins(i)-1,1)
+!          ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
+!     >                         ppiclf_binb(2*(i-1)+1)  ) / 
+!     >                        ppiclf_n_bins(i)
+!          total_bin = 1
+!          do j=1,ppiclf_ndim
+!             total_bin = total_bin*ppiclf_n_bins(j)
+!          enddo
+!          if (total_bin .le. ppiclf_np) exit
+!       enddo
+!
+!       exit_1 = .false.
+!       exit_2 = .false.
+!
+!       do while (.not. exit_1 .and. .not. exit_2)
+!          do i=1,ppiclf_ndim
+!             if (exit_1_array(i) .eq. 0) then
+!                ppiclf_n_bins(i) = ppiclf_n_bins(i) + 1
+!                ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
+!     >                               ppiclf_binb(2*(i-1)+1)  ) / 
+!     >                              ppiclf_n_bins(i)
+!
+!                ! Check conditions
+!                ! exit_1
+!                total_bin = 1
+!                do j=1,ppiclf_ndim
+!                   total_bin = total_bin*ppiclf_n_bins(j)
+!                enddo
+!                if (total_bin .gt. ppiclf_np) then
+!                   ! two exit arrays aren't necessary for now, but
+!                   ! to make sure exit_2 doesn't slip through, we
+!                   ! set both for now
+!                   exit_1_array(i) = 1
+!                   exit_2_array(i) = 1
+!                   ppiclf_n_bins(i) = ppiclf_n_bins(i) - 1
+!                   ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
+!     >                                  ppiclf_binb(2*(i-1)+1)  ) / 
+!     >                                  ppiclf_n_bins(i)
+!                   exit
+!                endif
+!                
+!                ! exit_2
+!                if (ppiclf_bins_dx(i) .lt. BinMinLen(1)) then
+!                   ! two exit arrays aren't necessary for now, but
+!                   ! to make sure exit_2 doesn't slip through, we
+!                   ! set both for now
+!                   exit_1_array(i) = 1
+!                   exit_2_array(i) = 1
+!                   ppiclf_n_bins(i) = ppiclf_n_bins(i) - 1
+!                   ppiclf_bins_dx(i) = (ppiclf_binb(2*(i-1)+2) -
+!     >                                  ppiclf_binb(2*(i-1)+1)  ) / 
+!     >                                  ppiclf_n_bins(i)
+!                   exit
+!                endif
+!             endif
+!          enddo
+!
+!          ! full exit_1
+!          sum_value = 0
+!          do i=1,ppiclf_ndim
+!             sum_value = sum_value + exit_1_array(i)
+!          enddo
+!          if (sum_value .eq. ppiclf_ndim) then
+!             exit_1 = .true.
+!          endif
+!
+!          ! full exit_2
+!          sum_value = 0
+!          do i=1,ppiclf_ndim
+!             sum_value = sum_value + exit_2_array(i)
+!          enddo
+!          if (sum_value .eq. ppiclf_ndim) then
+!             exit_2 = .true.
+!          endif
+!       enddo
+!      ! Check for too small bins 
+!      rthresh = 1E-12
+!      total_bin = 1
+!      do i=1,ppiclf_ndim
+!         total_bin = total_bin*ppiclf_n_bins(i)
+!         if (ppiclf_bins_dx(i) .lt. rthresh) ppiclf_bins_dx(i) = 1.0
+!      enddo
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+

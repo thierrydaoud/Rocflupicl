@@ -36,7 +36,15 @@ libpicl/user_files/*.swp
 libpicl/ppiclF/3rd_party/gslib/*
 !libpicl/ppiclF/3rd_party/gslib/install
 libpicl/ppiclF/build/*
-# leftover files from F90 migration
-libpicl/ppiclF/sourceF77/*
-libpicl/user_files_F77/*
-libpicl/ppiclF/tools/fyppmacros copy.py
+
+
+## ppiclf unit test output
+libpicl/unit_tests/*.txt
+libpicl/unit_tests/CodePerformance_UnitTest
+libpicl/unit_tests/CreateBin_UnitTest
+libpicl/unit_tests/InterpProj_UnitTest
+libpicl/unit_tests/Particle2Particle_UnitTest
+libpicl/unit_tests/run*
+libpicl/unit_tests/*.txt
+libpicl/unit_tests/unitTestSrc/*.o
+libpicl/unit_tests/unitTestSrc/PPICLF_UNIT_TEST

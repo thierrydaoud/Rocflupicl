@@ -66,6 +66,7 @@ submodule (ppiclf_user) ppiclf_user_SetYdot_imp
     use ppiclf_m_user_data
     use ppiclf_m_user_RFLUdata
 
+    use mpi, only: MPI_WTIME
     use ppiclf_op, only: ppiclf_exittr
     use ppiclf_solve, only: ppiclf_solve_NearestNeighborSB
 
@@ -157,6 +158,9 @@ module procedure ppiclf_user_SetYdot
     INTEGER*4  SBin_counter( 0 : ( (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist)         + 1) * (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)        + 1) * (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist)        + 1) - 1))
     INTEGER*4 i_Bin(3), n_SBin(3), tot_SBin
 
+#ifdef PERF
+    REAL*8 tstart, tfinal
+#endif
 
     ! Unit Test only Code:
     !-----------------------------------------------------------------------
@@ -242,8 +246,15 @@ module procedure ppiclf_user_SetYdot
     ! Avery added 10/10/2024 - Map particles to subbins if collisional force, 
     ! Briney Added Mass force, QS fluctation force, or pseudo turbulence is flagged
     !
-    if((am_flag==2).or.(collisional_flag>=1) .or.(qs_fluct_flag>=1) .or.(pseudoTurb_flag==1)) then
+    if(PPICLF_PPInteractions) then
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
         call ppiclf_user_subbinMap(i_Bin, n_SBin, tot_SBin,SBin_counter ,SBin_map)
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TParticleParticleModels = tfinal - tstart
+#endif
     endif ! Collisions, QS Fluct, Briney AM, or pseudoTurb flags on
     !
     !-----------------------------------------------------------------------
@@ -309,13 +320,7 @@ module procedure ppiclf_user_SetYdot
         ! TLJ - 04/03/2025; Do not calculate forces if vmag = 0
         !       Otherwise the particles might move before the 
         !       shock arrives
-        if (vmag <= 1.d-8) cycle
-
-        ! 08/08/2025 - Thierry  - 1.d-8 is very small
         if (vmag <= 1.d-3) cycle
-        !***
-        ! Avery - This is planar-shock curtain specific.  Shouldn't be in main code
-        !***
 
         ! Thierry - at initial times when rmachp and vmag are very
         ! small, we would get very large CD (>100)
@@ -330,7 +335,7 @@ module procedure ppiclf_user_SetYdot
         ! TLJ - redefined rprop(PPICLF_R_JSPT,i) to be the particle
         !   velocity magnitude for plotting purposes - 01/03/2025
 
-        ! ***This is bad practice and leads to hard to debug code -Avery***
+        ! ***This is bad practice and leads to difficult code to debug -Avery***
         @{USEPARTICLE(ppiclf_parts(i)%rprop%JSPT)}@ = sqrt((@{USEPARTICLE(ppiclf_parts(i)%y%vel%x)}@)**2 + (@{USEPARTICLE(ppiclf_parts(i)%y%vel%y)}@)**2 + (@{USEPARTICLE(ppiclf_parts(i)%y%vel%z)}@)**2)
 
         rep = max(0.1d0,rep)
@@ -338,9 +343,7 @@ module procedure ppiclf_user_SetYdot
         ! Redefine volume fractions
         ! Need to make sure phi_p + phi_f = 1
         rphip = @{USEPARTICLE(ppiclf_parts(i)%rprop%PHIP)}@
-        rphip = min(rphip,0.62d0)
         rphif = 1.0d0-rphip
-        !*** AVERY - we should rethink this limit of 62% pVF ***
 
         ! TLJ: Needed for viscous unsteady force
         !      Using same nomenclature as rocinteract subroutines
@@ -379,6 +382,9 @@ module procedure ppiclf_user_SetYdot
         ! variables to be used in nearest neighbors to zero
         ! before looping over particle j (j neq i)
         ! Briney Added Mass flag
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
         if (am_flag == 2) then 
             ! 07/14/24 - Thierry - If Briney Algorithm flag and fluct_flag
             !   are ON -> evaluate added-mass unary term before evaluating
@@ -390,7 +396,7 @@ module procedure ppiclf_user_SetYdot
         !
         ! Step 1b: Call NearestNeighbor if particles i and j interact
         !
-        if ((am_flag==2).or.(collisional_flag>=1) .or.(qs_fluct_flag>=1) .or.(pseudoTurb_flag==1)) then
+        if(PPICLF_PPInteractions) THEN
 
             !AVERY - we should fix vmag ~0 bug and remove conditional check
             if ((qs_fluct_flag>=1) .and. (vmag .gt. 1.d-8)) then
@@ -446,7 +452,12 @@ module procedure ppiclf_user_SetYdot
             END IF
 
         end if ! end Step 1b; nearestneighbor
-
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TParticleParticleModels = PPICLF_TParticleParticleModels + (tfinal - tstart)
+        ! TODO: Should this be tstart
+        tfinal = MPI_WTIME()
+#endif 
 
         !
         ! Step 2: Force component quasi-steady
@@ -564,7 +575,6 @@ module procedure ppiclf_user_SetYdot
             !  - Geotechnique
 
             ! Sam - STILL NEED TO VALIDATE COLLISION FORCE
-            ! Sam - Step 1b already calls nearest neighbor
             
             fcx  = @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%x)}@
             fcy  = @{USEPARTICLE(ppiclf_parts(i)%ydotc%vel%y)}@
@@ -982,8 +992,10 @@ module procedure ppiclf_user_SetYdot
         if (iStage==3) call ppiclf_user_ShiftUnsteadyData
         call ppiclf_user_plag2prop
     endif
-
-
+#ifdef PERF
+    tfinal = MPI_WTIME()
+    PPICLF_TParticleParticleModels = PPICLF_TParticleParticleModels + (tfinal - tstart)
+#endif
     ! ----------------------------------------------------------------------
 
     return

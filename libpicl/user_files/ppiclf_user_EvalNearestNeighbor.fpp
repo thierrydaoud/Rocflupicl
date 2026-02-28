@@ -116,6 +116,10 @@ module procedure ppiclf_user_EvalNearestNeighbor
     real*8 r1, r2, Rstar 
     real*8 ksp1, ksp2, ksp_min
 
+    ! 01/29/2025 - Thierry - added for particle collision with conical
+    !                         wall domain
+    real*8 rp, yp, zp, vp, wp, rp_new, yp_new, zp_new, vp_new, wp_new, rbound, urp, thetap
+
     !
     ! Code:
     !
@@ -455,9 +459,47 @@ module procedure ppiclf_user_EvalNearestNeighbor
         rnmag     = -rksp_max - rv12_mage
 
          
-        @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%X)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%X)}@ + rnmag*rn_12x
-        @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Y)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Y)}@ + rnmag*rn_12y
-        @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Z)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Z)}@ + rnmag*rn_12z
+        ! @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%X)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%X)}@ + rnmag*rn_12x
+        ! @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Y)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Y)}@ + rnmag*rn_12y
+        ! @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Z)}@ = @{USEPARTICLE(ppiclf_parts(i)%ydotc%Vel%Z)}@ + rnmag*rn_12z
+
+
+
+        ! Particles leavind the domain with wall collisions
+        ! Simple fix for a conical geometry
+        yp = @{USEPARTICLE(ppiclf_parts(i)%y%pos%y)}@ !yi(PPICLF_JY)
+        zp = @{USEPARTICLE(ppiclf_parts(i)%y%pos%z)}@ !yi(PPICLF_JZ)
+        vp = @{USEPARTICLE(ppiclf_parts(i)%y%vel%y)}@ !yi(PPICLF_JVY)
+        wp = @{USEPARTICLE(ppiclf_parts(i)%y%vel%z)}@ !yi(PPICLF_JVZ)
+
+        ! rbound = sqrt(yj(PPICLF_JY)**2 + yj(PPICLF_JZ)**2)
+        rbound = sqrt((@{USEPARTICLE(neighbor%y%pos%y)}@)**2 + (@{USEPARTICLE(neighbor%y%pos%z)}@)**2)
+        rp = sqrt(yp**2 + zp**2)
+        urp = sqrt(vp**2 + wp**2)
+        thetap = atan2(zp, yp)
+
+        if(rp > rbound) then
+        
+            rp_new = rp - (rp - rbound)
+            yp_new = rp_new * cos(thetap)
+            zp_new = rp_new * sin(thetap)
+
+            urp = - urp
+            
+            vp_new = urp * cos(thetap)
+            wp_new = urp * sin(thetap)
+
+            ! ppiclf_y(PPICLF_JY,i) = yp_new
+            ! ppiclf_y(PPICLF_JZ,i) = zp_new
+
+            ! ppiclf_y(PPICLF_JVY,i) = vp_new
+            ! ppiclf_y(PPICLF_JVZ,i) = wp_new
+            @{USEPARTICLE(ppiclf_parts(i)%y%pos%Y)}@ = yp_new
+            @{USEPARTICLE(ppiclf_parts(i)%y%pos%Z)}@ = zp_new
+
+            @{USEPARTICLE(ppiclf_parts(i)%y%Vel%Y)}@ = vp_new
+            @{USEPARTICLE(ppiclf_parts(i)%y%Vel%Z)}@ = wp_new
+        endif
         
         !write(*,*) "Wall NEAR",i,ppiclf_ydotc(PPICLF_JVY,i)  
     endif

@@ -1,10 +1,13 @@
-FC               = mpifort # Valid MPI Fortran compiler
+FC               = mpif77 # Valid MPI Fortran compiler
 CC               = mpicc  # Valid MPI C compiler
 FFLAGS          += -cpp -w -O3 -std=legacy -g -fmax-errors=1#-fallow-argument-mismatch -fcheck=all
 CPFLAGS         += -E
 ifeq ($(TEST),1)
-FFLAGS += -DTEST
-PPICLF_FFLAGS += -DTEST
+    FFLAGS += -DTEST
+endif
+
+ifeq ($(PERF),1)
+    FFLAGS += -DPERF
 endif
 
 PREPROCDEFINES+=-DNDIM=3
@@ -18,12 +21,7 @@ INSTALL_LOCATION = .
 # PPICLF LIBRARY
 SOURCE_ROOT_PPICLF=$(INSTALL_LOCATION)/ppiclF/source
 SOURCE_ROOT_USER=$(INSTALL_LOCATION)/user_files
-BUILD_ROOT_PPICLF=$(INSTALL_LOCATION)/ppiclF/build
-BUILD_ROOT_USER=$(BUILD_ROOT_PPICLF)/user
-PPICLF_IFLAGS+=-I$(SOURCE_ROOT_PPICLF)/include -I$(SOURCE_ROOT_USER) -I$(SOURCE_ROOT_USER)/include 
-PPICLF_FFLAGS+=$(PPICLF_IFLAGS) -cpp -Wall -ffree-line-length-none -Wno-missing-include-dirs -fmax-errors=20
-PPICLF_USER_FFLAGS:=$(PPICLF_FFLAGS) -J$(BUILD_ROOT_USER) -I$(BUILD_ROOT_PPICLF)
-PPICLF_FFLAGS+=-J$(BUILD_ROOT_PPICLF) 
+PPICLF_IFLAGS+=-I$(SOURCE_ROOT_PPICLF)
 
 # GSLIB LIBRARY
 SOURCE_ROOT_GSLIB=$(INSTALL_LOCATION)/ppiclF/3rd_party/gslib
@@ -71,7 +69,8 @@ PRE = $(SOURCE_ROOT_PPICLF)/PPICLF_SOLN.h     \
       $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h      \
       $(SOURCE_ROOT_PPICLF)/PPICLF_PARALLEL.h \
       $(SOURCE_ROOT_PPICLF)/PPICLF_USER_COMMON.h \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_PERFORMANCE.h
 POS = $(SOURCE_ROOT_PPICLF)/PPICLF
 
 

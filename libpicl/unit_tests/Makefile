@@ -1,29 +1,31 @@
-FC               = mpifort
-FFLAGS          += 	-cpp           \
- 	           		-Wall          \
-             	   	-fbacktrace    
-
+FC               = mpif77
+FFLAGS          += -cpp           \
+ 		   -z muldefs     \
+ 	           -Wall          \
+             	   -fbacktrace    \
+                   -fallow-argument-mismatch  
 CC               = mpicc  
 CPFLAGS         += -E
 
 # PPICLF LIBRARY
 SOURCE_ROOT_PPICLF= ../ppiclF/source
-SOURCE_ROOT_USER=$(SOURCE_ROOT_PPICLF)/../../user_files
-BUILD_ROOT_PPICLF = ../ppiclf/build
-USR_LFLAGS+=-L$(BUILD_ROOT_PPICLF) -lppiclF
+USR_LFLAGS+=-L $(SOURCE_ROOT_PPICLF) -lppiclF
+PRE = unitTestSrc/UNIT_TEST_COMMON.h             \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_SOLN.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GRID.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h         \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_PARALLEL.h    \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_USER_COMMON.h \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h
+POS = unitTestSrc/PPICLF_UNIT_TEST
+      
 
-PPICLF_IFLAGS+=-I$(SOURCE_ROOT_PPICLF)/include -I$(SOURCE_ROOT_USER) -I$(SOURCE_ROOT_USER)/include 
-PPICLF_FFLAGS+=$(PPICLF_IFLAGS) -cpp -Wall -ffree-line-length-none -Wno-missing-include-dirs -I$(BUILD_ROOT_PPICLF) -fmax-errors=20
-
-FFLAGS+= $(PPICLF_IFLAGS)
-
-SRC1 = unitTestSrc/UT_setup.f90
+SRC1 = unitTestSrc/UT_setup.f 
 SRC2 = unitTestSrc/UT_CreateBin.f
 SRC3 = unitTestSrc/UT_InterpProj.f
 SRC4 = unitTestSrc/UT_P2PNN.f
-SRC5 = unitTestSrc/UT_CodePerformance.f90
+SRC5 = unitTestSrc/UT_CodePerformance.f
 
-OBJ0 = unitTestSrc/UT_data.o
 OBJ1 = unitTestSrc/UT_setup.o 
 OBJ2 = unitTestSrc/UT_CreateBin.o
 OBJ3 = unitTestSrc/UT_InterpProj.o
@@ -36,13 +38,13 @@ ENAME3 = Particle2Particle_UnitTest
 ENAME4 = CodePerformance_UnitTest
 
 # Make commands
-default: getObjs linkObjs
+default: preProcess getObjs linkObjs
 
 linkObjs:  $(OBJ1)
-# 	$(FC) $(FFLAGS) -o $(ENAME1) $(OBJ1) $(OBJ2) $(USR_LFLAGS)
-# 	$(FC) $(FFLAGS) -o $(ENAME2) $(OBJ1) $(OBJ3) $(USR_LFLAGS)
-# 	$(FC) $(FFLAGS) -o $(ENAME3) $(OBJ1) $(OBJ4) $(USR_LFLAGS)
-	$(FC) $(FFLAGS) -o $(ENAME4) $(OBJ0) $(OBJ1) $(OBJ5) $(USR_LFLAGS)
+	$(FC) $(FFLAGS) -o $(ENAME1) $(OBJ1) $(OBJ2) $(USR_LFLAGS)
+	$(FC) $(FFLAGS) -o $(ENAME2) $(OBJ1) $(OBJ3) $(USR_LFLAGS)
+	$(FC) $(FFLAGS) -o $(ENAME3) $(OBJ1) $(OBJ4) $(USR_LFLAGS)
+	$(FC) $(FFLAGS) -o $(ENAME4) $(OBJ1) $(OBJ5) $(USR_LFLAGS)
 	@echo "                         "
 	@echo "*************************"
 	@echo "*** USER LINK SUCCESS ***"
@@ -50,18 +52,27 @@ linkObjs:  $(OBJ1)
 	@echo "                         "
 
 getObjs: $(SRC1) $(SRC2) $(SRC3) $(SRC4) $(SRC5)
-	$(FC) $(PPICLF_FFLAGS) -c unitTestSrc/UT_data.f90
-	$(FC) $(PPICLF_FFLAGS) -c $(SRC1) 
-# 	$(FC) $(FFLAGS) -c $(SRC2) 
-# 	$(FC) $(FFLAGS) -c $(SRC3) 
-# 	$(FC) $(FFLAGS) -c $(SRC4) 
-	$(FC) $(PPICLF_FFLAGS) -c $(SRC5)
+	$(FC) $(FFLAGS) -c $(SRC1) 
+	$(FC) $(FFLAGS) -c $(SRC2) 
+	$(FC) $(FFLAGS) -c $(SRC3) 
+	$(FC) $(FFLAGS) -c $(SRC4) 
+	$(FC) $(FFLAGS) -c $(SRC5)
 	@echo "                           "
 	@echo "***************************"
 	@echo "*** USER OBJECT SUCCESS ***"
 	@echo "***************************"
 	@echo "                           "
 	@mv *.o unitTestSrc/
+
+preProcess: $(PRE)
+	$(CC) $(CPFLAGS) $(PRE) > $(POS)_tmp
+	grep "^[^#]" $(POS)_tmp > $(POS)
+	rm $(POS)_tmp
+	@echo "                       "
+	@echo "********************"
+	@echo "*** PREPROCESSED ***"
+	@echo "********************"
+	@echo "                       "
 
 # Cleaning stuff
 clean:

@@ -120,7 +120,7 @@ INTEGER :: errorFlag,icg
    CHARACTER(CHRLEN) :: endString,iFileName,matName,comment
    CHARACTER(12) :: vtuFile,vtuFile1
    LOGICAL :: notfoundFlag, pf_restart,pf_rpInit,pf_settle,&
-              wall_exists, fexists, foundMat
+              wall_exists, fexists, foundMat, PPInteractions
    INTEGER :: i,npart,nCells,vi,vii,ii,jj,kk,loopCounter,ipart,icl
    INTEGER :: PPC,numPclCells,npart_local,i_global,i_global_min,i_global_max,&
               iFile,iMat, k, j, l, m
@@ -128,7 +128,7 @@ INTEGER :: errorFlag,icg
                    xMaxCurt,yMinCurt,yMaxCurt,xMinCell,xMaxCell,yMinCell,&
                    yMaxCell,zMinCell,zMaxCell,x,vFrac,volpclsum,xLoc,yLoc,zLoc,yL, &
                    zpf_factor,xpf_factor,dp,neighborWidth,xp_min,xp_max, &
-                   yp_min, yp_max, zp_min, zp_max, MinFluidCells
+                   yp_min, yp_max, zp_min, zp_max, MinFluidCells, maxVF
    REAL(RFREAL) :: y(PPICLF_LRS, PPICLF_LPART), &
                    rprop(PPICLF_LRP, PPICLF_LPART)
    REAL(RFREAL), DIMENSION(:,:), ALLOCATABLE :: rocGrid 
@@ -141,6 +141,25 @@ INTEGER :: errorFlag,icg
 
    INTEGER :: seed(33), isize, CellVertices
 
+<<<<<<< HEAD
+=======
+   INTEGER :: stationary, qs_flag, am_flag, pg_flag, &
+        collisional_flag, heattransfer_flag, feedback_flag, &
+        qs_fluct_flag, ppiclf_debug, rmu_flag, &
+        rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
+        qs_fluct_filter_adapt_flag, &
+        ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
+        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
+
+   REAL(RFREAL) :: rmu_ref, tref, suth, ksp, erest
+   COMMON /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag, &
+        collisional_flag, heattransfer_flag, feedback_flag, &
+        qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth, &
+        rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
+        qs_fluct_filter_adapt_flag, ksp, erest, &
+        ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
+        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
+>>>>>>> AveryVersion
   
    REAL(RFREAL) :: ppiclf_rcp_part
    CHARACTER(12) :: ppiclf_matname
@@ -216,6 +235,16 @@ erest = global%piclERest
 qs_fluct_filter_flag = global%piclQsFluctFilterFlag
 qs_fluct_filter_adapt_flag = global%piclQsFluctFilterAdaptFlag
 
+IF(     (am_flag==2)          & 
+   .OR. (collisional_flag>=1) &
+   .OR. (qs_fluct_flag>=1)    &
+   .OR. (pseudoTurb_flag==1)) THEN
+  PPInteractions = .TRUE.
+ELSE
+  PPInteractions = .FALSE.
+END IF
+
+
 x_per_flag = global%piclPeriodicXFlag 
 ! Find min/max grid coordinates across MPI ranks
 gridmin = MINVAL(pGrid%xyz(XCOORD,1:pGrid%nVert))
@@ -263,6 +292,13 @@ END IF
  ! Initialization for viscous unsteady term
  ppiclf_nTimeBH = 1
  ppiclf_nUnsteadyData = PPICLF_VU
+
+! Needed for fluctuations
+seed = 1
+CALL RANDOM_SEED(put=seed)
+CALL RANDOM_SEED(size=isize)
+
+
 ! ************************************************************
 
 ! Josh Gillis - Fixed restart probelm
@@ -439,17 +475,16 @@ IF(global%restartFromScratch) THEN
       zp_min < z_per_min .OR. zp_max > z_per_max) THEN
      IF(global%myProcid == MASTERPROC) THEN
        WRITE(*,*) 'WARNING - Particles initalized outside of fluid domain'
-       WRITE(*,*) 'Particle domain boundaries at t=0:'
-       WRITE(*,*) 'x - min, max', xp_min, xp_max, xp_max - xp_min
-       WRITE(*,*) 'y - min, max', yp_min, yp_max, yp_max - yp_min
-       WRITE(*,*) 'z - min, max', zp_min, zp_max, zp_max - zp_min
-       WRITE(*,*) 'Fluid domain boundaries:'
+       WRITE(*,*) 'Particle domain boundaries at t=0'
+       WRITE(*,*) 'x - min, max, dx', xp_min, xp_max, xp_max - xp_min
+       WRITE(*,*) 'y - min, max, dx', yp_min, yp_max, yp_max - yp_min
+       WRITE(*,*) 'z - min, max, dx', zp_min, zp_max, zp_max - zp_min
        WRITE(*,*) 'x fluid min/max', x_per_min, x_per_max
        WRITE(*,*) 'y fluid min/max', y_per_min, y_per_max
        WRITE(*,*) 'z fluid min/max', z_per_min, z_per_max
      END IF
      CALL MPI_Barrier(global%mpiComm,errorFlag)
-     CALL ErrorStop(global,0,459,"rocpicl Init: Particles outside fluid domain")
+     !CALL ErrorStop(global,0,459,"rocpicl Init: Particles outside fluid domain")
    END IF
 
    ! Close points.dat file
@@ -496,6 +531,9 @@ ELSE
       print*, " "
    END IF
 END IF ! global%restartFromScratch
+
+!CALL MPI_Barrier(global%mpiComm,errorFlag)
+
 
 ! User sets up overlap grid:
 nCells = pRegion%grid%nCells
@@ -551,7 +589,11 @@ DO i = 1, nCells
   END IF
 END DO
 ! Find cell lengths
+<<<<<<< HEAD
 Max_Celllen = 0.0d0
+=======
+Max_CellLen  = 0.0D0
+>>>>>>> AveryVersion
 DO i = 1,nCells
   IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
     ! Tetrahedral Cell
@@ -569,7 +611,10 @@ DO i = 1,nCells
     MaxPoint(l) = -1.0D10 
     MinPoint(l) =  1.0D10 
     CellLen(l)   =  0.0D0   
+<<<<<<< HEAD
 
+=======
+>>>>>>> AveryVersion
   END DO !l
   ! Add all x,y,z cell corners for centroid and find extremes
   DO k = 1,CellVertices
@@ -615,6 +660,8 @@ DO i = 1,nCells
   rocGrid(7,i) = pRegion%grid%vol(i)    !Cell volume
 END DO !i
 
+!     CALL MPI_Barrier(global%mpiComm,errorFlag)
+
 MinFluidCells = 2.0D0 !Number of fluid cells for Minimum Bin Size and ppiclf_filter(1:3)
 DO l = 1,3
   filter_local(l) = MinFluidCells*Max_CellLen(l) 
@@ -630,6 +677,8 @@ IF((neighborWidth .GT. global%piclNeighborWidth) &
         '*** WARNING *** PICL NEIGHBORWIDTH too small, defaulting to 4*dp_max'
 END IF
 neighborWidth = MAX(neighborWidth, global%piclNeighborWidth)
+
+!CALL MPI_Barrier(global%mpiComm,errorFlag)
 
 IF(global%myProcid == MASTERPROC) THEN
    PRINT*,' '
@@ -653,6 +702,7 @@ IF(global%myProcid == MASTERPROC) THEN
 END IF
 
 CALL ppiclf_solve_Initialize( & 
+           PPInteractions, & 
            x_per_flag, x_per_min, x_per_max, &
            y_per_flag, y_per_min, y_per_max, &
            z_per_flag, z_per_min, z_per_max, &
@@ -667,6 +717,7 @@ END IF
 
 ! Creates OverlapGrid and Calls Init Solve
 CALL ppiclf_comm_InitOverlapGrid(nCells,rocGrid)
+!CALL MPI_Barrier(global%mpiComm,errorFlag)
 CALL ppiclf_solve_InitSolve
 
 INQUIRE(FILE='filein.vtk', EXIST=wall_exists)
@@ -718,9 +769,6 @@ DO i=1,pGrid%nCellsTot
         pRegion%mixt%piclVF(i) = 0.0_RFREAL
 END DO
 
-! Calling inisolve to gather particle volume fraction
-CALL ppiclf_solve_initsolve
-
 IF ( global%myProcid == MASTERPROC) WRITE(*,*) "PFINIT: Calc Init VolP"
 DO i = 1, nCells
        CALL ppiclf_solve_GetProFld(i, PPICLF_P_JPHIP, volp(i))
@@ -729,13 +777,17 @@ DO i = 1, nCells
            CALL ErrorStop(global,ERR_OPTION_TYPE,__LINE__,'PPICLF:axi')
        END IF
        volp(i) = volp(i)/pRegion%grid%vol(i)
-!*** VOL FRAC CAP
-!*** I THINK WE SHOULD DELETE THIS CAP - AVERY ***
-       IF(volp(i) .GT. 0.62) THEN
-           volp(i) = 0.62
-       END IF
        pRegion%mixt%piclVF(i) = volp(i) 
 END DO
+
+maxVF = MAXVAL(volp)
+CALL MPI_Allreduce(maxVF,maxVF,1,MPI_RFREAL,MPI_MAX, &
+      global%mpiComm,global%mpierr )
+! Particle Volume Fraction Sanity Check
+IF(maxVF .GT. 0.65 .AND. global%myProcid == MASTERPROC) THEN
+  PRINT*, '*** WARNING*** Max particle vf: ', maxVF, & 
+         'Adjust grid for a larger minimum cell size or decrease particle diameter'
+END IF
 
 ! TLJ:
 ! This section takes as input from utilities/init/RFLU_InitFlowHardCode.F90
@@ -781,6 +833,7 @@ IF ( global%myProcid == MASTERPROC) then
    print*, 'heattransfer_flag    = ',global%piclHeatTransferFlag
    print*, 'feedback_flag        = ',global%piclFeedbackFlag
    print*, 'qs_fluct_flag        = ',global%piclQsFluctFlag
+   print*, 'P-P Interactions     = ',PPInteractions
    print*, 'ppiclf_debug         = ',global%piclDebug
    print*, 'ppiclf_nUnsteadyData = ',ppiclf_nUnsteadyData
    print*, 'ppiclf_VU            = ',PPICLF_VU

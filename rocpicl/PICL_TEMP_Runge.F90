@@ -72,8 +72,7 @@
 
 SUBROUTINE PICL_TEMP_Runge(pRegion)
 
-!  USE 
-
+  USE ModMPI      
   USE ModDataTypes
   USE ModDataStruct, ONLY : t_level,t_region
   USE ModGlobal, ONLY     : t_global
@@ -131,7 +130,7 @@ TYPE(t_grid), POINTER :: pGrid
   REAL(KIND=8) :: dudx,dudy,dudz
   REAL(KIND=8) :: dvdx,dvdy,dvdz
   REAL(KIND=8) :: dwdx,dwdy,dwdz
-  REAL(KIND=8) :: vFrac
+  REAL(KIND=8) :: vFrac, maxVF
 
   REAL(KIND=8), DIMENSION(3) :: ug      
   REAL(KIND=8), DIMENSION(:), ALLOCATABLE :: rhoF
@@ -724,14 +723,10 @@ pGc => pRegion%mixt%gradCell
                          +DOT_PRODUCT(ug,pGc(:,4,i))
 
        CALL ppiclf_solve_GetProFld(i,PPICLF_P_JPHIP,vfP(i))
-       vfP(i) = vfP(i)/pRegion%grid%vol(i)
-       PhiP(i) = vfP(i)
-       !VOL Frac cap
-       IF(PhiP(i) .GT. 0.62) PhiP(i) = 0.62
-       vfp(i) = PhiP(i)      
+       PhiP(i) = vfP(i)/pRegion%grid%vol(i)
 
        ! TLJ - 02/07/2025 scaled conserved density by gas-phase volume fraction
-       vFrac = 1.0_RFREAL - PhiP(i)!pRegion%mixt%piclVF(i)
+       vFrac = 1.0_RFREAL - PhiP(i) ! This is fluid volume fraction
 
        rhoF(i) = pRegion%mixt%cv(CV_MIXT_DENS,i) / vFrac
        uxF(i) =  pRegion%mixt%cv(CV_MIXT_XMOM,i) &
@@ -842,6 +837,16 @@ pGc => pRegion%mixt%gradCell
        dpvzF(i) = pRegion%mixt%diss(CV_MIXT_ZMOM,i)/pRegion%grid%vol(i)
      END DO
 
+maxVF = MAXVAL(PhiP)
+CALL MPI_Allreduce(maxVF,maxVF,1,MPI_RFREAL,MPI_MAX, &
+      global%mpiComm,global%mpierr )
+! Particle Volume Fraction Sanity Check
+IF(maxVF .GT. 0.65 .AND. global%myProcid == MASTERPROC) THEN
+  PRINT*, '*** WARNING*** Max particle vf: ', maxVF, &
+          'Adjust smallest cell size or decrease particle diameter'
+END IF
+
+
 ! Interp field calls
 ! TLJ - interpolates various fluid quantities onto the 
 !       the ppiclf particle locations
@@ -853,39 +858,60 @@ pGc => pRegion%mixt%gradCell
          CALL ErrorStop(global,ERR_INVALID_VALUE ,__LINE__,'PPICLF:LRP_INT')
       END IF
  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHOF,rhoF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JUX,uxF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JUY,uyF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JUZ,uzF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPDX,dpxF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPDY,dpyF)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPDZ,dpzF)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JCS,csF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JT,tpF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JPHIP,vfP)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDRX,SDRX)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDRY,SDRY)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDRZ,SDRZ)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHSR,rhsR)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JPGCX,pGcX) 
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JPGCY,pGcY) 
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JPGCZ,pGcZ) 
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JXVOR,domgdx)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JYVOR,domgdy)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JZVOR,domgdz)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JP,ppF)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHOGX,drhodx)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHOGY,drhody)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHOGZ,drhodz)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPVDX,dpvxF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPVDY,dpvyF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPVDZ,dpvzF)
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOX,SDOX)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOY,SDOY)  
-      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOZ,SDOZ)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHOF,rhoF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JUX,uxF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JUY,uyF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JUZ,uzF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPDX,dpxF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPDY,dpyF,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPDZ,dpzF,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JCS,csF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JT,tpF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JPHIP,PhiP,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDRX,SDRX,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDRY,SDRY,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDRZ,SDRZ,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHSR,rhsR,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JPGCX,pGcX,nCells) 
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JPGCY,pGcY,nCells) 
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JPGCZ,pGcZ,nCells) 
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JXVOR,domgdx,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JYVOR,domgdy,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JZVOR,domgdz,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JP,ppF,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHOGX,drhodx,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHOGY,drhody,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JRHOGZ,drhodz,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPVDX,dpvxF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPVDY,dpvyF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JDPVDZ,dpvzF,nCells)
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOX,SDOX,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOY,SDOY,nCells)  
+      CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JSDOZ,SDOZ,nCells)  
+      CALL MPI_BARRIER(global%mpiComm,errorFlag)
 
  ! Solve RK stage of time stepping particle solution
      CALL ppiclf_solve_IntegrateParticle(1,piclIO,piclDtMin,piclCurrentTime)
+
+! Update particle volume fraction
+DO i = 1,pRegion%grid%nCells
+!zero out PhiP
+       PhiP(i) = 0.0D0
+       CALL ppiclf_solve_GetProFld(i,PPICLF_P_JPHIP,vfP(i))
+       PhiP(i) = vfP(i)/pRegion%grid%vol(i)
+       pRegion%mixt%piclVF(i) = PhiP(i)
+       ! zero out Ksg before feedback
+       pRegion%mixt%piclKsg(i) = 0
+END DO
+
+maxVF = MAXVAL(PhiP)
+CALL MPI_Allreduce(maxVF,maxVF,1,MPI_RFREAL,MPI_MAX, &
+      global%mpiComm,global%mpierr )
+! Particle Volume Fraction Sanity Check
+IF(maxVF .GT. 0.65 .AND. global%myProcid == MASTERPROC) THEN
+  PRINT*, '*** WARNING*** Max particle vf: ', maxVF, & 
+          'Adjust smallest cell size or decrease particle diameter'
+END IF
 
 !FEED BACK TERMS
      JFXCell = 0.0_RFREAL
@@ -914,12 +940,6 @@ IF(global%piclFeedbackFlag == 1) THEN
        CALL ppiclf_solve_GetProFld(i,PPICLF_P_JFY,JFY(i))
        CALL ppiclf_solve_GetProFld(i,PPICLF_P_JFZ,JFZ(i))
        CALL ppiclf_solve_GetProFld(i,PPICLF_P_JE,JFE(i)) 
-       CALL ppiclf_solve_GetProFld(i,PPICLF_P_JPHIP,vfP(i))
-       PhiP(i) = vfP(i)/pRegion%grid%vol(i)
-
-       !VOL Frac cap
-       IF(PhiP(i) .GT. 0.62) PhiP(i) = 0.62
-       vfp(i) = PhiP(i)      
    !---------------------------------------------------------------------------------------
        ! 07/21/2025 - Thierry - begins here - added for PseudoTurbulence
        if(global%piclPseudoTurbFlag .eq. 1) then
@@ -1182,18 +1202,6 @@ endif
        endif ! piclPseudoTurbFlag
 END IF ! global%piclFeedbackFlag
 
-!Due to moving particle integration stuff stoping this for now
-DO i = 1,pRegion%grid%nCells
-!zero out PhiP
-       PhiP(i) = 0.0D0
-       CALL ppiclf_solve_GetProFld(i,PPICLF_P_JPHIP,vfP(i))
-       vfP(i) = vfP(i)/pRegion%grid%vol(i)
-       PhiP(i) = vfP(i)
-!VOL Frac Cap
-! Should we keep this???
-       IF(PhiP(i) .GT. 0.62) PhiP(i) = 0.62
-       pRegion%mixt%piclVF(i) = PhiP(i) 
-END DO
 !Deallocate arrays
 
     IF(pRegion%mixtInput%axiFlag) THEN

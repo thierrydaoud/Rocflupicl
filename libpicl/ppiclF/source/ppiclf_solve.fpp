@@ -70,12 +70,18 @@ module ppiclf_solve
         !
         ! Input:
         !
+        logical PP
         INTEGER*4 xi1, yi1, zi1, ai1
         REAL*8    xpmin,xpmax,ypmin,ypmax,zpmin,zpmax,apa,apxa,aprin,aprout, pi, angled
 
         ! Called by rocpicl/PICL_TEMP_InitSolver.F90
         ! xdrange adjusts the bin boundaries to ensure they aren't 
         ! larger than the cartesian fluid domain extremes.
+
+        ! Establishes if particle-particle interactions are included.
+        ! Includes collisions, Added mass, pseudo-turbulence, and qs
+        ! fluctuations
+        PPICLF_PPInteractions = PP
 
         ! Linear X-Periodicity
         ppiclf_xdrange(1,1) = xpmin
@@ -234,6 +240,8 @@ module ppiclf_solve
         ppiclf_linperiodic(1) = .FALSE.    
         ppiclf_linperiodic(2) = .FALSE.   
         ppiclf_linperiodic(3) = .FALSE. 
+
+        PPICLF_PPInteractions = .FALSE.
 
         ppiclf_cycle  = 0
         ppiclf_iostep = 1
@@ -575,17 +583,26 @@ module ppiclf_solve
         ! 
         ! Input: 
         ! 
-        REAL*8    time
+            REAL*8    time
+#ifdef PERF
+            REAL *8 tstart,tfinal     
+#endif
         ! 
         ! Internal:
         !
+#ifdef PERF
+            tstart = MPI_WTIME()
+#endif
         ppiclf_time   = time
 
         CALL ppiclf_io_WriteParticleVTU('')
         CALL ppiclf_io_WriteBinVTU('')
         ! Output diagnostics
         CALL ppiclf_io_OutputDiagAll
-
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TWriteSolution = tfinal - tstart
+#endif
         RETURN 
     END SUBROUTINE ppiclf_solve_WriteVTU
 
@@ -602,7 +619,31 @@ module ppiclf_solve
         ! Internal:
         !
         LOGICAL iout
-        !
+
+#ifdef PERF
+        REAL*8    tstart, tfinal
+        REAL*8    tsPeriodic, tfPeriodic
+
+        ! Reset timers at start of each RK stage
+        PPICLF_TCreateBin              = 0.0D0
+        PPICLF_TSendParticles          = 0.0D0
+        PPICLF_TSendGridOverlap        = 0.0D0               
+        PPICLF_TSendFluidFields        = 0.0D0             
+        PPICLF_TParticleParticleModels = 0.0D0       
+        PPICLF_TFluidParticleModels    = 0.0D0     
+        PPICLF_TSendGhostParticles     = 0.0D0     
+        PPICLF_TMapParticlesCells      = 0.0D0    
+        PPICLF_TInterpolation          = 0.0D0    
+        PPICLF_TProjection             = 0.0D0     
+        PPICLF_TWriteSolution          = 0.0D0                  
+        PPICLF_TIntegration            = 0.0D0    
+        PPICLF_TPeriodicity            = 0.0D0       
+        PPICLF_TDataTransfers          = 0.0D0        
+        PPICLF_TTotal                  = 0.0D0
+
+        tstart = MPI_WTIME()
+#endif
+
         ppiclf_cycle  = istep
         ppiclf_iostep = iostep
         ppiclf_dt     = dt
@@ -623,7 +664,27 @@ module ppiclf_solve
             CALL ppiclf_exittr('Wrong RK for rocpicl',0.D0,0)
         END IF
 
-        RETURN
+#ifdef PERF
+        tsPeriodic = MPI_WTIME()
+#endif
+
+        IF(ppiclf_linperiodic(1) .OR. ppiclf_linperiodic(2) .OR. ppiclf_linperiodic(3)) THEN
+            CALL ppiclf_solve_PeriodicParticleShift
+        END IF
+
+#ifdef PERF
+        tfPeriodic = MPI_WTIME()
+        PPICLF_TPeriodicity = tfPeriodic - tsPeriodic
+#endif
+
+        CALL ppiclf_solve_PostTimeStep
+
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TTotal = tfinal - tstart
+        CALL ppiclf_io_WritePerformance()
+#endif
+      RETURN
     END SUBROUTINE ppiclf_solve_IntegrateParticle
 
     SUBROUTINE ppiclf_solve_IntegrateRK3s_Rocflu(iout)
@@ -643,8 +704,13 @@ module ppiclf_solve
         !
         LOGICAL, intent(out) :: iout
         !
-        icalld = icalld + 1
+#ifdef PERF
+        REAL *8 tstart,tfinal     
 
+        tstart = MPI_WTIME()
+#endif
+
+        icalld = icalld + 1
         ! get rk3 coeffs
         CALL ppiclf_solve_SetRK3Coeff(ppiclf_dt)
 
@@ -654,8 +720,16 @@ module ppiclf_solve
         iout = .FALSE.
         if (istage .EQ. nstage) iout = .TRUE.
 
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TIntegration = tfinal - tstart
+#endif
         ! evaluate ydot
         CALL ppiclf_solve_SetYdot
+
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
 
         !Zero out for first stage
         if (istage .EQ. 1) then
@@ -678,20 +752,20 @@ module ppiclf_solve
 #:endfor
         END DO
     
-        IF(ppiclf_linperiodic(1) .OR. ppiclf_linperiodic(2) .OR. ppiclf_linperiodic(3)) THEN
-            CALL ppiclf_solve_PeriodicParticleShift
-        END IF
-
         !Store Current stage RHS for next stage's use
-        !TODO: is this supposed to be commented out?
-        DO i= 1,PPICLF_NPART
-            DO j= 1,PPICLF_LRS
-                !ppiclf_y1(j,i) =  ppiclf_ydot(j,i)
+        !TODO FIX THIS
+        IF(istage .ne. 3) THEN
+            DO i= 1,PPICLF_NPART
+                DO j= 1,PPICLF_LRS
+                    ppiclf_y1(j,i) =  ppiclf_ydot(j,i)
+                END DO
             END DO
-        END DO
+        end if
     
-        !      PPICLF_READYTOSOLVE = .FALSE.
-        !      CALL ppiclf_solve_PostSolve
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TIntegration = PPICLF_TIntegration + (tfinal - tstart)
+#endif
 
         RETURN
     END SUBROUTINE ppiclf_solve_IntegrateRK3s_Rocflu
@@ -702,6 +776,9 @@ module ppiclf_solve
         !
         INTEGER*4 i  
         REAL*8 per_alpha
+#ifdef PERF
+        REAL *8 tstart,tfinal     
+#endif
         !
         DO i=1,ppiclf_npart
             !!!!!!!!!!!!!!!!        Rotational Periodicity Starts Here     !!!!!!!!!!!!!!!!!!!!
@@ -810,114 +887,19 @@ module ppiclf_solve
     END SUBROUTINE ppiclf_solve_SetRK3Coeff
 
     SUBROUTINE ppiclf_solve_SetYdot
-        ! 
-        !      IF(.NOT. PPICLF_READYTOSOLVE)
-        !     >  CALL ppiclf_solve_InitSolve
-        CALL ppiclf_solve_InitSolve
-        CALL ppiclf_user_SetYdot
-
-        RETURN
-    END SUBROUTINE ppiclf_solve_SetYdot
-
-    SUBROUTINE ppiclf_solve_InitSolve
-        ! 
-        ! Internal: 
-        ! 
-        INTEGER*4 :: i, j
-        ! ppiclf_binchanged set in CreateBin
-        ! ppiclf_binchanged .TRUE. means
-        ! bin coordinates changed
-        CALL ppiclf_comm_CreateBin
-
-        ! ppiclf_particleMoved set in FindParticle
-        ! ppiclf_particleMoved .EQ. 0 means all particles
-        ! stayed in same bin as previous RK Stage.
-        CALL ppiclf_comm_FindParticle
-        IF(ppiclf_particleMoved .NE. 0 .OR. ppiclf_binchanged) THEN
-            CALL ppiclf_comm_MoveParticle
-        END IF
-
-        IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
-            CALL ppiclf_comm_MapOverlapGrid
-        END IF
-
-        IF(ppiclf_overlap) THEN
-            ! Interpolate fluid solver grid to particle
-            CALL ppiclf_solve_InterpParticleGrid
-            ! Project particle feedback to fluid solver grid
-            CALL ppiclf_solve_ProjectParticleGrid
-        END IF
-
-        !      IF(ppiclf_gprequired) THEN
-        ! Ghost particles are needed 
-        CALL ppiclf_comm_CreateGhost
-        CALL ppiclf_comm_MoveGhost
-        !      END IF
-
-        ! Zero collisions
-            DO i=1, ppiclf_npart
-                @{USEPARTICLE(ppiclf_parts(i)%ydotc)}@(:) = 0.0D0
-            END DO
-        RETURN
-    END SUBROUTINE ppiclf_solve_InitSolve
-
-    !      SUBROUTINE ppiclf_solve_PostSolve
-        !!
-        !      IMPLICIT NONE
-        !!
-        !      INCLUDE "PPICLF"
-        !! 
-        !! Internal: 
-        !! 
-        !      INTEGER*4 :: i, j, ierr
-        !
-        !      ! ppiclf_binchanged set in CreateBin
-        !      ! ppiclf_binchanged .TRUE. means
-        !      ! bin coordinates changed
-        !      CALL ppiclf_comm_CreateBin
-        !   
-        !      CALL MPI_BARRIER(ppiclf_comm,ierr)
-        !
-        !      ! ppiclf_particleMoved set in FindParticle
-        !      ! ppiclf_particleMoved .EQ. 0 means all particles
-        !      ! stayed in same bin as previous RK Stage.
-        !      CALL ppiclf_comm_FindParticle
-        !
-        !      IF(ppiclf_particleMoved .NE. 0 .OR.
-        !     >              ppiclf_binchanged) THEN
-        !        CALL ppiclf_comm_MoveParticle
-        !      END IF
-        !
-        !      IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
-        !        CALL ppiclf_comm_MapOverlapGrid
-        !      END IF
-        !
-        !      IF(ppiclf_overlap) THEN
-        !        ! Interpolate fluid solver grid to particle
-        !        CALL ppiclf_solve_InterpParticleGrid
-        !        ! Project particle feedback to fluid solver grid
-        !        CALL ppiclf_solve_ProjectParticleGrid
-        !      END IF
-        !
-        !!      IF(ppiclf_gprequired) THEN
-        !      ! Ghost particles are needed 
-        !        CALL ppiclf_comm_CreateGhost
-        !        CALL ppiclf_comm_MoveGhost
-        !!      END IF
-        !
-        !      ! Zero collisions 
-        !      ppiclf_ydotc = 0.0D0
-        !
-        !      RETURN
-        !      END
-    !-----------------------------------------------------------------------
-    
-    SUBROUTINE ppiclf_solve_InterpParticleGrid
-        !
-        ! Internal:
-        !
         INTEGER*4 j
+#ifdef PERF
+        REAL *8 tstart,tfinal     
+#endif
+        ! 
+        ! Assumes cells have already been mapped to particles and ghost
+        ! particles are created.
         !
+
+#ifdef PERF
+      tstart = MPI_WTIME()     
+#endif
+
         ! Copies Grid Cell ID for all Rocflu elements that map
         ! to ppiclf domain for GSLIB Transfer.  This copy is from
         ! MapOverlapGrid.
@@ -933,6 +915,75 @@ module ppiclf_solve
         ! cells that map to ppiclf domain.
         CALL ppiclf_solve_InterpTupleTransfer
 
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TSendFluidFields = tfinal - tstart    
+        tstart = MPI_WTIME()
+#endif
+
+        ! Interpolates rprop data for ppiclf domain cells in this bin
+        CALL ppiclf_solve_Interpolate
+
+        ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
+        PPICLF_INT_ICNT = 0
+
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TInterpolation = tfinal - tstart    
+#endif
+        CALL ppiclf_user_SetYdot
+
+        RETURN
+    END SUBROUTINE ppiclf_solve_SetYdot
+
+    SUBROUTINE ppiclf_solve_InitSolve
+        ! This is called during the initialization. It forms the first bin and
+        ! paritcle-cell mappings.
+        ! 
+        ! Internal: 
+        ! 
+        INTEGER*4 :: j
+        ! ppiclf_binchanged set in CreateBin
+        ! ppiclf_binchanged .TRUE. means
+        ! bin coordinates changed
+        CALL ppiclf_comm_CreateBin
+
+        ! ppiclf_particleMoved set in FindParticle
+        ! ppiclf_particleMoved .EQ. 0 means all particles
+        ! stayed in same bin as previous RK Stage.
+        CALL ppiclf_comm_FindParticle
+
+        IF(ppiclf_particleMoved .NE. 0 .OR. ppiclf_binchanged) THEN
+            CALL ppiclf_comm_MoveParticle
+        END IF
+
+        IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
+            CALL ppiclf_comm_MapOverlapGrid
+        END IF
+
+        ! Copies Grid Cell ID for all Rocflu elements that map
+        ! to ppiclf domain for GSLIB Transfer.  This copy is from
+        ! MapOverlapGrid.
+        CALL ppiclf_solve_InitInterp
+
+        ! Makes array (ppiclf_int_fld_input) of all rprop data
+        ! for grid cellss that map to ppiclf domain.
+        DO j=1,PPICLF_INT_ICNT
+            CALL ppiclf_solve_InterpField(j)
+        END DO
+        
+        ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
+        ! cells that map to ppiclf domain.
+        CALL ppiclf_solve_InterpTupleTransfer
+
+        IF(PPICLF_PPInteractions) THEN
+            ! Ghost particles are needed 
+            CALL ppiclf_comm_CreateGhost
+            CALL ppiclf_comm_MoveGhost
+            ! Zero collisions 
+            ppiclf_ydotc = 0.0D0
+        END IF
+
         ! Maps up to 27 closest cell centers to particle
         ! Includes: CellID, total dist, x dist, y dist, z dist
         CALL ppiclf_solve_SBParticleToCellMap
@@ -944,7 +995,7 @@ module ppiclf_solve
 
 
         RETURN
-    END SUBROUTINE ppiclf_solve_InterpParticleGrid
+    END SUBROUTINE ppiclf_solve_InitSolve
 
     SUBROUTINE ppiclf_solve_InterpFieldUser(jp,infld)
         !
@@ -1021,9 +1072,12 @@ module ppiclf_solve
         !
         ! Internal: 
         !
-        REAL*8 FLD(PPICLF_LEX,PPICLF_LEY,PPICLF_LEZ,PPICLF_LEE), Max_CellLen(3)
-        INTEGER*4 nkey(2), nl, nii, njj, nrr, ie, l 
+        REAL*8 FLD(PPICLF_LEX,PPICLF_LEY,PPICLF_LEZ,PPICLF_LEE)
+        INTEGER*4 nkey(2), nl, nii, njj, nrr  
         LOGICAL partl
+#ifdef PERF
+        REAL *8 tstart,tfinal     
+#endif
         !
         ! send it all
         nl   = 0
@@ -1032,6 +1086,10 @@ module ppiclf_solve
         nrr  = PPICLF_LRP_INT
         nkey(1) = 2
         nkey(2) = 1
+
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
 
         CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl  & ! Setup
             ,ppiclf_nCells_Interp, PPICLF_LEE             & ! Amount of columns to transfer
@@ -1046,24 +1104,10 @@ module ppiclf_solve
             ,ppiclf_int_fld,nrr                           & ! Real data
             ,nkey,2)                                        ! Sorting order
 
-        ! Find distance check for interpolation.
-        ! This is 1.5*MaxCellLength to ensure that at least
-        ! 27 neighboring cells are mapped.
-        Max_CellLen(1) = 0.0D0
-        Max_CellLen(2) = 0.0D0
-        Max_CellLen(3) = 0.0D0
-        DO ie = 1,ppiclf_nCells_Interp ! Loop through cells mapped to bin
-            DO l = 1,3
-                ! Find max cell lengths in all dimensions
-                IF(ppiclf_picl_grid(3+l,ie) .GT. Max_CellLen(l)) Max_CellLen(l) = ppiclf_picl_grid(3+l,ie)
-            END DO !l
-        END DO !ie
-
-        DO l = 1,3
-            ! Multiply by 1.5 so particle near face will
-            ! find center one cell over in farthest direction
-            ppiclf_interp_dchk(l) = Max_CellLen(l)*1.5D0
-        END DO
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
 
         RETURN
     END SUBROUTINE ppiclf_solve_InterpTupleTransfer
@@ -1073,27 +1117,28 @@ module ppiclf_solve
         INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, CellID_nearest(28), partCount
         REAL*8    dSQl, dSQi, dSQ(28), xp(3), dl, CellCenter(3,28), w(27), binblength(3), Max_CellLen(3), Max_CellLenSQ(3), dSQchk(3)
         LOGICAL   added, farAway, alreadyMapped
-    
-
-        INTEGER*4  SBin_map( 0 : (                                                                      &
-            (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))/ppiclf_interp_dchk(1)) + 1) *        &
-            (FLOOR((ppiclf_bins_dx(2) + 2*ppiclf_interp_dchk(2))/ppiclf_interp_dchk(2)) + 1) *        &
-            (FLOOR((ppiclf_bins_dx(3) + 2*ppiclf_interp_dchk(3))/ppiclf_interp_dchk(3)) + 1) - 1)     &
+ 
+        INTEGER*4  SBin_map( 0 : (                                                                  &
+            (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))/ppiclf_interp_dchk(1)) + 1) *      &
+            (FLOOR((ppiclf_bins_dx(2) + 2*ppiclf_interp_dchk(2))/ppiclf_interp_dchk(2)) + 1) *      &
+            (FLOOR((ppiclf_bins_dx(3) + 2*ppiclf_interp_dchk(3))/ppiclf_interp_dchk(3)) + 1) - 1)   &
             ,ppiclf_nCells_Interp)
 
-        INTEGER*4  SBin_counter( 0 : (                                                                  &
-            (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))/ppiclf_interp_dchk(1)) + 1) *        &
-            (FLOOR((ppiclf_bins_dx(2) + 2*ppiclf_interp_dchk(2))/ppiclf_interp_dchk(2)) + 1) *        &
+        INTEGER*4  SBin_counter( 0 : (                                                              &
+            (FLOOR((ppiclf_bins_dx(1) + 2*ppiclf_interp_dchk(1))/ppiclf_interp_dchk(1)) + 1) *      &
+            (FLOOR((ppiclf_bins_dx(2) + 2*ppiclf_interp_dchk(2))/ppiclf_interp_dchk(2)) + 1) *      &
             (FLOOR((ppiclf_bins_dx(3) + 2*ppiclf_interp_dchk(3))/ppiclf_interp_dchk(3)) + 1) - 1))
 
-
-        INTEGER*4 n_SBin(3), tot_SBin, i_SBin(3), iTemp_SBin(3), temp_SBin, iSB, jSB, kSB, loopSB, i_count, firstSB(3), lastSB(3)  
+        INTEGER*4 n_SBin(3), tot_SBin, i_SBin(3), iTemp_SBin(3),temp_SBin, iSB, jSB, kSB, loopSB, i_count,firstSB(3), lastSB(3)  
         REAL*8    bin_Min(3), x_range(3), size_SBin(3)
         LOGICAL   remove
+#ifdef PERF
+        REAL *8 tstart,tfinal     
+#endif
         !***************************************************************
 
         IF(ppiclf_npart .LT. 1) RETURN
-        IF(ppiclf_nCells_Interp .EQ. 0 .AND. ppiclf_npart .GT. 0) THEN
+        IF(ppiclf_nCells_FV2PICL .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
             PRINT*,'ERROR: ',ppiclf_npart, 'Particles mapped to bin:',ppiclf_nid
             PRINT*,'No cells mapped to bin for Interpolation/Projection.'
             CALL ppiclf_exittr('Failure in particle to cell mapping',0.D0,0)
@@ -1189,7 +1234,7 @@ module ppiclf_solve
                         ! Finally, add the cell to a subbin 
                         temp_SBin = iTemp_SBin(1) + iTemp_SBin(2)*n_SBin(1) + iTemp_SBin(3)*n_SBin(1)*n_SBin(2)
                         SBin_Counter(temp_SBin) = SBin_Counter(temp_SBin) + 1
-                        IF(SBin_Counter(temp_SBin) .GT. ppiclf_nCells_Interp) PRINT*, 'counter more than interp cells. SB:', temp_SBin, SBin_Counter(temp_SBin), ppiclf_nCells_Interp
+                        IF(SBin_Counter(temp_SBin) .GT. ppiclf_nCells_FV2PICL) PRINT*, 'counter more than interp cells. SB:',temp_SBin, SBin_Counter(temp_SBin),ppiclf_nCells_FV2PICL
                         SBin_Map(temp_SBin,SBin_Counter(temp_SBin)) = ie
                     END DO !k
                 END DO !j 
@@ -1328,7 +1373,7 @@ module ppiclf_solve
 
         !***************************************************************
 
-        IF(ppiclf_nCells_Interp .EQ. 0 .AND. ppiclf_npart .GT. 0) THEN
+        IF(ppiclf_nCells_FV2PICL .EQ. 0 .AND. ppiclf_npart .GT. 0) THEN
             PRINT*,'No cells mapped to ppiclf bin. Num Particles/Proc ID:',ppiclf_npart, ppiclf_nid
             CALL ppiclf_exittr('Failure in particle to cell mapping',0.D0,0)
         END IF
@@ -1355,7 +1400,7 @@ module ppiclf_solve
                 CellID_nearest(ie) = -1 ! index of nearest elements
                 dSQ(ie) = 1D20 ! distance to center of nearest element
             ENDDO !ie
-            DO ie = 1,ppiclf_nCells_Interp
+            DO ie = 1,ppiclf_nCells_FV2PICL
                 ! get distance from particle to center
                 dSQl     = 0.0D0
                 dSQi     = 0.0D0
@@ -1501,7 +1546,10 @@ module ppiclf_solve
         INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj, nrr, nkey(2), iee
         REAL*8    CellVol, GaussianConst, dist, w(27), wsum, x_norm, y_norm, z_norm, PI, eps
         LOGICAL   partl 
- 
+
+#ifdef PERF
+        REAL*8    tstart, tfinal
+#endif
         PI = 4*ATAN(1.0D0)
         GaussianConst = 2.305D0 ! Distribution over 2 cell widths
         ppiclf_pro_fld_picl = 0.0d0
@@ -1544,7 +1592,7 @@ module ppiclf_solve
         ! Now send feedback information to processor that contains 
         ! the cell for the fluid solver
 
-        ppiclf_nCells_Proj = ppiclf_nCells_Interp
+        ppiclf_nCells_Proj = ppiclf_nCells_FV2PICL
         DO i = 1,ppiclf_nCells_Proj
             CALL ppiclf_icopy(ppiclf_cell_map_proj(1,i),ppiclf_cell_map_interp(1,i),PPICLF_LRMAX)
         END DO
@@ -1555,6 +1603,11 @@ module ppiclf_solve
         nrr = PPICLF_LRP_PRO
         nkey(1) = 2
         nkey(2) = 1
+
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+
         CALL pfgslib_crystal_tuple_transfer(      & 
             ppiclf_cr_hndl                      & ! Setup
             ,ppiclf_nCells_Proj, PPICLF_LEE     & ! Amount of columns to transfer
@@ -1570,6 +1623,11 @@ module ppiclf_solve
             ,partl,nl                           & ! Logical data
             ,ppiclf_pro_fld_picl,nrr            & ! Real data
             ,nkey,2)                              ! Sorting order
+
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
+#endif
 
         ppiclf_pro_fld = 0.0d0
         DO ie=1,ppiclf_nCells_Proj

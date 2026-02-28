@@ -78,13 +78,13 @@ module ppiclf_data
     ! Originally PPICLF_PARALLEL.h
     ! Communication
 
-    INTEGER*4 PPICLF_COMM, PPICLF_NP, PPICLF_NID, PPICLF_CR_HNDL,PPICLF_FP_HNDL, PPICLF_COMM_NID
+    INTEGER*4 PPICLF_COMM, PPICLF_NP, PPICLF_NID, PPICLF_GLNPART, PPICLF_CR_HNDL,PPICLF_FP_HNDL, PPICLF_COMM_NID
     DATA PPICLF_NID /0/
 
     ! Bins
-    INTEGER*4 PPICLF_N_BINS(3) 
+    INTEGER*4 PPICLF_N_BINS(3),PPICLF_TOTALBINS, PPICLF_IMEDSLICE(2), PPICLF_ILARSLICE(2)
 
-    REAL*8 PPICLF_BINS_DX(3), PPICLF_BINB(6), PPICLF_BIN_POS(2,3),PPICLF_PREVIOUSBINB(6)
+    REAL*8 PPICLF_BINS_DX(3), PPICLF_BINB(6), PPICLF_BIN_POS(2,3),PPICLF_PREVIOUSBINB(6), PPICLF_BINDOMLEN(3), PPICLF_RMEDSLICE(2)
       
 
     ! Ghost particles
@@ -98,7 +98,7 @@ module ppiclf_data
 
     INTEGER*4  PPICLF_NPART_GP
 
-    LOGICAL PPICLF_GPREQUIRED
+    LOGICAL PPICLF_PPINTERACTIONS
 
     INTEGER*4 PARTICLE_NN(PPICLF_LPART)
 
@@ -110,6 +110,24 @@ module ppiclf_data
 
     INTEGER*4  PPICLF_NWALL
 
+    ! Originally PPICLF_PERFORMACE.h
+
+    ! Time per operation per stage
+    REAL*8  PPICLF_TCreateBin               &
+        ,PPICLF_TSendParticles              &
+        ,PPICLF_TSendGridOverlap            &
+        ,PPICLF_TSendFluidFields            &
+        ,PPICLF_TParticleParticleModels     &
+        ,PPICLF_TFluidParticleModels        &
+        ,PPICLF_TSendGhostParticles         &
+        ,PPICLF_TMapParticlesCells          &
+        ,PPICLF_TInterpolation              &
+        ,PPICLF_TProjection                 &
+        ,PPICLF_TWriteSolution              &
+        ,PPICLF_TIntegration                &
+        ,PPICLF_TPeriodicity                &
+        ,PPICLF_TDataTransfers              &
+        ,PPICLF_TTotal                      
 
     ! Originally PPICLF_USER_COMMON.h
     ! this seems like really poor design, I dont think the user code should be defining variables used by 
