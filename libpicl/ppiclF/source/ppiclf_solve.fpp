@@ -19,7 +19,7 @@ module ppiclf_solve
     ! binning variables
     use ppiclf_data, only: ppiclf_bins_dx, ppiclf_binb, ppiclf_bin_pos, ppiclf_previousbinb, ppiclf_n_bins
     ! ghost particle variables
-    use ppiclf_data, only: ppiclf_npart_gp, ppiclf_particlemoved
+    use ppiclf_data, only: ppiclf_npart_gp, ppiclf_particlemoved, PPICLF_PPINTERACTIONS
     ! wall support variables
     use ppiclf_data, only: ppiclf_nwall, ppiclf_wall_c, ppiclf_wall_n
     ! AngularPeriodic variables (?)(SEE NOTE IN ppiclf_data)
@@ -53,7 +53,6 @@ module ppiclf_solve
     public :: ppiclf_solve_SetRK3Coeff
     public :: ppiclf_solve_SetYdot
     public :: ppiclf_solve_InitSolve
-    public :: ppiclf_solve_InterpParticleGrid
     public :: ppiclf_solve_InterpFieldUser
     public :: ppiclf_solve_InitInterp
     public :: ppiclf_solve_InterpField
@@ -66,7 +65,7 @@ module ppiclf_solve
     public :: ppiclf_solve_GetProFld
     contains
 
-    SUBROUTINE ppiclf_solve_Initialize(xi1,xpmin,xpmax,yi1,ypmin,ypmax,zi1,zpmin,zpmax,ai1,apa,apxa,aprin,aprout)
+    SUBROUTINE ppiclf_solve_Initialize(PP, xi1,xpmin,xpmax,yi1,ypmin,ypmax,zi1,zpmin,zpmax,ai1,apa,apxa,aprin,aprout)
         !
         ! Input:
         !
@@ -756,9 +755,9 @@ module ppiclf_solve
         !TODO FIX THIS
         IF(istage .ne. 3) THEN
             DO i= 1,PPICLF_NPART
-                DO j= 1,PPICLF_LRS
-                    ppiclf_y1(j,i) =  ppiclf_ydot(j,i)
-                END DO
+#:for n, y1_ref, y1_off, ydot_ref, ydot_off in fyppmacros.Loop_All_Reals("ppiclf_parts(i)%y1", "ppiclf_parts(i)%ydot")
+        ${y1_ref}$(${y1_off + 1}$: ${y1_off + n}$)  = ${ydot_ref}$(${ydot_off + 1}$: ${ydot_off + n}$)
+#:endfor
             END DO
         end if
     
@@ -981,7 +980,9 @@ module ppiclf_solve
             CALL ppiclf_comm_CreateGhost
             CALL ppiclf_comm_MoveGhost
             ! Zero collisions 
-            ppiclf_ydotc = 0.0D0
+            do j = 1, ppiclf_npart
+                @{USEPARTICLE(ppiclf_parts(j)%ydotc)}@ = 0.0D0
+            end do
         END IF
 
         ! Maps up to 27 closest cell centers to particle
@@ -991,13 +992,122 @@ module ppiclf_solve
         ! Interpolates rprop data for ppiclf domain cells in this bin
         CALL ppiclf_solve_Interpolate
 
+        ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
         PPICLF_INT_ICNT = 0
+
+        ! Project particle feedback to fluid solver grid
+        CALL ppiclf_solve_ProjectParticleGrid
 
 
         RETURN
     END SUBROUTINE ppiclf_solve_InitSolve
 
-    SUBROUTINE ppiclf_solve_InterpFieldUser(jp,infld)
+    SUBROUTINE ppiclf_solve_PostTimeStep
+        ! 
+        ! Internal: 
+        ! 
+        INTEGER*4 :: i, j
+
+#ifdef PERF
+        REAL *8 tstart,tfinal     
+#endif
+!
+
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
+
+        ! ppiclf_binchanged set in CreateBin
+        ! ppiclf_binchanged .TRUE. means
+        ! bin coordinates changed
+        CALL ppiclf_comm_CreateBin
+
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TCreateBin = tfinal - tstart
+        tstart = MPI_WTIME()
+#endif
+
+        ! ppiclf_particleMoved set in FindParticle
+        ! ppiclf_particleMoved .EQ. 0 means all particles
+        ! stayed in same bin as previous RK Stage.
+        CALL ppiclf_comm_FindParticle
+        IF(ppiclf_particleMoved .NE. 0 .OR. ppiclf_binchanged) THEN
+            CALL ppiclf_comm_MoveParticle
+        END IF
+
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TSendParticles = tfinal - tstart
+        PPICLF_TSendGridOverlap = 0.0D0
+#endif
+
+        IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
+
+#ifdef PERF
+            tstart = MPI_WTIME()
+#endif
+
+            CALL ppiclf_comm_MapOverlapGrid
+
+#ifdef PERF
+            tfinal = MPI_WTIME()
+            PPICLF_TSendGridOverlap = tfinal - tstart
+#endif
+
+        END IF
+
+#ifdef PERF
+        PPICLF_TSendGhostParticles = 0.0D0
+#endif
+
+        IF(PPICLF_PPInteractions) THEN
+
+#ifdef PERF
+            tstart = MPI_WTIME()
+#endif
+
+            ! Ghost particles are needed 
+            CALL ppiclf_comm_CreateGhost
+            CALL ppiclf_comm_MoveGhost
+            ! Zero collisions 
+            do j = 1, ppiclf_npart
+                @{USEPARTICLE(ppiclf_parts(j)%ydotc)}@ = 0.0D0
+            end do
+
+#ifdef PERF
+            tfinal = MPI_WTIME()
+            PPICLF_TSendGhostParticles = tfinal-tstart
+#endif
+
+        END IF
+
+#ifdef PERF
+        tstart= MPI_WTIME()
+#endif
+
+        ! Maps up to 27 closest cell centers to particle
+        ! Includes: CellID, total dist, x dist, y dist, z dist
+        CALL ppiclf_solve_SBParticleToCellMap
+
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TMapParticlesCells = tfinal - tstart
+        tstart = MPI_WTIME()
+#endif
+
+        ! Project particle feedback to fluid solver grid
+        CALL ppiclf_solve_ProjectParticleGrid
+
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TProjection = tfinal - tstart
+#endif
+
+        RETURN
+    END SUBROUTINE ppiclf_solve_PostTimeStep
+
+    SUBROUTINE ppiclf_solve_InterpFieldUser(jp,infld, nCells)
         !
         ! This is called by rocpicl/PICL_TEMP_Runge.F90 each timestep
         ! There is a call for each quantity that should be interpolated
@@ -1007,6 +1117,7 @@ module ppiclf_solve
         !
 
         INTEGER*4 jp,i !rprop index
+        INTEGER*4 nCells ! TODO: What is this param for, it was added on the caller side, but it wasn't added to this side
         REAL*8 infld(*) !value to set rprop to
         !
         ! Internal:
@@ -1138,7 +1249,7 @@ module ppiclf_solve
         !***************************************************************
 
         IF(ppiclf_npart .LT. 1) RETURN
-        IF(ppiclf_nCells_FV2PICL .EQ. 0 . AND. ppiclf_npart .GT. 0) THEN
+        IF(ppiclf_nCells_FV2PICL .EQ. 0 .AND. ppiclf_npart .GT. 0) THEN
             PRINT*,'ERROR: ',ppiclf_npart, 'Particles mapped to bin:',ppiclf_nid
             PRINT*,'No cells mapped to bin for Interpolation/Projection.'
             CALL ppiclf_exittr('Failure in particle to cell mapping',0.D0,0)

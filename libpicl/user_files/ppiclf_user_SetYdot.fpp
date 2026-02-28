@@ -56,7 +56,7 @@ submodule (ppiclf_user) ppiclf_user_SetYdot_imp
     ! binning variables
     use ppiclf_data, only: ppiclf_n_bins, ppiclf_bins_dx
     ! ghost particle variables
-    use ppiclf_data, only: ppiclf_npart_gp
+    use ppiclf_data, only: ppiclf_npart_gp, PPICLF_PPInteractions
     ! wall support variables
     use ppiclf_data, only:
     ! AngularPeriodic variables (?)(SEE NOTE IN ppiclf_data)

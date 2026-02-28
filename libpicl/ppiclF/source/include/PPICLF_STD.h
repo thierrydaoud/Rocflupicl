@@ -1,3 +1,5 @@
+#include "PPICLF_USER.h"
+
 #ifndef PPICLF_LPART
 #define PPICLF_LPART 100000
 #endif

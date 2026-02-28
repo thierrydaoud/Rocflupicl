@@ -1,4 +1,4 @@
-FC               = mpif77 # Valid MPI Fortran compiler
+FC               = mpifort # Valid MPI Fortran compiler
 CC               = mpicc  # Valid MPI C compiler
 FFLAGS          += -cpp -w -O3 -std=legacy -g -fmax-errors=1#-fallow-argument-mismatch -fcheck=all
 CPFLAGS         += -E
@@ -21,7 +21,12 @@ INSTALL_LOCATION = .
 # PPICLF LIBRARY
 SOURCE_ROOT_PPICLF=$(INSTALL_LOCATION)/ppiclF/source
 SOURCE_ROOT_USER=$(INSTALL_LOCATION)/user_files
-PPICLF_IFLAGS+=-I$(SOURCE_ROOT_PPICLF)
+BUILD_ROOT_PPICLF=$(INSTALL_LOCATION)/ppiclF/build
+BUILD_ROOT_USER=$(BUILD_ROOT_PPICLF)/user
+PPICLF_IFLAGS+=-I$(SOURCE_ROOT_PPICLF)/include -I$(SOURCE_ROOT_USER) -I$(SOURCE_ROOT_USER)/include 
+PPICLF_FFLAGS+=$(PPICLF_IFLAGS) -cpp -Wall -ffree-line-length-none -Wno-missing-include-dirs -fmax-errors=20
+PPICLF_USER_FFLAGS:=$(PPICLF_FFLAGS) -J$(BUILD_ROOT_USER) -I$(BUILD_ROOT_PPICLF)
+PPICLF_FFLAGS+=-J$(BUILD_ROOT_PPICLF)
 
 # GSLIB LIBRARY
 SOURCE_ROOT_GSLIB=$(INSTALL_LOCATION)/ppiclF/3rd_party/gslib
@@ -151,6 +156,7 @@ $(BUILD_ROOT_PPICLF)/%.f90 : $(SOURCE_ROOT_PPICLF)/%.fpp
 
 $(BUILD_ROOT_PPICLF)/%.o : $(BUILD_ROOT_PPICLF)/%.f90
 	@mkdir -vp $(BUILD_ROOT_PPICLF)
+	@$(FC) $< -E -o $(BUILD_ROOT_PPICLF)/$*.i $(PPICLF_FFLAGS)
 	@$(FC) $< -c -o $@ $(PPICLF_FFLAGS)
 # mpifort source/ppiclf_data.f90 -cpp -o ppiclf_data.o -Isource/include -I../user_files -ffree-line-length-none
 
@@ -174,6 +180,7 @@ $(BUILD_ROOT_USER)/%.f90 : $(SOURCE_ROOT_USER)/%.fpp
 
 $(BUILD_ROOT_PPICLF)/%.o : $(BUILD_ROOT_USER)/%.f90
 	@mkdir -vp $(BUILD_ROOT_USER)
+	@$(FC) $< -E -o $(BUILD_ROOT_USER)/$*.i $(PPICLF_FFLAGS)
 	@$(FC) $< -c -o $@ $(PPICLF_FFLAGS)
 
 

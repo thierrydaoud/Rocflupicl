@@ -89,6 +89,8 @@ module procedure ppiclf_user_EvalNearestNeighbor
     real*8 adptfilter, dpl, phip, dist2, xdist2, ydist2, zdist2
     real*8 dist, rsig
     real*8 sig2, gkern, pi
+    ! TODO: Fix this
+    parameter(pi = 3.1415926535)
 
     ! 06/06/2024 - Thierry - Added Mass code
     integer*4 k, l, kk, ll

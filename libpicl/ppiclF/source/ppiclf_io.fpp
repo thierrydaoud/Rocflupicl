@@ -6,7 +6,7 @@ module ppiclf_io
     use ppiclf_data, only: ppiclf_npart
     use ppiclf_m_particledata, only: @{USEMODVAR(PPICLF_t_particle, ppiclf_parts)}@
     ! grid data
-    use ppiclf_data, only: ppiclf_ncells_fv2picl, ppiclf_nfvcells
+    use ppiclf_data, only: ppiclf_ncells_fv2picl, ppiclf_nfvcells, PPICLF_NCELLS_FV2PICL_ORIG
     ! particle options variables
     use ppiclf_data, only: ppiclf_filter, ppiclf_ndim, ppiclf_ngrids, ppiclf_cycle, ppiclf_time, ppiclf_dt, ppiclf_imethod, ppiclf_iostep, ppiclf_overlap, ppiclf_iendian, ppiclf_restart, ppiclf_printbinvtu
     ! comm variables
@@ -17,6 +17,8 @@ module ppiclf_io
     use ppiclf_data, only: ppiclf_npart_gp
     ! wall support variables
     use ppiclf_data, only: ppiclf_nwall, ppiclf_wall_c, ppiclf_wall_n
+    ! Performance tracking variables
+    use ppiclf_data, only: PPICLF_TCreateBin, PPICLF_TSendParticles, PPICLF_TSendGridOverlap, PPICLF_TSendFluidFields, PPICLF_TParticleParticleModels, PPICLF_TFluidParticleModels, PPICLF_TSendGhostParticles, PPICLF_TMapParticlesCells, PPICLF_TInterpolation, PPICLF_TProjection, PPICLF_TWriteSolution, PPICLF_TIntegration, PPICLF_TPeriodicity, PPICLF_TDataTransfers, PPICLF_TTotal 
     
 
     ! used functions/subroutines
@@ -1362,7 +1364,7 @@ module ppiclf_io
                     Tmin(i) = MIN(TimeArray(i,j), Tmin(i))
                     IF(ActiveProc(j)) Tavg(i) = Tavg(i) + TimeArray(i,j) 
                 END DO
-                avg(i) = Tavg(i) / REAL(ActiveCnt)
+                Tavg(i) = Tavg(i) / REAL(ActiveCnt)
             END DO
             DO i = 1,2
                 PAvg(i)       = 0.0D0

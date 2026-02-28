@@ -8,11 +8,13 @@ module ppiclf_m_comm
     ! grid data
     use ppiclf_data, only: ppiclf_ncells_fv2picl, ppiclf_ncells_fv2picl_orig, ppiclf_nfvcells, ppiclf_xdrange, ppiclf_fluid_grid, ppiclf_cell_map, ppiclf_picl_grid, ppiclf_cell_map_Orig
     ! particle options variables
-    use ppiclf_data, only: ppiclf_nndist, ppiclf_binchanged, ppiclf_lcomm, ppiclf_linit, ppiclf_ndim, ppiclf_printbinvtu, ppiclf_overlap, ppiclf_linperiodic, ppiclf_equaldomain, ppiclf_filter
+    use ppiclf_data, only: ppiclf_nndist, ppiclf_binchanged, ppiclf_lcomm, ppiclf_linit, ppiclf_ndim, ppiclf_printbinvtu, ppiclf_overlap, ppiclf_linperiodic, ppiclf_equaldomain, ppiclf_filter, PPICLF_INTERP_DCHK
     ! comm variables
-    use ppiclf_data, only: ppiclf_cr_hndl, ppiclf_comm, ppiclf_comm_nid, ppiclf_nid, ppiclf_np
+    use ppiclf_data, only: ppiclf_cr_hndl, ppiclf_comm, ppiclf_comm_nid, ppiclf_nid, ppiclf_np, ppiclf_glnpart
     ! binning variables
-    use ppiclf_data, only: ppiclf_n_bins, ppiclf_bin_pos, ppiclf_bins_dx, ppiclf_binb, ppiclf_previousbinb
+    use ppiclf_data, only: ppiclf_n_bins, PPICLF_N_BINS,PPICLF_TOTALBINS, PPICLF_IMEDSLICE, PPICLF_ILARSLICE
+    use ppiclf_data, only: PPICLF_BINS_DX, PPICLF_BINB, PPICLF_BIN_POS,PPICLF_PREVIOUSBINB, PPICLF_BINDOMLEN, PPICLF_RMEDSLICE
+
     ! ghost particle variables
     use ppiclf_data, only: ppiclf_npart_gp, ppiclf_particlemoved
     ! AngularPeriodic variables (?)(SEE NOTE IN ppiclf_data)
@@ -291,7 +293,7 @@ module ppiclf_m_comm
 
         ! Find ppiclf bin domain lengths
         DO i = 1,3
-            binb_length(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
+            ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
         END DO
 
         !*** Start active bin iteration loop here      
@@ -303,7 +305,7 @@ module ppiclf_m_comm
         binNegBound = 1
         binIterations = binPosBound + binNegBound 
         DO i = 1,3
-            MaxPotentialBins(i) = FLOOR(binb_length(i)/BinMinLen(i))
+            MaxPotentialBins(i) = FLOOR(ppiclf_BinDomLen(i)/BinMinLen(i))
             IF(MaxPotentialBins(i) .LT. 1) THEN
                 CALL ppiclf_exittr('BinMinLen() criteria violated.',0.0D0,i)
             END IF
@@ -1201,12 +1203,12 @@ module ppiclf_m_comm
       tstart = MPI_WTIME()
 #endif
 
-        CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl  & 
-            ,ppiclf_npart_gp,PPICLF_LPART_GP                & ! Setup
-            ,ppiclf_iprop_gp,PPICLF_LIP_GP                  & ! Integer Comm
-            ,partl,0                                        & ! Logical Comm
-            ,ppiclf_rprop_gp,PPICLF_LRP_GP                  & ! Real Comm
-            ,iprop_proc_index)                                ! Receiver processor index
+        ! CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl  & 
+        !     ,ppiclf_npart_gp,PPICLF_LPART_GP                & ! Setup
+        !     ,ppiclf_iprop_gp,PPICLF_LIP_GP                  & ! Integer Comm
+        !     ,partl,0                                        & ! Logical Comm
+        !     ,ppiclf_rprop_gp,PPICLF_LRP_GP                  & ! Real Comm
+        !     ,iprop_proc_index)                                ! Receiver processor index
 
 #ifdef PERF
         tfinal = MPI_WTIME()
@@ -1252,8 +1254,8 @@ module ppiclf_m_comm
                 ! Finding min/max particle extremes.
                 ! Add buffer so that layers of outer cells 
                 ! are available for interpolation/projection.
-                temp1 = ppiclf_y(j,i) - BinBuffer(j)
-                temp2 = ppiclf_y(j,i) + BinBuffer(j)
+                temp1 = @{USEPARTICLE(ppiclf_parts(i)%y%pos, skipIndex)}@(j) - BinBuffer(j)
+                temp2 = @{USEPARTICLE(ppiclf_parts(i)%y%pos, skipIndex)}@(j) + BinBuffer(j)
                 IF(temp1 .LT. local_extremes(2*j-1)) local_extremes(2*j-1) = temp1
                 IF(temp2 .GT. local_extremes(2*j))   local_extremes(2*j) = temp2
             END DO
@@ -1321,10 +1323,10 @@ module ppiclf_m_comm
 
             ! Maps particle to correct processor based on active bin number
             !ppiclf_iprop(4,i) = nrank ! Processor to send to
-            ppiclf_iprop(5,i) = ii    ! x bin #
-            ppiclf_iprop(6,i) = jj    ! y bin #
-            ppiclf_iprop(7,i) = kk    ! z bin #
-            ppiclf_iprop(8,i) = nbin ! total bin number
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(5) = ii    ! x bin #
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(6) = jj    ! y bin #
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(7) = kk    ! z bin #
+            @{USEPARTICLE(ppiclf_parts(i)%iprop)}@(8) = nbin ! total bin number
             ParticleCount(nbin) = ParticleCount(nbin) + 1
         END DO
 

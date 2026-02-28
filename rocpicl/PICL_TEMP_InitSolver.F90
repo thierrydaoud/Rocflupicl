@@ -141,25 +141,6 @@ INTEGER :: errorFlag,icg
 
    INTEGER :: seed(33), isize, CellVertices
 
-<<<<<<< HEAD
-=======
-   INTEGER :: stationary, qs_flag, am_flag, pg_flag, &
-        collisional_flag, heattransfer_flag, feedback_flag, &
-        qs_fluct_flag, ppiclf_debug, rmu_flag, &
-        rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
-        qs_fluct_filter_adapt_flag, &
-        ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
-        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
-
-   REAL(RFREAL) :: rmu_ref, tref, suth, ksp, erest
-   COMMON /RFLU_ppiclF/ stationary, qs_flag, am_flag, pg_flag, &
-        collisional_flag, heattransfer_flag, feedback_flag, &
-        qs_fluct_flag, ppiclf_debug, rmu_flag, rmu_ref, tref, suth, &
-        rmu_fixed_param, rmu_suth_param, qs_fluct_filter_flag, &
-        qs_fluct_filter_adapt_flag, ksp, erest, &
-        ViscousUnsteady_flag, ppiclf_nUnsteadyData,ppiclf_nTimeBH, &
-        sbNearest_flag, burnrate_flag, flow_model, pseudoTurb_flag
->>>>>>> AveryVersion
   
    REAL(RFREAL) :: ppiclf_rcp_part
    CHARACTER(12) :: ppiclf_matname
@@ -589,11 +570,7 @@ DO i = 1, nCells
   END IF
 END DO
 ! Find cell lengths
-<<<<<<< HEAD
-Max_Celllen = 0.0d0
-=======
 Max_CellLen  = 0.0D0
->>>>>>> AveryVersion
 DO i = 1,nCells
   IF(pGrid%cellGlob2Loc(1,i) == 1) THEN
     ! Tetrahedral Cell
@@ -611,10 +588,6 @@ DO i = 1,nCells
     MaxPoint(l) = -1.0D10 
     MinPoint(l) =  1.0D10 
     CellLen(l)   =  0.0D0   
-<<<<<<< HEAD
-
-=======
->>>>>>> AveryVersion
   END DO !l
   ! Add all x,y,z cell corners for centroid and find extremes
   DO k = 1,CellVertices

@@ -10,10 +10,10 @@ cd libpicl
 rm -f ppiclF/source/ppiclf.f
 rm -f ppiclF/source/PPICLF_USER.h
 rm -f ppiclF/source/PPICLF_USER_COMMON.h
-cd ppiclF/source
-ln -s ../../user_files/PPICLF_USER.h .
-ln -s ../../user_files/PPICLF_USER_COMMON.h .
-cd ../../
+# cd ppiclF/source
+# ln -s ../../user_files/PPICLF_USER.h .
+# ln -s ../../user_files/PPICLF_USER_COMMON.h .
+# cd ../../
 make clean
 make
 cd .. 
@@ -23,9 +23,9 @@ rm -f build_lib/*.f90
 rm -f build_lib/*.d
 rm -f build_lib/*.o
 
-rm build_util/*/*.f90
-rm build_util/*/*.d
-rm build_util/*/*.o
+rm -f build_util/*/*.f90
+rm -f build_util/*/*.d
+rm -f build_util/*/*.o
 
 make RFLU=1 PICL=1 SPEC=1 FOLDER=1 -j16
 ls --color=auto
