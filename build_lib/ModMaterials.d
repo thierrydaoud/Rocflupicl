@@ -1,3 +1,0 @@
-ModMaterials.o: \
- ModDataTypes.o \
-

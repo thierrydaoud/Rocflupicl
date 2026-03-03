@@ -1,4 +1,4 @@
-FC               = mpif77 # Valid MPI Fortran compiler
+FC               = mpifort # Valid MPI Fortran compiler
 CC               = mpicc  # Valid MPI C compiler
 FFLAGS          += -cpp -w -O3 -std=legacy -g -fmax-errors=1#-fallow-argument-mismatch -fcheck=all
 CPFLAGS         += -E
@@ -9,6 +9,8 @@ endif
 ifeq ($(PERF),1)
     FFLAGS += -DPERF
 endif
+
+PREPROCDEFINES+=-DNDIM=3
  	           
 INSTALL_LOCATION = .
 
@@ -19,67 +21,175 @@ INSTALL_LOCATION = .
 # PPICLF LIBRARY
 SOURCE_ROOT_PPICLF=$(INSTALL_LOCATION)/ppiclF/source
 SOURCE_ROOT_USER=$(INSTALL_LOCATION)/user_files
-PPICLF_IFLAGS+=-I$(SOURCE_ROOT_PPICLF)
+BUILD_ROOT_PPICLF=$(INSTALL_LOCATION)/ppiclF/build
+BUILD_ROOT_USER=$(BUILD_ROOT_PPICLF)/user
+PPICLF_IFLAGS+=-I$(SOURCE_ROOT_PPICLF)/include -I$(SOURCE_ROOT_USER) -I$(SOURCE_ROOT_USER)/include 
+PPICLF_FFLAGS+=$(PPICLF_IFLAGS) -cpp -Wall -ffree-line-length-none -Wno-missing-include-dirs -fmax-errors=20
+PPICLF_USER_FFLAGS:=$(PPICLF_FFLAGS) -J$(BUILD_ROOT_USER) -I$(BUILD_ROOT_PPICLF)
+PPICLF_FFLAGS+=-J$(BUILD_ROOT_PPICLF)
 
 # GSLIB LIBRARY
 SOURCE_ROOT_GSLIB=$(INSTALL_LOCATION)/ppiclF/3rd_party/gslib
 SOURCE_ROOT_GSLIB_OBJ=$(SOURCE_ROOT_GSLIB)/gslib/src
 GSLIB_IFLAGS+=-I$(SOURCE_ROOT_GSLIB)/include
 
-SRC = $(SOURCE_ROOT_USER)/ppiclf_user.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_subbinMap.f       \
-      $(SOURCE_ROOT_USER)/ppiclf_user_unitproblems.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_QuasiSteady.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_Fluctuations.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_AddedMass.f     \
-      $(SOURCE_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.f   \
-      $(SOURCE_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_subroutines.f   \
-      $(SOURCE_ROOT_USER)/ppiclf_user_HeatTransfer.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_Torque.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_Lift.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_ViscousUnsteady.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_InitZero.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_debug.f     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_BurnRateModel.f   \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_comm.f     \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_op.f       \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_io.f       \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_solve.f    \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_mxm.f      
-OBJ = $(SOURCE_ROOT_USER)/ppiclf_user.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_subbinMap.o       \
-      $(SOURCE_ROOT_USER)/ppiclf_user_unitproblems.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_QuasiSteady.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_Fluctuations.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_AddedMass.o     \
-      $(SOURCE_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.o   \
-      $(SOURCE_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_subroutines.o   \
-      $(SOURCE_ROOT_USER)/ppiclf_user_HeatTransfer.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_Torque.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_Lift.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_ViscousUnsteady.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_InitZero.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_debug.o     \
-      $(SOURCE_ROOT_USER)/ppiclf_user_BurnRateModel.o   \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_comm.o     \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_op.o       \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_io.o       \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_solve.o    \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_mxm.o
-PRE = $(SOURCE_ROOT_PPICLF)/PPICLF_SOLN.h        \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_GRID.h        \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h         \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_PARALLEL.h    \
+SRCUSR =    $(SOURCE_ROOT_USER)/ppiclf_user_MapProjPart.f90    \
+			$(SOURCE_ROOT_USER)/ppiclf_m_user_data.f90 \
+			$(SOURCE_ROOT_USER)/ppiclf_m_user_RFLUdata.f90 \
+			$(SOURCE_ROOT_USER)/ppiclf_user_SetYdot.fpp		\
+            $(SOURCE_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.fpp     \
+            $(SOURCE_ROOT_USER)/ppiclf_user_InitZero.fpp     \
+			$(SOURCE_ROOT_USER)/ppiclf_user_NearestNeighbor.f90 \
+     		$(SOURCE_ROOT_USER)/ppiclf_user_subbinMap.fpp       \
+			$(SOURCE_ROOT_USER)/ppiclf_m_user_ForceModels.fpp \
+            $(SOURCE_ROOT_USER)/ppiclf_user_BurnRateModel.fpp   \
+            $(SOURCE_ROOT_USER)/ppiclf_user_Lift.fpp     \
+            $(SOURCE_ROOT_USER)/ppiclf_user_Torque.fpp     \
+            $(SOURCE_ROOT_USER)/ppiclf_user_HeatTransfer.fpp     \
+            $(SOURCE_ROOT_USER)/ppiclf_user_Fluctuations.fpp     \
+            $(SOURCE_ROOT_USER)/ppiclf_user_QuasiSteady.fpp     \
+            $(SOURCE_ROOT_USER)/ppiclf_user_ViscousUnsteady.fpp     \
+            $(SOURCE_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.fpp   \
+            $(SOURCE_ROOT_USER)/ppiclf_user_AddedMass.fpp     \
+			
+UNUSED=     $(SOURCE_ROOT_USER)/ppiclf_user_unitproblems.fpp     \
+            $(SOURCE_ROOT_USER)/ppiclf_user_debug.fpp     \
+
+SRC =       $(SOURCE_ROOT_PPICLF)/ppiclf_data.fpp \
+            $(SOURCE_ROOT_PPICLF)/ppiclf_op.fpp       \
+            $(SOURCE_ROOT_PPICLF)/ppiclf_m_comm.fpp     \
+            $(SOURCE_ROOT_PPICLF)/ppiclf_io.fpp       \
+			$(SOURCE_ROOT_PPICLF)/ppiclf_initsolve.fpp       \
+            $(SOURCE_ROOT_PPICLF)/ppiclf_solve.fpp    \
+			$(SOURCE_ROOT_PPICLF)/ppiclf_user.fpp	\
+            $(SOURCE_ROOT_PPICLF)/ppiclf_mxm.fpp	\
+			$(SOURCE_ROOT_PPICLF)/ppiclf_m_types.fpp	\
+			$(SOURCE_ROOT_PPICLF)/ppiclf_m_particledata.fpp	
+
+OBJ = 	$(patsubst $(SOURCE_ROOT_PPICLF)/%.fpp,$(BUILD_ROOT_PPICLF)/%.o,$(SRC))
+OBJUSR =  	$(patsubst $(SOURCE_ROOT_USER)/%,$(BUILD_ROOT_USER)/%,$(patsubst %.f90,%.o,$(patsubst %.fpp,%.o,$(SRCUSR))))
+
+PRE = $(SOURCE_ROOT_PPICLF)/PPICLF_SOLN.h     \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GRID.h     \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h      \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_PARALLEL.h \
       $(SOURCE_ROOT_PPICLF)/PPICLF_USER_COMMON.h \
       $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h        \
       $(SOURCE_ROOT_PPICLF)/PPICLF_PERFORMANCE.h
 POS = $(SOURCE_ROOT_PPICLF)/PPICLF
-      
 
-# Make commands
-default: makeThird preProcess getObjs libObjs 
+
+default: libppicl
+test: $(BUILD_ROOT_PPICLF)/ppiclf_m_particledata.f90
+# default: $(BUILD_ROOT_USER)/ppiclf_user_imp.o
+
+libppicl: $(BUILD_ROOT_PPICLF)/libppiclF.a
+
+libppiclcore: $(BUILD_ROOT_PPICLF)/libppiclcore.a
+
+# core library build rule
+$(BUILD_ROOT_PPICLF)/libppiclcore.a: $(OBJ) makeThird
+	ar crv $(BUILD_ROOT_PPICLF)/libppiclcore.a $(OBJ) $(SOURCE_ROOT_GSLIB_OBJ)/*.o
+
+$(BUILD_ROOT_PPICLF)/testfile.f90: $(SOURCE_ROOT_PPICLF)/include/PPICLF_PARTMACROS.fypp
+
+# module dependencies
+$(BUILD_ROOT_PPICLF)/ppiclf_m_comm.o: $(BUILD_ROOT_PPICLF)/ppiclf_data.o
+$(BUILD_ROOT_PPICLF)/ppiclf_m_comm.o: $(BUILD_ROOT_PPICLF)/ppiclf_io.o
+$(BUILD_ROOT_PPICLF)/ppiclf_m_comm.o: $(BUILD_ROOT_PPICLF)/ppiclf_op.o
+$(BUILD_ROOT_PPICLF)/ppiclf_m_comm.o: $(BUILD_ROOT_PPICLF)/ppiclf_user.o
+
+
+
+$(BUILD_ROOT_PPICLF)/ppiclf_op.o: $(BUILD_ROOT_PPICLF)/ppiclf_data.o
+
+$(BUILD_ROOT_PPICLF)/ppiclf_io.o: $(BUILD_ROOT_PPICLF)/ppiclf_data.o
+$(BUILD_ROOT_PPICLF)/ppiclf_io.o: $(BUILD_ROOT_PPICLF)/ppiclf_op.o
+$(BUILD_ROOT_PPICLF)/ppiclf_io.o: $(BUILD_ROOT_PPICLF)/ppiclf_initsolve.o
+
+$(BUILD_ROOT_PPICLF)/ppiclf_solve.o: $(BUILD_ROOT_PPICLF)/ppiclf_user.o
+$(BUILD_ROOT_PPICLF)/ppiclf_solve.o: $(BUILD_ROOT_PPICLF)/ppiclf_data.o
+$(BUILD_ROOT_PPICLF)/ppiclf_solve.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_comm.o
+$(BUILD_ROOT_PPICLF)/ppiclf_solve.o: $(BUILD_ROOT_PPICLF)/ppiclf_op.o
+
+$(BUILD_ROOT_PPICLF)/ppiclf_initsolve.o: $(BUILD_ROOT_PPICLF)/ppiclf_user.o
+$(BUILD_ROOT_PPICLF)/ppiclf_initsolve.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_particledata.o
+
+$(BUILD_ROOT_PPICLF)/ppiclf_m_particledata.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_types.o
+
+$(BUILD_ROOT_PPICLF)/ppiclf_user.o: $(BUILD_ROOT_PPICLF)/ppiclf_m_types.o
+
+# user file dependencies 
+$(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_m_user_ForceModels.o
+$(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_user_subbinMap.o
+$(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_SetYdot.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.o: $(BUILD_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.o
+$(BUILD_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_EvalNearestNeighbor.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_Torque.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_Torque.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_Lift.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_Lift.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_HeatTransfer.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_HeatTransfer.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_Fluctuations.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_Fluctuations.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_ViscousUnsteady.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_ViscousUnsteady.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_AddedMass.o: $(BUILD_ROOT_USER)/ppiclf_m_user_RFLUdata.o
+$(BUILD_ROOT_USER)/ppiclf_user_AddedMass.o: $(BUILD_ROOT_USER)/ppiclf_m_user_data.o
+
+$(BUILD_ROOT_USER)/ppiclf_user_AddedMass.o: $(BUILD_ROOT_USER)/Added_Mass/ppiclf_user_AddedMass_functions.o
+
+
+$(BUILD_ROOT_PPICLF)/%.f90 : $(SOURCE_ROOT_PPICLF)/%.fpp
+	@mkdir -vp $(BUILD_ROOT_PPICLF)
+	@fypp -I $(SOURCE_ROOT_USER) -I $(SOURCE_ROOT_PPICLF)/include $< $@ -m fyppmacros -M $(INSTALL_LOCATION)/ppiclF/tools/ ${PREPROCDEFINES} -n
+
+$(BUILD_ROOT_PPICLF)/%.o : $(BUILD_ROOT_PPICLF)/%.f90
+	@mkdir -vp $(BUILD_ROOT_PPICLF)
+	@$(FC) $< -E -o $(BUILD_ROOT_PPICLF)/$*.i $(PPICLF_FFLAGS)
+	@$(FC) $< -c -o $@ $(PPICLF_FFLAGS)
+# mpifort source/ppiclf_data.f90 -cpp -o ppiclf_data.o -Isource/include -I../user_files -ffree-line-length-none
+
+
+
+
+
+# full library build rule, adds the user files to the core archive generated above
+# this separation allows for the core library to be build without the user files (except the .h file)
+$(BUILD_ROOT_PPICLF)/libppiclF.a: $(BUILD_ROOT_PPICLF)/libppiclcore.a $(OBJUSR)
+	cp $(BUILD_ROOT_PPICLF)/libppiclcore.a $(BUILD_ROOT_PPICLF)/libppiclF.a
+	ar rv $(BUILD_ROOT_PPICLF)/libppiclF.a $(OBJUSR)
+
+$(BUILD_ROOT_USER)/%.o : $(SOURCE_ROOT_USER)/%.f90
+	mkdir -vp $(BUILD_ROOT_USER)
+	$(FC) $< -c -o $@ $(PPICLF_USER_FFLAGS)
+
+$(BUILD_ROOT_USER)/%.f90 : $(SOURCE_ROOT_USER)/%.fpp
+	@mkdir -vp $(BUILD_ROOT_USER)
+	@fypp -I $(SOURCE_ROOT_USER) -I $(SOURCE_ROOT_PPICLF)/include $< $@ -m fyppmacros -M $(INSTALL_LOCATION)/ppiclF/tools/ ${PREPROCDEFINES} -n
+
+$(BUILD_ROOT_PPICLF)/%.o : $(BUILD_ROOT_USER)/%.f90
+	@mkdir -vp $(BUILD_ROOT_USER)
+	@$(FC) $< -E -o $(BUILD_ROOT_USER)/$*.i $(PPICLF_FFLAGS)
+	@$(FC) $< -c -o $@ $(PPICLF_FFLAGS)
+
+
+
+
+
+
+# Old Make commands
+defaultold: makeThird preProcess getObjs libObjs 
 
 libObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.o
 	@ar crv $(SOURCE_ROOT_PPICLF)/libppiclF.a $(SOURCE_ROOT_PPICLF)/ppiclf.o $(SOURCE_ROOT_GSLIB_OBJ)/*.o
@@ -121,20 +231,23 @@ makeThird: $(SOURCE_ROOT_GSLIB)/install
 	@echo "***********************"
 	@echo "                       "
 
-clean:
-	 rm -r $(SOURCE_ROOT_PPICLF)/*.o                        
-	 rm -r $(SOURCE_ROOT_PPICLF)/ppiclf.f
-	 rm -r $(SOURCE_ROOT_PPICLF)/PPICLF
-	 rm -r $(SOURCE_ROOT_PPICLF)/libppiclF.a                
-	 rm -r $(SOURCE_ROOT_PPICLF)/PPICLF_tmp/*                
-	 rm -r $(SOURCE_ROOT_GSLIB)/gslib                       
-	 rm -r $(SOURCE_ROOT_GSLIB)/lib                         
-	 rm -r $(SOURCE_ROOT_GSLIB)/include                     
-	 rm -r $(SOURCE_ROOT_GSLIB)/*.tar.gz                    
-	 rm -r $(INSTALL_LOCATION)/short_tests/*.pyc            
-	 rm -r $(INSTALL_LOCATION)/short_tests/lib/*.pyc        
-	 rm -r $(INSTALL_LOCATION)/short_tests/test1/test1.log*
-	 rm -r $(INSTALL_LOCATION)/short_tests/test1/*.vtu
-	 cd $(INSTALL_LOCATION)/short_tests/test1/; \
+clean:             
+	@rm -rf $(SOURCE_ROOT_GSLIB)/gslib                       
+	@rm -rf $(SOURCE_ROOT_GSLIB)/lib                         
+	@rm -rf $(SOURCE_ROOT_GSLIB)/include                     
+	@rm -rf $(SOURCE_ROOT_GSLIB)/*.tar.gz                    
+	@rm -rf $(INSTALL_LOCATION)/short_tests/*.pyc            
+	@rm -rf $(INSTALL_LOCATION)/short_tests/lib/*.pyc        
+	@rm -rf $(INSTALL_LOCATION)/short_tests/test1/test1.log*
+	@rm -rf $(INSTALL_LOCATION)/short_tests/test1/*.vtu
+	@rm -rf $(BUILD_ROOT_PPICLF)
+	@mkdir $(BUILD_ROOT_PPICLF)
+	@mkdir $(BUILD_ROOT_USER)
+	@mkdir $(BUILD_ROOT_USER)/Added_Mass
+	@cd $(INSTALL_LOCATION)/ppiclF/short_tests/test1/; \
 	make clean
 
+
+.SECONDARY: $(patsubst $(SOURCE_ROOT_PPICLF)/%.fpp,$(BUILD_ROOT_PPICLF)/%.f90,$(SRC)) $(patsubst $(SOURCE_ROOT_USER)/%.fpp,$(BUILD_ROOT_USER)/%.f90,$(SRCUSR))
+
+FORCE:

@@ -96,14 +96,14 @@ USE RFLU_ModConvertCv, ONLY: RFLU_ConvertCvCons2Prim, &
 
  USE ModInterfaces, ONLY: RFLU_DecideWrite !BRAD added for picl
  
+ use ppiclf_solve, only: ppiclf_solve_GetProFld, ppiclf_solve_InterpFieldUser, ppiclf_solve_IntegrateParticle
 #endif
 
 
 
 #ifdef PICL
 !DEC$ NOFREEFORM
-#include "../libpicl/ppiclF/source/PPICLF_USER.h"
-#include "../libpicl/ppiclF/source/PPICLF_STD.h"
+#include "PPICLF_STD.h"
 !DEC$ FREEFORM
 #endif
 
@@ -976,7 +976,7 @@ IF(global%piclFeedbackFlag == 1) THEN
        JFYCell(i) = JFY(i) 
        JFZCell(i) = JFZ(i) 
        !JE correction
-       JFECell(i) = JFE(i)
+       JFECell(i) = JFE(i) 
        energydotg = JFECell(i) ! includs KE feedback already
 
        IF(IsNan(JFXCell(i)) .EQV. .TRUE.) THEN
@@ -1089,7 +1089,7 @@ IF(global%piclFeedbackFlag == 1) THEN
          endif ! piclPseudoTurbFlag
 
     END DO !nCells
- 
+       
        if(global%piclPseudoTurbFlag .eq. 1) then
 
          ALLOCATE(varInfoPicl(9),STAT=errorFlag)

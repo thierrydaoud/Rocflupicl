@@ -1,3 +1,0 @@
-FaceVector.o: \
- ModDataTypes.o \
-

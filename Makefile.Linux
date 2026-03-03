@@ -124,6 +124,8 @@ ifeq ($(findstring ufhpc,$(MACHINE)),ufhpc)
 #    CXXLINKFLAGS+=${PICLF} -I/home/rahul.koneru/codes/Rocflu-ppiclF/ppiclF_new/ppiclF/source
 #        CXXLINKFLAGS+= -I${PICLFSRC} #${PICLFSRC}/libppiclF.a -I${PICLFSRC}
 
+  
+    FPPFLAGS+= -DPICL -I$(PICLFSRC)/include -I$(PICLFSRC)/../../user_files/ -I$(PICLFSRC)/../build -I$(PICLFSRC)/../build/user
     #CXXLINKFLAGS+= ${PICLFSRC}/libppiclF.a -I${PICLFSRC}
     CMFLAGS+=-z muldefs #--allow-multiple-definition
     LDFLAGS+=-z muldefs #--allow-multiple-definition

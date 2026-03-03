@@ -1,0 +1,144 @@
+! Y, YDot Components
+
+! particle position
+@:ADDPROP(pos, vec_real, solution, ghost)
+
+
+! x velocity
+@:ADDPROP(vel, vec_real, solution, ghost)
+
+
+! angular velocity (?)
+@:ADDPROP(ang_vel, vec_real, solution, ghost)
+
+@:ADDPROP(t, real, solution, ghost)
+@:ADDPROP(metal, real, solution, ghost)
+@:ADDPROP(oxide, real, solution, ghost)
+
+
+
+! rprop: PPICLF_LRP
+! rho p
+@:ADDPROP(RHOp, real, prop, ghost)
+
+! rho f (rho fluid, interpolated ?)
+@:ADDPROP(RHOf, real, interp)
+
+! particle diameter(?)
+@:ADDPROP(Dp, real, prop, ghost)
+
+! particle volume
+@:ADDPROP(VOLp, real, prop, ghost)
+
+@:ADDPROP(PHIp, real, interp)
+
+! gas velocity vector
+@:ADDPROP(U, vec_real, interp)
+
+! speed of sound in gas
+@:ADDPROP(CS, real, interp)
+
+! gas pressure derivative
+@:ADDPROP(DPDX, vec_real, interp)
+
+
+! Du/Dt (?) Gas substantial derivative
+@:ADDPROP(SDR, vec_real, interp)
+! gas density time derivative
+@:ADDPROP(RHSR, real, interp)
+
+! gas density velocity vector
+@:ADDPROP(JPGC, vec_real, interp)
+
+! fluid temperature
+@:ADDPROP(JT, real, interp)
+
+! fluctuating QS force vector
+@:ADDPROP(FLUCTF, vec_real, prop)
+
+
+! relative acceleration
+@:ADDPROP(WDOT, vec_real, prop, ghost)
+
+
+! gas-phase vorticity (interpolated)
+@:ADDPROP(VOR, vec_real, interp)
+
+! initial particle diameter ?
+@:ADDPROP(IDp, real, prop)
+
+! total burn time
+@:ADDPROP(BRNT, real, prop)
+
+! pressure (?) (interpolated from fluid?)
+@:ADDPROP(Pf, real, interp)
+
+! grad of rho^g (fluid)
+@:ADDPROP(RHOG, vec_real, interp)
+
+
+! ?????? 
+@:ADDPROP(DPVDX, vec_real, interp)
+
+
+! DOmega/Dt (?)
+@:ADDPROP(SDO, vec_real, interp)
+
+@:ADDPROP(XIPAR, real, prop)
+@:ADDPROP(XIPERP, real, prop)
+@:ADDPROP(XIT, real, prop)
+
+
+
+! map: PPICLF_LRP_PRO
+!--- Particle Volume Fraction Feedback
+@:ADDPROP(P_JPHIP, proj)
+!--- x,y,z Forces Feedback
+! x feedback force
+@:ADDPROP(JFX, proj)
+! y feedback force
+@:ADDPROP(JFY, proj)
+! z feedback force
+@:ADDPROP(JFZ, proj)
+!---Energy Feedback
+@:ADDPROP(JE, proj)
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+@:ADDPROP(JPHIPD, proj)
+@:ADDPROP(JPHIPU, proj)
+@:ADDPROP(JPHIPV, proj)
+@:ADDPROP(JPHIPW, proj)
+@:ADDPROP(JPHIPT, proj)
+!--- Reynolds Subgrid Stress Tensor (RSG)
+@:ADDPROP(JRSG11, proj)
+@:ADDPROP(JRSG12, proj)
+@:ADDPROP(JRSG13, proj)
+@:ADDPROP(JRSG21, proj)
+@:ADDPROP(JRSG22, proj)
+@:ADDPROP(JRSG23, proj)
+@:ADDPROP(JRSG31, proj)
+@:ADDPROP(JRSG32, proj)
+@:ADDPROP(JRSG33, proj)
+!--- Pseudo Turbulent Kinetic Energy
+@:ADDPROP(JTSG1, proj)
+@:ADDPROP(JTSG2, proj)
+@:ADDPROP(JTSG3, proj)
+
+
+
+! dummy int props to make the iprop array line up with the old version, 
+! its unclear what each one is being used for. Giving them names as I see them used in code
+@:ADDPROP(partNumber, int, prop, ghost)
+@:ADDPROP(dummyint2, int, prop, ghost)
+@:ADDPROP(dummyint3, int, prop, ghost)
+@:ADDPROP(dummyint4, int, prop, ghost)
+@:ADDPROP(dummyint5, int, prop, ghost)
+@:ADDPROP(dummyint6, int, prop, ghost)
+@:ADDPROP(dummyint7, int, prop, ghost)
+@:ADDPROP(dummyint8, int, prop, ghost)
+@:ADDPROP(RemoveParticle, int, prop, ghost)
+@:ADDPROP(dummyint10, int, prop, ghost)
+@:ADDPROP(dummyint11, int, prop, ghost)
+
+
+
+! DONT PUT ANYTHING AFTER THIS LINE

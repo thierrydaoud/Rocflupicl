@@ -1,3 +1,0 @@
-ModBorder.o: \
- ModDataTypes.o \
-

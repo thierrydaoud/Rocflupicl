@@ -1,6 +1,30 @@
 # RocfluMP build files
-build_lib/
-build_util/*
+build_lib/*.f90
+build_lib/*.d
+build_lib/*.o
+build_lib/*.mod
+build_lib/*.a
+
+build_std/*.f90
+build_std/*.d
+build_std/*.o
+build_std/*.mod
+
+build_util/**/*.f90
+build_util/**/*.d
+build_util/**/*.o
+build_util/**/*.mod
+
+
+rfluclone
+rfluconv
+rfluextr
+rfluinit
+rflumap
+rflump
+rflupart
+rflupick
+rflupost
 
 # Vim swap files
 ## RocfluMP
@@ -9,11 +33,9 @@ build_util/*
 ## ppiclF
 libpicl/ppiclf/source/*.swp
 libpicl/user_files/*.swp
-libpicl/ppiclF/3rd_party/gslib/gslib/src/*.swp
-libpicl/ppiclF/source/PPICLF
-libpicl/ppiclF/source/ppiclf.f
-libpicl/ppiclF/source/ppiclf.o
-libpicl/ppiclF/source/libppiclF.a
+libpicl/ppiclF/3rd_party/gslib/*
+!libpicl/ppiclF/3rd_party/gslib/install
+libpicl/ppiclF/build/*
 
 
 ## ppiclf unit test output

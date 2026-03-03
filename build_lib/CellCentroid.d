@@ -1,3 +1,0 @@
-CellCentroid.o: \
- ModDataTypes.o \
-

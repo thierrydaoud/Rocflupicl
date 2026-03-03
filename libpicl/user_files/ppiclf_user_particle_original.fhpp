@@ -1,0 +1,158 @@
+! Y, YDot Components
+
+! particle position
+@:ADDPROP(pos, vec_real, solution, ghost)
+! x velocity
+@:ADDPROP(vel, vec_real, solution, ghost)
+! angular velocity (?)
+@:ADDPROP(ang_vel, vec_real, solution, ghost)
+
+
+@:ADDPROP(t, real, solution, ghost)
+@:ADDPROP(metal, real, solution, ghost)
+@:ADDPROP(oxide, real, solution, ghost)
+
+
+
+! rprop: PPICLF_LRP
+! rho p
+@:ADDPROP(RHOp, real, ghost, prop)
+
+! rho f (rho fluid, interpolated ?)
+@:ADDPROP(RHOf, real, ghost, prop)
+
+! particle diameter(?)
+@:ADDPROP(Dp, real, ghost, prop)
+
+@:ADDPROP(VOLp, real, ghost, prop)
+@:ADDPROP(PHIp, real, ghost, prop)
+
+! gas velocity vector
+@:ADDPROP(U, vec_real, prop, ghost)
+
+@:ADDPROP(CS, real, ghost, prop)
+
+! gas pressure derivative
+@:ADDPROP(DPDX, vec_real, prop, ghost)
+
+! Du/Dt (?) Gas substantial derivative
+@:ADDPROP(SDR, vec_real, prop, ghost)
+
+@:ADDPROP(RHSR, real, ghost, prop)
+
+! gas density velocity vector
+@:ADDPROP(PGC, vec_real, prop, ghost)
+
+@:ADDPROP(JDPi, real, ghost, prop)
+@:ADDPROP(JDPe, real, ghost, prop)
+@:ADDPROP(JSPL, real, ghost, prop)
+@:ADDPROP(JSPT, real, ghost, prop)
+
+@:ADDPROP(JT, real, ghost, prop)
+
+! fluctuating QS force vector
+@:ADDPROP(FLUCTF, vec_real, prop)
+
+! relative acceleration
+@:ADDPROP(WDOT, vec_real, prop, ghost)
+
+! gas-phase vorticity (interpolated)
+@:ADDPROP(VOR, vec_real, prop, ghost)
+
+! initial particle diameter ?
+@:ADDPROP(IDp, real, ghost, prop)
+
+! total burn time
+@:ADDPROP(BRNT, real, ghost, prop)
+
+! pressure (?) (interpolated from fluid?, prop)
+@:ADDPROP(Pf, real, ghost, prop)
+
+! grad of rho^g (fluid)
+@:ADDPROP(RHOG, vec_real, prop, ghost)
+
+! ?????? 
+@:ADDPROP(DPVDX, vec_real, prop, ghost)
+
+! DOmega/Dt (?)
+@:ADDPROP(SDO, vec_real, prop, ghost)
+
+@:ADDPROP(XIPAR, real, ghost, prop)
+@:ADDPROP(XIPERP, real, ghost, prop)
+@:ADDPROP(XIT, real, ghost, prop)
+
+
+!:ADDPROP(FQSX, real, ghost, prop)
+!:ADDPROP(FQSY, real, ghost, prop)
+!:ADDPROP(FQSZ, real, ghost, prop)
+!:ADDPROP(FAMX, real, ghost, prop)
+!:ADDPROP(FAMY, real, ghost, prop)
+!:ADDPROP(FAMZ, real, ghost, prop)
+!:ADDPROP(FAMBX, real, ghost, prop)
+!:ADDPROP(FAMBY, real, ghost, prop)
+!:ADDPROP(FAMBZ, real, ghost, prop)
+!:ADDPROP(FCX, real, ghost, prop)
+!:ADDPROP(FCY, real, ghost, prop)
+!:ADDPROP(FCZ, real, ghost, prop)
+!:ADDPROP(FVUX, real, ghost, prop)
+!:ADDPROP(FVUY, real, ghost, prop)
+!:ADDPROP(FVUZ, real, ghost, prop)
+!:ADDPROP(QQ, real, ghost, prop)
+!:ADDPROP(FPGX, real, ghost, prop) 
+!:ADDPROP(FPGY, real, ghost, prop) 
+!:ADDPROP(FPGZ, real, ghost, prop) 
+
+
+
+! map: PPICLF_LRP_PRO
+!--- Particle Volume Fraction Feedback
+@:ADDPROP(P_JPHIP, proj)
+!--- x,y,z Forces Feedback
+! x feedback force
+@:ADDPROP(JFX, proj)
+! y feedback force
+@:ADDPROP(JFY, proj)
+! z feedback force
+@:ADDPROP(JFZ, proj)
+!---Energy Feedback
+@:ADDPROP(JE, proj)
+!--- More VF quanities. ***NEED TO CONFIRM THEY ARE USED ***
+@:ADDPROP(JPHIPD, proj)
+@:ADDPROP(JPHIPU, proj)
+@:ADDPROP(JPHIPV, proj)
+@:ADDPROP(JPHIPW, proj)
+@:ADDPROP(JPHIPT, proj)
+!--- Reynolds Subgrid Stress Tensor (RSG)
+@:ADDPROP(JRSG11, proj)
+@:ADDPROP(JRSG12, proj)
+@:ADDPROP(JRSG13, proj)
+@:ADDPROP(JRSG21, proj)
+@:ADDPROP(JRSG22, proj)
+@:ADDPROP(JRSG23, proj)
+@:ADDPROP(JRSG31, proj)
+@:ADDPROP(JRSG32, proj)
+@:ADDPROP(JRSG33, proj)
+!--- Pseudo Turbulent Kinetic Energy
+@:ADDPROP(JTSG1, proj)
+@:ADDPROP(JTSG2, proj)
+@:ADDPROP(JTSG3, proj)
+
+
+
+! dummy int props to make the iprop array line up with the old version, 
+! its unclear what each one is being used for. Giving them names as I see them used in code
+@:ADDPROP(partNumber, int, prop, ghost)
+@:ADDPROP(dummyint2, int, prop, ghost)
+@:ADDPROP(dummyint3, int, prop, ghost)
+@:ADDPROP(dummyint4, int, prop, ghost)
+@:ADDPROP(dummyint5, int, prop, ghost)
+@:ADDPROP(dummyint6, int, prop, ghost)
+@:ADDPROP(dummyint7, int, prop, ghost)
+@:ADDPROP(RemoveParticle, int, prop, ghost)
+@:ADDPROP(dummyint9, int, prop, ghost)
+@:ADDPROP(dummyint10, int, prop, ghost)
+@:ADDPROP(dummyint11, int, prop, ghost)
+
+
+
+! DONT PUT ANYTHING AFTER THIS LINE

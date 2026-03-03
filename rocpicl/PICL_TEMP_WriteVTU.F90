@@ -86,15 +86,14 @@ USE RFLU_ModConvertCv, ONLY: RFLU_ConvertCvCons2Prim, &
                                RFLU_ConvertCvPrim2Cons
 
  USE ModInterfaces, ONLY: RFLU_DecideWrite !BRAD added for picl
- 
+ use ppiclf_solve, only: ppiclf_solve_WriteVTU
 #endif
 
 
 
 #ifdef PICL
 !DEC$ NOFREEFORM
-#include "../libpicl/ppiclF/source/PPICLF_USER.h"
-#include "../libpicl/ppiclF/source/PPICLF_STD.h"
+#include "PPICLF_STD.h"
 !DEC$ FREEFORM
 #endif
 

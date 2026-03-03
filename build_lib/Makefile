@@ -22,7 +22,7 @@ include ../Makefile.common
 include ../Makefile.$(SYSTEM)
 
 ifdef PICL
-LIBINT+=${PICLFSRC}/libppiclF.a
+LIBINT+=${PICLFSRC}/../build/libppiclF.a
 endif
 
 ### vpath definitions ##########################################################
@@ -50,6 +50,7 @@ endif
 ifdef PICL
   vpath PICL_Mod%.F90   ../rocpicl
   vpath PICL%.F90       ../rocpicl
+  vpath ppiclf_solve.o  ../libpicl/ppiclF/build
 endif
 
 ifdef RADI

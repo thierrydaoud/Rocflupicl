@@ -39,4 +39,4 @@ getObjs: $(SRC)
 
 # Cleaning stuff
 clean:
-	@rm $(ENAME) *.o
+	@rm -f $(ENAME) *.o
