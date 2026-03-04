@@ -1203,6 +1203,78 @@ c----------------------------------------------------------------------
       RETURN
       END
 !----------------------------------------------------------------------
+      SUBROUTINE ppiclf_solve_InitSolvePartLB
+!
+      IMPLICIT NONE
+!
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+! This is called during the initialization. It forms the first bin and
+! paritcle-cell mappings.
+! 
+! Internal: 
+! 
+      INTEGER*4 :: j
+      ! ppiclf_binchanged set in CreateBin
+      ! ppiclf_binchanged .TRUE. means
+      ! bin coordinates changed
+      CALL ppiclf_comm_CreateBinPartLB
+
+      ! ppiclf_particleMoved set in FindParticle
+      ! ppiclf_particleMoved .EQ. 0 means all particles
+      ! stayed in same bin as previous RK Stage.
+      CALL ppiclf_comm_FindParticlePartLB
+
+      IF(ppiclf_particleMoved .NE. 0 .OR.
+     >              ppiclf_binchanged) THEN
+        CALL ppiclf_comm_MoveParticlePartLB
+      END IF
+
+      IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
+        CALL ppiclf_comm_MapOverlapGridPartLB
+      END IF
+
+      ! Copies Grid Cell ID for all Rocflu elements that map
+      ! to ppiclf domain for GSLIB Transfer.  This copy is from
+      ! MapOverlapGrid.
+      CALL ppiclf_solve_InitInterp
+
+      ! Makes array (ppiclf_int_fld_input) of all rprop data
+      ! for grid cellss that map to ppiclf domain.
+      DO j=1,PPICLF_INT_ICNT
+         CALL ppiclf_solve_InterpField(j)
+      END DO
+      
+      ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
+      ! cells that map to ppiclf domain.
+      CALL ppiclf_solve_InterpTupleTransfer
+
+      PPICLF_PPInteractions = .FALSE.
+      !IF(PPICLF_PPInteractions) THEN
+      !  ! Ghost particles are needed 
+      !  CALL ppiclf_comm_CreateGhost
+      !  CALL ppiclf_comm_MoveGhost
+      !  ! Zero collisions 
+      !  ppiclf_ydotc = 0.0D0
+      !END IF
+
+      ! Maps up to 27 closest cell centers to particle
+      ! Includes: CellID, total dist, x dist, y dist, z dist
+      CALL ppiclf_solve_ParticleToCellMap
+
+      ! Interpolates rprop data for ppiclf domain cells in this bin
+      CALL ppiclf_solve_Interpolate
+      ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
+      PPICLF_INT_ICNT = 0
+
+      ! Project particle feedback to fluid solver grid
+      CALL ppiclf_solve_ProjectParticleGrid
+
+
+      RETURN
+      END
+
+!----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InitSolve
 !
       IMPLICIT NONE

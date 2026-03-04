@@ -1,4 +1,4 @@
-FC               = mpif77 # Valid MPI Fortran compiler
+FC               = mpif90 # Valid MPI Fortran compiler
 CC               = mpicc  # Valid MPI C compiler
 FFLAGS          += -cpp -w -O3 -std=legacy -g -fmax-errors=1#-fallow-argument-mismatch -fcheck=all
 CPFLAGS         += -E
@@ -26,6 +26,10 @@ SOURCE_ROOT_GSLIB=$(INSTALL_LOCATION)/ppiclF/3rd_party/gslib
 SOURCE_ROOT_GSLIB_OBJ=$(SOURCE_ROOT_GSLIB)/gslib/src
 GSLIB_IFLAGS+=-I$(SOURCE_ROOT_GSLIB)/include
 
+
+DYN_SRC = $(SOURCE_ROOT_PPICLF)/ppiclf_DynamicAllocation.F90
+DYN_OBJ = $(SOURCE_ROOT_PPICLF)/ppiclf_DynamicAllocation.o
+
 SRC = $(SOURCE_ROOT_USER)/ppiclf_user.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_subbinMap.f       \
       $(SOURCE_ROOT_USER)/ppiclf_user_unitproblems.f     \
@@ -43,6 +47,7 @@ SRC = $(SOURCE_ROOT_USER)/ppiclf_user.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_debug.f     \
       $(SOURCE_ROOT_USER)/ppiclf_user_BurnRateModel.f   \
       $(SOURCE_ROOT_PPICLF)/ppiclf_comm.f     \
+      $(SOURCE_ROOT_PPICLF)/ppiclf_PBloading.f     \
       $(SOURCE_ROOT_PPICLF)/ppiclf_op.f       \
       $(SOURCE_ROOT_PPICLF)/ppiclf_io.f       \
       $(SOURCE_ROOT_PPICLF)/ppiclf_solve.f    \
@@ -64,10 +69,11 @@ OBJ = $(SOURCE_ROOT_USER)/ppiclf_user.o     \
       $(SOURCE_ROOT_USER)/ppiclf_user_debug.o     \
       $(SOURCE_ROOT_USER)/ppiclf_user_BurnRateModel.o   \
       $(SOURCE_ROOT_PPICLF)/ppiclf_comm.o     \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_op.o       \
+      $(SOURCE_ROOT_PPICLF)/ppiclf_PBloading.o     \
+     $(SOURCE_ROOT_PPICLF)/ppiclf_op.o       \
       $(SOURCE_ROOT_PPICLF)/ppiclf_io.o       \
       $(SOURCE_ROOT_PPICLF)/ppiclf_solve.o    \
-      $(SOURCE_ROOT_PPICLF)/ppiclf_mxm.o
+      $(SOURCE_ROOT_PPICLF)/ppiclf_mxm.o      
 PRE = $(SOURCE_ROOT_PPICLF)/PPICLF_SOLN.h        \
       $(SOURCE_ROOT_PPICLF)/PPICLF_GRID.h        \
       $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h         \
@@ -79,17 +85,20 @@ POS = $(SOURCE_ROOT_PPICLF)/PPICLF
       
 
 # Make commands
-default: makeThird preProcess getObjs libObjs 
+default: makeThird preProcess $(DYN_OBJ) getObjs libObjs 
 
-libObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.o
-	@ar crv $(SOURCE_ROOT_PPICLF)/libppiclF.a $(SOURCE_ROOT_PPICLF)/ppiclf.o $(SOURCE_ROOT_GSLIB_OBJ)/*.o
+$(DYN_OBJ): $(DYN_SRC)
+	$(FC) -c $(DYN_SRC) -J$(SOURCE_ROOT_PPICLF) -o $(DYN_OBJ) 
+
+libObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.o $(DYN_OBJ)
+	@ar crv $(SOURCE_ROOT_PPICLF)/libppiclF.a $(DYN_OBJ) $(SOURCE_ROOT_PPICLF)/ppiclf.o $(SOURCE_ROOT_GSLIB_OBJ)/*.o
 	@echo "                       "
 	@echo "***********************"
 	@echo "*** LIBRARY SUCCESS ***"
 	@echo "***********************"
 	@echo "                       "
 
-getObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.f
+getObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.f $(DYN_OBJ)
 	$(FC) $(FFLAGS) -c $(SOURCE_ROOT_PPICLF)/ppiclf.f $(GSLIB_IFLAGS) 
 	mv *.o $(SOURCE_ROOT_PPICLF)
 	@echo "                              "
@@ -122,10 +131,11 @@ makeThird: $(SOURCE_ROOT_GSLIB)/install
 	@echo "                       "
 
 clean:
+	 rm -r $(SOURCE_ROOT_PPICLF)/libppiclF.a                
 	 rm -r $(SOURCE_ROOT_PPICLF)/*.o                        
+	 rm -r $(SOURCE_ROOT_PPICLF)/ppiclf_DynamicAllocation.mod
 	 rm -r $(SOURCE_ROOT_PPICLF)/ppiclf.f
 	 rm -r $(SOURCE_ROOT_PPICLF)/PPICLF
-	 rm -r $(SOURCE_ROOT_PPICLF)/libppiclF.a                
 	 rm -r $(SOURCE_ROOT_PPICLF)/PPICLF_tmp/*                
 	 rm -r $(SOURCE_ROOT_GSLIB)/gslib                       
 	 rm -r $(SOURCE_ROOT_GSLIB)/lib                         
