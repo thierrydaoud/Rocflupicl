@@ -203,7 +203,6 @@
         IF((ppiclf_binb(2*i-1) + BinBuffer(i)) .LT.
      >                             ppiclf_previousbinb(2*i-1)) THEN
           BinCheck = 1
-          EXIT
         END IF
         IF((ppiclf_binb(2*i)   - BinBuffer(i)) .GT.
      >                             ppiclf_previousbinb(2*i)) THEN
@@ -211,8 +210,6 @@
           EXIT
         END IF
       END DO
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
-
       BinCheck = ppiclf_iglmax(BinCheck,1)
 
 #ifdef TEST
@@ -300,17 +297,17 @@
       ! area minimization and bin aspect ratio close to 1
       binsReal(1) = (targetTotBin**(1.0D0/3.0D0))*
      >              (ppiclf_BinDomLen(1)**(2.0D0/3.0D0))/ 
-     >              ((ppiclf_BinDomLen(2)**(1.0D0/3.0D0))*
+     >             ((ppiclf_BinDomLen(2)**(1.0D0/3.0D0))*
      >              (ppiclf_BinDomLen(3))**(1.0D0/3.0D0)) 
       
       binsReal(2) = (targetTotBin**(1.0D0/3.0D0))*
      >              (ppiclf_BinDomLen(2)**(2.0D0/3.0D0))/ 
-     >              ((ppiclf_BinDomLen(1)**(1.0D0/3.0D0))*
+     >             ((ppiclf_BinDomLen(1)**(1.0D0/3.0D0))*
      >              (ppiclf_BinDomLen(3))**(1.0D0/3.0D0)) 
      
       binsReal(3) = (targetTotBin**(1.0D0/3.0D0))*
      >              (ppiclf_BinDomLen(3)**(2.0D0/3.0D0))/ 
-     >              ((ppiclf_BinDomLen(2)**(1.0D0/3.0D0))*
+     >             ((ppiclf_BinDomLen(2)**(1.0D0/3.0D0))*
      >              (ppiclf_BinDomLen(1))**(1.0D0/3.0D0)) 
 
       ! The loop below ensures bins don't exceed number of
@@ -573,7 +570,7 @@
          ppiclf_iprop(8,i) = nrank ! total bin number
       END DO
       ppiclf_particleMoved = ppiclf_iglmax(partcheck,1)
-
+      CALL MPI_BARRIER(ppiclf_comm,ierr)
       RETURN
       END
 !-----------------------------------------------------------------------

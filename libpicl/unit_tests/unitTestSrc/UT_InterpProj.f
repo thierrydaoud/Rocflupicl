@@ -33,7 +33,7 @@
 
       LOGICAL   xFace(2), yFace(2), zFace(2), farAway, interpolation(8),
      >          projection(8), binGen, nnpart(8), interp_logical(8),
-     >          proj_logical(8), nn_logical(8), PartOnProc
+     >          proj_logical(8), nn_logical(8), PartOnProc, PPInteract
 
       ! Projection variables
       REAL*8    wProjTot, dSQl, dSQi, dist, CellVol, GaussianConst,
@@ -68,7 +68,6 @@
       END IF
 
       CALL UT_setup
-
       CALL ppiclf_comm_InitMPI(icomm, nid, nproc)
 
       DO test = 1,8
@@ -83,20 +82,23 @@
         ang_per_rin    = 0.0D0
         ang_per_rout   = 0.0D0  
 
-        CALL MPI_BARRIER(icomm,ierr)
  
 ! Start ppiclF Calls
 !**********************************************************************
         PPICLF_OVERLAP = .FALSE.
+        PPInteract = .TRUE.
         CALL ppiclf_solve_InitParticle(2,3,0,npart_local,
      >                                 p_part_y,p_part_r,filter,nndist)
-        CALL ppiclf_solve_Initialize(x_per_flag, x_per_min, x_per_max,
+        CALL MPI_BARRIER(icomm,ierr)
+        CALL ppiclf_solve_Initialize(PPInteract,
+     >                               x_per_flag, x_per_min, x_per_max,
      >                               y_per_flag, y_per_min, y_per_max, 
      >                               z_per_flag, z_per_min, z_per_max, 
      >                               ang_per_flag, ang_per_angle, 
      >                               ang_per_xangle, ang_per_rin,
      >                                                    ang_per_rout)
         CALL ppiclf_comm_InitOverlapGrid(proc_ncells,p_grid)
+        CALL MPI_BARRIER(icomm,ierr)
         ! Setup fluid temperature field for ppiclf input
         ! This is temperature for cells in processor's grid domain
         DO i = 1,proc_ncells
@@ -111,6 +113,7 @@
      >               COS(2*PI*z_norm)
         END DO
         CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JT,tpF)
+        CALL MPI_BARRIER(icomm,ierr)
         CALL ppiclf_solve_InitSolve
         CALL MPI_BARRIER(icomm,ierr)
         DO ie = 1,proc_ncells

@@ -396,6 +396,8 @@
          ppiclf_iprop(1,i) = i
          ppiclf_iprop(2,i) = ppiclf_nid
          ppiclf_iprop(3,i) = ppiclf_cycle
+         ! 9 is set to -1 when particle should be removed
+         ppiclf_iprop(9,i) = 0
       END DO
 
       RETURN
@@ -895,23 +897,18 @@ c----------------------------------------------------------------------
         PRINT*, 'ERROR: Wrong RK selected for rocpicl. Use RK3!'
         CALL ppiclf_exittr('Wrong RK for rocpicl',0.D0,0)
       END IF
-
 #ifdef PERF
       tsPeriodic = MPI_WTIME()
 #endif
-
       IF(ppiclf_linperiodic(1) .OR. ppiclf_linperiodic(2) .OR.
      >                             ppiclf_linperiodic(3)) THEN
         CALL ppiclf_solve_PeriodicParticleShift
       END IF
-
 #ifdef PERF
       tfPeriodic = MPI_WTIME()
       PPICLF_TPeriodicity = tfPeriodic - tsPeriodic
 #endif
-
       CALL ppiclf_solve_PostTimeStep
-
 #ifdef PERF
       tfinal = MPI_WTIME()
       PPICLF_TTotal = tfinal - tstart
@@ -1357,27 +1354,19 @@ c----------------------------------------------------------------------
 ! Internal: 
 ! 
       INTEGER*4 :: i, j
-
 #ifdef PERF
       REAL *8 tstart,tfinal     
-#endif
-!
-
-#ifdef PERF
       tstart = MPI_WTIME()
 #endif
-
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
       ! bin coordinates changed
       CALL ppiclf_comm_CreateBin
-
 #ifdef PERF
       tfinal = MPI_WTIME()
       PPICLF_TCreateBin = tfinal - tstart
       tstart = MPI_WTIME()
 #endif
-
       ! ppiclf_particleMoved set in FindParticle
       ! ppiclf_particleMoved .EQ. 0 means all particles
       ! stayed in same bin as previous RK Stage.
@@ -1386,73 +1375,55 @@ c----------------------------------------------------------------------
      >              ppiclf_binchanged) THEN
         CALL ppiclf_comm_MoveParticle
       END IF
-
 #ifdef PERF
       tfinal = MPI_WTIME()
       PPICLF_TSendParticles = tfinal - tstart
       PPICLF_TSendGridOverlap = 0.0D0
 #endif
-
       IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
-
 #ifdef PERF
-      tstart = MPI_WTIME()
+        tstart = MPI_WTIME()
 #endif
-
         CALL ppiclf_comm_MapOverlapGrid
-
 #ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TSendGridOverlap = tfinal - tstart
+        tfinal = MPI_WTIME()
+        PPICLF_TSendGridOverlap = tfinal - tstart
 #endif
-
       END IF
-
 #ifdef PERF
       PPICLF_TSendGhostParticles = 0.0D0
 #endif
-
       IF(PPICLF_PPInteractions) THEN
-
 #ifdef PERF
       tstart = MPI_WTIME()
 #endif
-
         ! Ghost particles are needed 
         CALL ppiclf_comm_CreateGhost
         CALL ppiclf_comm_MoveGhost
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
-
 #ifdef PERF
       tfinal = MPI_WTIME()
       PPICLF_TSendGhostParticles = tfinal-tstart
 #endif
-
       END IF
-
 #ifdef PERF
       tstart= MPI_WTIME()
 #endif
-
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
       CALL ppiclf_solve_SBParticleToCellMap
-
 #ifdef PERF
       tfinal = MPI_WTIME()
       PPICLF_TMapParticlesCells = tfinal - tstart
       tstart = MPI_WTIME()
 #endif
-
       ! Project particle feedback to fluid solver grid
       CALL ppiclf_solve_ProjectParticleGrid
-
 #ifdef PERF
       tfinal = MPI_WTIME()
       PPICLF_TProjection = tfinal - tstart
 #endif
-
       RETURN
       END
 
@@ -1841,29 +1812,30 @@ c----------------------------------------------------------------------
           END DO !jSB
         END DO !iSB
         nnearest = MIN(nnearest,27)
+        remove = .FALSE.
         IF(nnearest .LT. 1) remove = .TRUE.
 
-        ! Remove particle outside of any cell
-        IF(nnearest .LT. 27 .AND. nnearest .GE. 1) THEN
-         ie = CellID_nearest(1)
-         DO l = 1,3
-          ! similar distance check as above, but only for the cell that is
-          ! closest to the particle (1st index in nnearest)
-          ! used ABS since distance isn't squared.
-          ! ppiclf_interp_dchk is set to be 1.5xmax cell length per
-          ! dimension (in SUBROUTINE ppiclf_solve_InterpTupleTransfer)
-          IF(ppiclf_linperiodic(l) .AND.
-     >                            ppiclf_EqualDomain(l)) THEN
-            dl = ABS(MIN((ppiclf_picl_grid(l,ie) - xp(l)), 
-     >             (binblength(l)-ABS(ppiclf_picl_grid(l,ie)
-     >              - xp(l)))))
-          ELSE
-            dl = ABS(ppiclf_picl_grid(l,ie) - xp(l))
-          END IF
-          ! Ensure particle is within 1/2 cell distance of one cell.
-          IF(dl .GT. ppiclf_interp_dchk(l)/1.5D0*0.5D0) remove = .TRUE.
-         END DO
-        END IF
+!        ! Remove particle outside of any cell
+!        IF(nnearest .LT. 27 .AND. nnearest .GE. 1) THEN
+!         ie = CellID_nearest(1)
+!         DO l = 1,3
+!          ! similar distance check as above, but only for the cell that is
+!          ! closest to the particle (1st index in nnearest)
+!          ! used ABS since distance isn't squared.
+!          ! ppiclf_interp_dchk is set to be 1.5xmax cell length per
+!          ! dimension (in SUBROUTINE ppiclf_solve_InterpTupleTransfer)
+!          IF(ppiclf_linperiodic(l) .AND.
+!     >                            ppiclf_EqualDomain(l)) THEN
+!            dl = ABS(MIN((ppiclf_picl_grid(l,ie) - xp(l)), 
+!     >             (binblength(l)-ABS(ppiclf_picl_grid(l,ie)
+!     >              - xp(l)))))
+!          ELSE
+!            dl = ABS(ppiclf_picl_grid(l,ie) - xp(l))
+!          END IF
+!          ! Ensure particle is within 1/2 cell distance of one cell.
+!          IF(dl .GT. ppiclf_interp_dchk(l)/1.5D0*0.5D0) remove = .TRUE.
+!         END DO
+!        END IF
 
         IF (remove) THEN
           ! Particle is outside of fluid domain.

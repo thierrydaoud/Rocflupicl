@@ -83,7 +83,8 @@
         PPICLF_OVERLAP = .FALSE.
         CALL ppiclf_solve_InitParticle(2,3,0,npart_local,
      >                                 p_part_y,p_part_r,filter,nndist)
-        CALL ppiclf_solve_Initialize(x_per_flag, x_per_min, x_per_max,
+        CALL ppiclf_solve_Initialize(.TRUE.,
+     >                               x_per_flag, x_per_min, x_per_max,
      >                               y_per_flag, y_per_min, y_per_max, 
      >                               z_per_flag, z_per_min, z_per_max, 
      >                               ang_per_flag, ang_per_angle, 
