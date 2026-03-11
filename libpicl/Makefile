@@ -1,6 +1,6 @@
 FC               = mpif77 # Valid MPI Fortran compiler
 CC               = mpicc  # Valid MPI C compiler
-FFLAGS          += -cpp -w -O3 -std=legacy -g -fbacktrace -fallow-argument-mismatch -fcheck=all
+FFLAGS          += -cpp -w -O3 -std=legacy -g -fbacktrace -fallow-argument-mismatch -fcheck=all -fopenmp
 #FFLAGS          += -cpp -w -std=legacy -g #-fcheck=all
 CPFLAGS         += -E
 #FFLAGS          += -DPPICLC

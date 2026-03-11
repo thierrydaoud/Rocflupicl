@@ -41,6 +41,7 @@
       implicit none
 !
       include "PPICLF"
+      include 'omp_lib.h'
 !
 ! Internal:
 !      
@@ -110,6 +111,9 @@
       data      f_dump /1/
 
       logical exist_file
+
+! OpenMP Implementation
+      integer*4 tid, nthreads, nthreads_max
 !
 !-----------------------------------------------------------------------
 !   
@@ -294,6 +298,17 @@
 ! for the particles
 !
 
+!$omp parallel private(tid)
+      tid = omp_get_thread_num()
+      nthreads = omp_get_num_threads()
+      nthreads_max = omp_get_max_threads()
+
+!      if(tid .eq. 0) then
+!        print*, "Thread ", tid, " No. Threads ", nthreads, 
+!     >         " max threads ", nthreads_max
+!      endif
+
+!$omp do
       do i=1,ppiclf_npart
 
          ! Choose viscosity law
@@ -952,6 +967,8 @@
 
 
       enddo ! do i=1,ppiclf_npart
+!$omp end do
+!$omp end parallel
 
 !
 !-----------------------------------------------------------------------

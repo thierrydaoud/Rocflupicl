@@ -43,6 +43,7 @@
       implicit none
 !
       include "PPICLF"
+      include 'omp_lib.h'
 !
 ! Internal:
 !      
@@ -112,6 +113,9 @@
       data      f_dump /1/
 
       logical exist_file
+
+! OpenMP Implementation
+      integer*4 tid, nthreads, nthreads_max
 !
 !-----------------------------------------------------------------------
 !   
@@ -296,6 +300,17 @@
 ! for the particles
 !
 
+!$omp parallel private(tid)
+      tid = omp_get_thread_num()
+      nthreads = omp_get_num_threads()
+      nthreads_max = omp_get_max_threads()
+
+!      if(tid .eq. 0) then
+!        print*, "Thread ", tid, " No. Threads ", nthreads, 
+!     >         " max threads ", nthreads_max
+!      endif
+
+!$omp do
       do i=1,ppiclf_npart
 
          ! Choose viscosity law
@@ -954,6 +969,8 @@
 
 
       enddo ! do i=1,ppiclf_npart
+!$omp end do
+!$omp end parallel
 
 !
 !-----------------------------------------------------------------------
@@ -11363,6 +11380,7 @@ c1511 continue
       implicit none
 !
       include "PPICLF"
+      include "omp_lib.h"
 ! 
 ! Input:
 ! 
@@ -11389,6 +11407,7 @@ c1511 continue
 
       dist2 = ppiclf_d2chk(3)**2
 
+!$omp parallel do private(i, j)
       do j=1,ppiclf_npart
          if (j .eq. i) cycle
 
@@ -11420,7 +11439,9 @@ c1511 continue
      >                                 ,ppiclf_cp_map(1+PPICLF_LRS,j))
 
       ENDdo
+!$omp end parallel do
 
+!$omp parallel do private(j)
       do j=1,ppiclf_npart_gp
          j_ii = ppiclf_nb_g(1,j)
          j_jj = ppiclf_nb_g(2,j)
@@ -11451,8 +11472,11 @@ c1511 continue
      >                                 ,ppiclf_rprop_gp(1+PPICLF_LRS,j))
 
       ENDdo
+!$omp end parallel do
 
       istride = ppiclf_ndim
+
+!$omp parallel do private(j)
       do j=1,ppiclf_nwall
 
          rnx  = ppiclf_wall_n(1,j)
@@ -11569,6 +11593,7 @@ c1511 continue
 
  1511 continue
       ENDdo
+!$omp end parallel do
 
       RETURN
       END
@@ -12953,6 +12978,7 @@ c----------------------------------------------------------------------
       implicit none
 !
       include "PPICLF"
+      include 'omp_lib.h'
 ! 
 ! Internal: 
 ! 
@@ -12967,6 +12993,8 @@ c----------------------------------------------------------------------
      >                   ,0.0d0,0)
 
       n = PPICLF_LEX*PPICLF_LEY*PPICLF_LEZ
+
+!$omp parallel do private(ie)
       do ie=1,ppiclf_neltb
          call ppiclf_copy(ppiclf_xm1bi(1,1,1,ie,1)
      >                   ,ppiclf_xm1b(1,1,1,1,ie),n)
@@ -12975,6 +13003,7 @@ c----------------------------------------------------------------------
          call ppiclf_copy(ppiclf_xm1bi(1,1,1,ie,3)
      >                   ,ppiclf_xm1b(1,1,1,3,ie),n)
       ENDdo
+!$omp end parallel do      
 
       tol     = 5e-13
       bb_t    = 0.01
@@ -13007,10 +13036,12 @@ c     ndum    = ppiclf_neltb*n
 
       ! copy MapOverlapMesh mapping from prior to communicating map
       ppiclf_neltbbb = ppiclf_neltbb
+!$omp parallel do private(ie)
       do ie=1,ppiclf_neltbbb
          call ppiclf_icopy(ppiclf_er_mapc(1,ie),ppiclf_er_maps(1,ie)
      >             ,PPICLF_LRMAX)
       ENDdo
+!$omp end parallel do      
       !PRINT*, 'Processor ID, ppiclf_neltbbb', ppiclf_nid, ppiclf_neltbbb
       RETURN
       END
@@ -13020,6 +13051,7 @@ c     ndum    = ppiclf_neltb*n
       implicit none
 !
       include "PPICLF"
+      include 'omp_lib.h'
 !
 ! Input: 
 !
@@ -13032,11 +13064,13 @@ c     ndum    = ppiclf_neltb*n
       ! use the map to take original grid and map to fld which will be
       ! sent to mapped processors
       n = PPICLF_LEX*PPICLF_LEY*PPICLF_LEZ
+!$omp parallel do private(ie)
       do ie=1,ppiclf_neltbbb
          iee = ppiclf_er_mapc(1,ie)
          call ppiclf_copy(ppiclf_int_fld (1,1,1,j  ,ie)
      >                   ,ppiclf_int_fldu(1,1,1,iee,j ),n)
       ENDdo
+!$omp end parallel do      
 
       RETURN
       END
@@ -13046,6 +13080,7 @@ c     ndum    = ppiclf_neltb*n
       implicit none
 !
       include "PPICLF"
+      include "omp_lib.h"
 !
 ! Internal: 
 !
@@ -13087,10 +13122,12 @@ c     ndum    = ppiclf_neltb*n
       do i=1,PPICLF_INT_ICNT
          jp = PPICLF_INT_MAP(i)
 
+c!$omp parallel do private(ie)
          do ie=1,ppiclf_neltbbb
             call ppiclf_copy(fld(1,1,1,ie)
      >                      ,ppiclf_int_fld(1,1,1,i,ie),nxyz)
          ENDdo
+c!$omp end parallel do         
 
          ! sam commenting out eval nearest neighbor to use Local Interp instead
          ! leaving findpts call to help with projection, where the element id is
@@ -13126,6 +13163,7 @@ c     ndum    = ppiclf_neltb*n
       IMPLICIT NONE
 
       include "PPICLF"
+      include "omp_lib.h"
 
       ! Local Variables
       INTEGER*4 i, j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
@@ -13144,6 +13182,7 @@ c     ndum    = ppiclf_neltb*n
       nxyz = PPICLF_LEX*PPICLF_LEY*PPICLF_LEZ !number of points in mesh
                                                !element 
       ! Calculate centroid, max cell lengths
+c!$omp parallel do private(ie)
       DO ie = 1,ppiclf_neltbbb !Loop fluid cells on this processor
         ! Initialize as zero for each element
         DO l = 1,3
@@ -13176,6 +13215,7 @@ c     ndum    = ppiclf_neltb*n
           centeri(l,ie) = centeri(l,ie) / nxyz
         ENDDO !l
       ENDDO !ie
+c!$omp end parallel do      
 
       ! Find bin lengths for linear periodicity calculations
       DO l = 1,3
@@ -13199,6 +13239,7 @@ c     ndum    = ppiclf_neltb*n
         d2Max_EleLen(l) = d2Max_EleLen(l)*CellLengthMultiplier
       END DO
 
+c!$omp parallel do private(ip)
       DO ip=1,ppiclf_npart !Loop all particles in this bin
         ! particle centers in all directions
         xp(1) = ppiclf_y(PPICLF_JX, ip)
@@ -13301,6 +13342,7 @@ c     ndum    = ppiclf_neltb*n
             ENDDO ! i
         ENDIF ! nnearest
       ENDDO ! ip
+c!$omp end parallel do      
       RETURN
       END
 

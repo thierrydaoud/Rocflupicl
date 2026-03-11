@@ -142,7 +142,7 @@ ifeq ($(findstring ufhpc,$(MACHINE)),ufhpc)
 #  CXXLINKFLAGS +=  -lmpi_mpifh -lmpi_usempif08 -lifcore -lifport
 
 #  GCC
-  CXXLINKFLAGS +=  -lmpi_mpifh -lmpi_usempif08 -lgfortran
+  CXXLINKFLAGS += -fopenmp -lmpi_mpifh -lmpi_usempif08 -lgfortran
 
 #  CXXLINKFLAGS += -L/apps/gcc/12.2.0/lapack/3.11.0/lib -llapack
 
