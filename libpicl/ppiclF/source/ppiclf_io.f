@@ -339,13 +339,13 @@
       icalld1 = icalld1+1
 
       !ppiclf_printbinvtu set true in ppiclf_comm_CreateBin
-      IF(ppiclf_printbinvtu .OR. ppiclf_time .EQ. 0.0) THEN
-        call ppiclf_printsi(' *Begin WriteBinVTU$',ppiclf_cycle)
-        ! Set false for next iteration
-        ppiclf_printbinvtu = .FALSE. 
-      ELSE
-        RETURN
-      END IF
+!      IF(ppiclf_printbinvtu .OR. ppiclf_time .EQ. 0.0) THEN
+!        call ppiclf_printsi(' *Begin WriteBinVTU$',ppiclf_cycle)
+!        ! Set false for next iteration
+!        ppiclf_printbinvtu = .FALSE. 
+!      ELSE
+!        RETURN
+!      END IF
 
       nnp   = ppiclf_np
       nxx   = PPICLF_NPART
@@ -955,7 +955,7 @@ c1511 continue
          rout_lrp(ic_lrp) = sngl(ppiclf_rprop(j,i))
       enddo
       enddo
-      do j=1,3
+      do j=1,9
       do i=1,nxx
          ! This prints out the particle tag info
          ic_lip = ic_lip + 1
@@ -1061,7 +1061,7 @@ c1511 continue
          iint = iint + 1*isize*npt_total + isize
       enddo
 
-      do ie=1,3
+      do ie=1,9
          write(prostr,'(A3,I2.2)') "tag",ie
          call ppiclf_io_WriteDataArrayVTU(vtu,prostr,1,iint)
          iint = iint + 1*isize*npt_total + isize
@@ -1187,7 +1187,7 @@ c1511 continue
          call ppiclf_byte_close_mpi(pth,ierr)
       enddo
 
-      do i=1,3
+      do i=1,9
          idisp_lip = ivtu_size + isize*(3*npt_total  
      >                         + PPICLF_LRS*npt_total
      >                         + PPICLF_LRP*npt_total

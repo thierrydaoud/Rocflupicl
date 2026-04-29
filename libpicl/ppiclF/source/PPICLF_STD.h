@@ -95,7 +95,7 @@
 #endif
 
 #ifndef PPICLF_LRMAX
-#define PPICLF_LRMAX 6
+#define PPICLF_LRMAX 7
 #endif
 
 #ifndef PPICLF_LWALL

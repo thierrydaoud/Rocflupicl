@@ -96,7 +96,7 @@
       IF(ncell .GT. PPICLF_LEE .OR. ncell .LT. 0) THEN
         PRINT*, '***ERROR*** PPICLF_LEE', PPICLF_LEE, 'in', 
      >   'InitMapOverlapGrid must be greater than', ncell
-        CALL MPI_BARRIER(ppiclf_comm,ierr) 
+        !CALL MPI_BARRIER(ppiclf_comm,ierr) 
         CALL ppiclf_exittr('Increase LEE in InitOverlap$',0.0d0,ncell)
       END IF
 
@@ -195,7 +195,7 @@
       ppiclf_binb(5) = ppiclf_glmin(zmin,1)
       ppiclf_binb(6) = ppiclf_glmax(zmax,1)
 
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
+      !CALL MPI_BARRIER(ppiclf_comm,ierr)
       ! If all particles within last RK Stage binbound, do not calculate
       ! bins again and do not remap overlap grid.
       BinCheck = 0
@@ -570,7 +570,7 @@
          ppiclf_iprop(8,i) = nrank ! total bin number
       END DO
       ppiclf_particleMoved = ppiclf_iglmax(partcheck,1)
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
+      !CALL MPI_BARRIER(ppiclf_comm,ierr)
       RETURN
       END
 !-----------------------------------------------------------------------

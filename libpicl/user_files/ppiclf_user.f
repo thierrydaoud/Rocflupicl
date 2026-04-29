@@ -41,7 +41,6 @@
       implicit none
 !
       include "PPICLF"
-      include "mpif.h"
 !
 ! Internal:
 !
@@ -113,48 +112,6 @@
 !
 !-----------------------------------------------------------------------
 !   
-
-      ! Avery added 10/10/2024 for subbin nearest neighbor search
-      
-      INTEGER*4 SBin_map( 0 : (
-     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist) 
-     >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)
-     >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist) 
-     >       + 1) - 1), (ppiclf_npart+ppiclf_npart_gp))
-      INTEGER*4  SBin_counter( 0 : (
-     > (FLOOR((ppiclf_bins_dx(1)+2*ppiclf_nndist)/ppiclf_nndist) 
-     >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(2)+2*ppiclf_nndist)/ppiclf_nndist)
-     >        + 1) *
-     > (FLOOR((ppiclf_bins_dx(3)+2*ppiclf_nndist)/ppiclf_nndist) 
-     >       + 1) - 1))
-      INTEGER*4 i_Bin(3), n_SBin(3), tot_SBin
-
-#ifdef PERF
-      REAL*8 tstart, tfinal
-#endif
-
-! Unit Test only Code:
-!-----------------------------------------------------------------------
-!
-#ifdef TEST
-      ! unit_test only tests the SB nearest neighbor search in this
-      ! subroutine.  The full subroutine is called to ensure that
-      ! the array initialization is correct.
-      CALL ppiclf_user_subbinMap(i_Bin, n_SBin, tot_SBin 
-     >                           ,SBin_counter ,SBin_map)
-      DO i = 1,ppiclf_npart
-        CALL ppiclf_solve_NearestNeighborSB(
-     >         i,tot_SBin,SBin_counter,SBin_map,n_SBin,i_Bin)
-      END DO
-      RETURN
-#endif
-
-! 
-!-----------------------------------------------------------------------
-!
 !
 ! Code:
 !
@@ -228,23 +185,6 @@
 !
 !-----------------------------------------------------------------------
 !
-! Avery added 10/10/2024 - Map particles to subbins if collisional force, 
-! Briney Added Mass force, QS fluctation force, or pseudo turbulence is flagged
-!
-      if(PPICLF_PPInteractions) then
-#ifdef PERF
-      tstart = MPI_WTIME()
-#endif
-        call ppiclf_user_subbinMap(i_Bin, n_SBin, tot_SBin 
-     >                               ,SBin_counter ,SBin_map)
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TParticleParticleModels = tfinal - tstart
-#endif
-      endif ! Collisions, QS Fluct, Briney AM, or pseudoTurb flags on
-!
-!-----------------------------------------------------------------------
-!
       ! Set initial max values - must be done npart loop
       if (ppiclf_debug >= 1) then
          phimax    = 0.d0
@@ -263,6 +203,7 @@
          umean_max = 0.d0; vmean_max = 0.d0; wmean_max = 0.d0
       endif
 
+
 !
 !-----------------------------------------------------------------------
 !
@@ -270,7 +211,9 @@
 ! Evaluate ydot, the rhs of the equations of motion
 ! for the particles
 !
+
       do i=1,ppiclf_npart
+
          ! Choose viscosity law
          if (rmu_flag==rmu_fixed_param) then
             ! Constant viscosity law
@@ -284,6 +227,7 @@
              call ppiclf_exittr('Unknown viscosity law$', 0.0d0, 0)
          endif
          rkappa = rcp_fluid*rmu/rpr
+
 
          ! Useful values
          rmass  = ppiclf_rprop(PPICLF_R_JVOLP,i)
@@ -304,7 +248,13 @@
          ! TLJ - 04/03/2025; Do not calculate forces if vmag = 0
          !       Otherwise the particles might move before the 
          !       shock arrives
+         if (vmag <= 1.d-8) cycle
+
+         ! 08/08/2025 - Thierry  - 1.d-8 is very small
          if (vmag <= 1.d-3) cycle
+         !***
+         ! Avery - This is planar-shock curtain specific.  Shouldn't be in main code
+         !***
  
          ! Thierry - at initial times when rmachp and vmag are very
          ! small, we would get very large CD (>100)
@@ -319,7 +269,7 @@
          ! TLJ - redefined rprop(PPICLF_R_JSPT,i) to be the particle
          !   velocity magnitude for plotting purposes - 01/03/2025
  
-         ! ***This is bad practice and leads to difficult code to debug -Avery***
+         ! ***This is bad practice and leads to hard to debug code -Avery***
          ppiclf_rprop(PPICLF_R_JSPT,i) = sqrt(
      >       ppiclf_y(PPICLF_JVX,i)**2 +
      >       ppiclf_y(PPICLF_JVY,i)**2 +
@@ -330,7 +280,9 @@
          ! Redefine volume fractions
          ! Need to make sure phi_p + phi_f = 1
          rphip = ppiclf_rprop(PPICLF_R_JPHIP,i)
+         !rphip = min(rphip,0.62d0)
          rphif = 1.0d0-rphip
+         !*** AVERY - we should rethink this limit of 62% pVF ***
 
          ! TLJ: Needed for viscous unsteady force
          !      Using same nomenclature as rocinteract subroutines
@@ -369,9 +321,6 @@
          ! variables to be used in nearest neighbors to zero
          ! before looping over particle j (j neq i)
          ! Briney Added Mass flag
-#ifdef PERF
-      tstart = MPI_WTIME()
-#endif
          if (am_flag == 2) then 
             ! 07/14/24 - Thierry - If Briney Algorithm flag and fluct_flag
             !   are ON -> evaluate added-mass unary term before evaluating
@@ -379,79 +328,73 @@
             call ppiclf_user_AM_Briney_Unary(i,iStage,
      >           famx,famy,famz,rmass_add)
          endif ! end am_flag = 2
+
+
 !
 ! Step 1b: Call NearestNeighbor if particles i and j interact
 !
-         IF(PPICLF_PPInteractions) THEN
-           !AVERY - we should fix vmag ~0 bug and remove conditional check
-           if ((qs_fluct_flag>=1) .and. (vmag .gt. 1.d-8)) then
-              ! Compute mean for particle i
-              !    add neighbor particle j afterward
-              ! Box filter is used if qs_fluct_filter_flag=0
-              !   The box filter used here is a simple cube centered
-              !     at particle i with half-width dist2 (see
-              !     ppiclf_user_EvalNearestNeighbor.f for definition)
-              !   We use a simple arithmetic mean
-              !   phipmean is not used
-              ! Gaussian filter is used if qs_fluct_filter_flag=1
-              !   We use the value of the Gaussian times the volume
-              !     of the particle to get the filtered particle volume
+         if ((am_flag==2).or.(collisional_flag>=1)
+     >          .or.(qs_fluct_flag>=1)
+     >          .or.(pseudoTurb_flag==1)) then
 
-              if (qs_fluct_filter_flag==0) then
-                 ! box filter
-                 !***AVERY - I think phipmean is using wrong index ***
-                 ! Also, none of the below are means...
-                 phipmean = ppiclf_rprop(PPICLF_R_JVOLP,i)
-                 upmean   = ppiclf_y(PPICLF_JVX,i)
-                 vpmean   = ppiclf_y(PPICLF_JVY,i)
-                 wpmean   = ppiclf_y(PPICLF_JVZ,i)
-                 u2pmean  = upmean**2
-                 v2pmean  = vpmean**2
-                 w2pmean  = wpmean**2
-                 icpmean  = 1
-              else if (qs_fluct_filter_flag==1) then
-                 ! gaussian kernel
-                 ! r = 0
-                 !***AVERY - verify max filter dimension should be used***
-                 maxFilter = MAX(ppiclf_filter(1),ppiclf_filter(2),
-     >                           ppiclf_filter(3))
-                 gkern = sqrt(rpi*maxFilter**2/
-     >                  (4.0d0*log(2.0d0)))**(-ppiclf_ndim)
-                 !***AVERY - I think phipmean is using wrong index ***
-                 ! Also, none of the below are means...
-                 phipmean = gkern*ppiclf_rprop(PPICLF_R_JVOLP,i)
-                 upmean   = gkern*ppiclf_y(PPICLF_JVX,i)*
-     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
-                 vpmean   = gkern*ppiclf_y(PPICLF_JVY,i)*
-     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
-                 wpmean   = gkern*ppiclf_y(PPICLF_JVZ,i)*
-     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
-                 u2pmean  = gkern*(ppiclf_y(PPICLF_JVX,i)**2)*
-     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
-                 v2pmean  = gkern*(ppiclf_y(PPICLF_JVY,i)**2)*
-     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
-                 w2pmean  = gkern*(ppiclf_y(PPICLF_JVZ,i)**2)*
-     >                      ppiclf_rprop(PPICLF_R_JVOLP,i)
-                 icpmean = 1
-              end if
-           end if
+         !AVERY - we should fix vmag ~0 bug and remove conditional check
+         if ((qs_fluct_flag>=1) .and. (vmag .gt. 1.d-8)) then
+            ! Compute mean for particle i
+            !    add neighbor particle j afterward
+            ! Box filter is used if qs_fluct_filter_flag=0
+            !   The box filter used here is a simple cube centered
+            !     at particle i with half-width dist2 (see
+            !     ppiclf_user_EvalNearestNeighbor.f for definition)
+            !   We use a simple arithmetic mean
+            !   phipmean is not used
+            ! Gaussian filter is used if qs_fluct_filter_flag=1
+            !   We use the value of the Gaussian times the volume
+            !     of the particle to get the filtered particle volume
 
-           ! add neighbors
-           ! AVERY - always use subbins
-           IF ( 1 .EQ. 1 ) THEN !sbNearest_flag .EQ. 1) THEN
-              CALL ppiclf_solve_NearestNeighborSB(
-     >             i,tot_SBin,SBin_counter,SBin_map,n_SBin,i_Bin)
-!           ELSE
-!               CALL ppiclf_solve_NearestNeighbor(i)
-           END IF
+            if (qs_fluct_filter_flag==0) then
+               ! box filter
+               !***AVERY - I think phipmean is using wrong index ***
+               ! Also, none of the below are means...
+               phipmean = ppiclf_rprop(PPICLF_R_JVOLP,i)
+               upmean   = ppiclf_y(PPICLF_JVX,i)
+               vpmean   = ppiclf_y(PPICLF_JVY,i)
+               wpmean   = ppiclf_y(PPICLF_JVZ,i)
+               u2pmean  = upmean**2
+               v2pmean  = vpmean**2
+               w2pmean  = wpmean**2
+               icpmean  = 1
+            else if (qs_fluct_filter_flag==1) then
+               ! gaussian kernel
+               ! r = 0
+               !***AVERY - verify max filter dimension should be used***
+               maxFilter = MAX(ppiclf_filter(1),ppiclf_filter(2),
+     >                         ppiclf_filter(3))
+               gkern = sqrt(rpi*maxFilter**2/
+     >                (4.0d0*log(2.0d0)))**(-ppiclf_ndim)
+               !***AVERY - I think phipmean is using wrong index ***
+               ! Also, none of the below are means...
+               phipmean = gkern*ppiclf_rprop(PPICLF_R_JVOLP,i)
+               upmean   = gkern*ppiclf_y(PPICLF_JVX,i)*
+     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
+               vpmean   = gkern*ppiclf_y(PPICLF_JVY,i)*
+     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
+               wpmean   = gkern*ppiclf_y(PPICLF_JVZ,i)*
+     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
+               u2pmean  = gkern*(ppiclf_y(PPICLF_JVX,i)**2)*
+     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
+               v2pmean  = gkern*(ppiclf_y(PPICLF_JVY,i)**2)*
+     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
+               w2pmean  = gkern*(ppiclf_y(PPICLF_JVZ,i)**2)*
+     >                    ppiclf_rprop(PPICLF_R_JVOLP,i)
+               icpmean = 1
+            end if
+         end if
+
+         ! add neighbors
+          CALL ppiclf_solve_NearestNeighborSB(i)
 
          end if ! end Step 1b; nearestneighbor
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TParticleParticleModels = PPICLF_TParticleParticleModels +
-     >                                 (tfinal - tstart)
-      tfinal = MPI_WTIME()
-#endif
+
 
 !
 ! Step 2: Force component quasi-steady
@@ -579,6 +522,7 @@
             !  - Geotechnique
 
             ! Sam - STILL NEED TO VALIDATE COLLISION FORCE
+            ! Sam - Step 1b already calls nearest neighbor
             
             fcx  = ppiclf_ydotc(PPICLF_JVX,i)
             fcy  = ppiclf_ydotc(PPICLF_JVY,i)
@@ -720,6 +664,13 @@
             Rsg   = 0.0D0
             T_par = 0.0D0
           END IF ! pseudoTurb_flag
+
+
+          !  ****************************************************
+          ! Avery added for troubleshooting negative internal energy.
+          !ppiclf_feedbk(PPICLF_P_JE,i) = 0.0!qq
+          !  ****************************************************
+
           ! 07/21/2025 - Thierry - Added Reynolds Subgrid Stress Feedback
           ppiclf_feedbk(PPICLF_P_JRSG11,i) = Rsg(1,1) 
      >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
@@ -1043,10 +994,7 @@
          call ppiclf_user_plag2prop
       endif
 
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TFluidParticleModels = tfinal - tstart
-#endif
+
 ! ----------------------------------------------------------------------
 
       return
