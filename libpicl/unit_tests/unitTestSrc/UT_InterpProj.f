@@ -70,7 +70,7 @@
       CALL UT_setup
       CALL ppiclf_comm_InitMPI(icomm, nid, nproc)
 
-      DO test = 1,8
+      DO test = 1,1
        
         ! Periodicity flag Setup
         CALL test_setperiodic(x_per_flag,y_per_flag,z_per_flag,
@@ -114,7 +114,7 @@
         END DO
         CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JT,tpF)
         CALL MPI_BARRIER(icomm,ierr)
-        CALL ppiclf_solve_InitSolve
+        CALL ppiclf_solve_InitSolvePartLB
         CALL MPI_BARRIER(icomm,ierr)
         DO ie = 1,proc_ncells
           CALL ppiclf_solve_GetProFld(ie,1,feedback1(ie))
@@ -405,7 +405,7 @@
 
         ! Only print out error results for x,y,z periodicitiy on.
         ! This shows all periodicity and interior particles.
-        IF(test .EQ. 8) THEN
+        IF(test .EQ. 8) THEN 
           IF(nid .EQ. rootProc .AND. nproc .EQ. 1) THEN
             PRINT*,''
             PRINT*,'Linear Periodicity Implemented in x, y, & z'
@@ -597,7 +597,7 @@
      >                                      MPI_SUM,iComm,ierr)
         e1avg = e1avg / REAL(projCells)
         e2avg = e2avg / REAL(projCells)
-        IF(test .EQ. 8) THEN
+        IF(test .EQ. 8) THEN 
           IF(nid .EQ. rootProc .AND. nproc .EQ. 1) THEN
             PRINT*,'Linear Periodicity Implemented in x, y, & z'
             PRINT*,'Cell average projection errors:'

@@ -701,7 +701,7 @@ END IF
 ! Creates OverlapGrid and Calls Init Solve
 CALL ppiclf_comm_InitOverlapGrid(nCells,rocGrid)
 !CALL MPI_Barrier(global%mpiComm,errorFlag)
-CALL ppiclf_solve_InitSolve
+CALL ppiclf_solve_InitSolvePartLB
 
 INQUIRE(FILE='filein.vtk', EXIST=wall_exists)
 IF(wall_exists) THEN

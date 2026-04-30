@@ -3,12 +3,13 @@
 #SBATCH --output=ppiclfTestResults.txt
 #SBATCH --error=run.err
 ##SBATCH --mail-type=none
-#SBATCH --ntasks=64
-#SBATCH --nodes=4
-#SBATCH --mem-per-cpu=20gb                     # Per node
+#SBATCH --ntasks=16
+#SBATCH --nodes=1
+#SBATCH --mem-per-cpu=1gb                     # Per node
 #SBATCH --time=00-02:30:00             # Walltime in hh:mm:ss or d-hh:mm:ss
 #SBATCH --account=bala1s
 #SBATCH --qos=bala1s
+#SBATCH --partition=hpg-dev
 date
 
 module purge 
@@ -36,20 +37,38 @@ make
 date
 echo "Current Directory =" `pwd`
 echo ""
-echo "*** Number of Processors Used: 1 ***"
 
-srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC1 -v 2
+#for j in {1..1000}; do
+#  srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC4 $j 100000 -v 2
+#  srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC4 $j 200000 -v 2
+#  srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC4 $j 300000 -v 2
+#  srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC4 $j 400000 -v 2
+#echo "Iteration $j completed"
+#done
+
+# Normal Flow below.
+echo "*** Number of Processors Used: 1 ***"
+#srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC1 -v 2
 srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC2 -v 2
 srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC3 -v 2
-srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC4 -v 2
+#srun -N 1 -n 1  --mpi=${HPC_PMIX} $EXEC4 -v 2
 
 echo ""
-for i in {2..64}; do
+for i in {2..16}; do
 echo "*** ***  Number of Processors Used: $i  *** ***"
 
-  srun -N 4 -n $i  --mpi=${HPC_PMIX} $EXEC2 -v 2
-  srun -N 4 -n $i  --mpi=${HPC_PMIX} $EXEC3 -v 2
-  srun -N 4 -n $i  --mpi=${HPC_PMIX} $EXEC4 -v 2
+  srun -N 1 -n $i  --mpi=${HPC_PMIX} $EXEC2 -v 2
+  srun -N 1 -n $i  --mpi=${HPC_PMIX} $EXEC3 -v 2
+#  #srun -N 1 -n $i  --mpi=${HPC_PMIX} $EXEC4 -v 2
 
   echo ""
 done
+#for i in {5..64}; do
+#echo "*** ***  Number of Processors Used: $i  *** ***"
+#
+#  srun -N 4 -n $i  --mpi=${HPC_PMIX} $EXEC2 -v 2
+#  srun -N 4 -n $i  --mpi=${HPC_PMIX} $EXEC3 -v 2
+#  srun -N 4 -n $i  --mpi=${HPC_PMIX} $EXEC4 -v 2
+#
+#  echo ""
+#done

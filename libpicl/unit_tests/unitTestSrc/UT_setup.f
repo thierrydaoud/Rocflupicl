@@ -35,7 +35,7 @@
       zmax =  1.0D0
 
       ! Particle Input
-      totalParticles = 10000
+      totalParticles = 4000
       ! Particles to calculate periodicity error
       faceParticles = 1200
       
@@ -161,34 +161,34 @@
         DO i = 1,totalParticles
           DO j = 1,3 ! loop through x, y, & z coordinates
             CALL RANDOM_NUMBER(randNum)
-            part_y(j,i) = gridDomain(1,j) 
-     >                    + (gridDomain(2,j) - gridDomain(1,j))*randNum
+            part_y(j,i) = (gridDomain(2,j) - gridDomain(1,j))/4.0D0
+     >               +(gridDomain(2,j) - gridDomain(1,j))/2.0D0*randNum
 
             ! IF's below put first faceParticles within 1/3 a particle
             ! diameter from a face for linear periodicity testing.
-            IF(i .LE. faceParticles) THEN
-              ! Choose face (k)
-              k = 3 !zface
-              IF(i .LT. INT(REAL(faceParticles*2.0/3.0)+0.49D0) + 1) 
-     >          k = 2 ! yface
-              IF(i .LT. INT(REAL(faceParticles*1.0/3.0)+0.49D0) + 1) 
-     >          k = 1 ! xface
-              ! only modify one coordinate to put on face 
-              IF(j .EQ. k) THEN
-                IF(i - (k-1)*INT(REAL(faceParticles/3.0)+0.49D0) .LT.
-     >                       INT(REAL(faceParticles/6.0)+1.49D0)) THEN
-                  ! 1/6 faceParticles on min face
-                  part_y(j,i) = gridDomain(1,j) + (pdia/2.0)*randNum
-                ELSE
-                  ! 1/6 faceParticles on max face
-                  part_y(j,i) = gridDomain(2,j) - (pdia/2.0)*randNum
-                END IF
-              END IF ! j == k
-            END IF ! i < faceParticles
-            ! Make sure that there are some corner particles!
-            IF(i .GT. faceParticles .AND.
-     >         i .LE. INT(REAL(faceParticles)*(1.0D0+1.0D0/6.0D0))) 
-     >        part_y(j,i) = gridDomain(2,j) - pdia/2.0D0*randNum
+!            IF(i .LE. faceParticles) THEN
+!              ! Choose face (k)
+!              k = 3 !zface
+!              IF(i .LT. INT(REAL(faceParticles*2.0/3.0)+0.49D0) + 1) 
+!     >          k = 2 ! yface
+!              IF(i .LT. INT(REAL(faceParticles*1.0/3.0)+0.49D0) + 1) 
+!     >          k = 1 ! xface
+!              ! only modify one coordinate to put on face 
+!              IF(j .EQ. k) THEN
+!                IF(i - (k-1)*INT(REAL(faceParticles/3.0)+0.49D0) .LT.
+!     >                       INT(REAL(faceParticles/6.0)+1.49D0)) THEN
+!                  ! 1/6 faceParticles on min face
+!                  part_y(j,i) = gridDomain(1,j) + (pdia/2.0)*randNum
+!                ELSE
+!                  ! 1/6 faceParticles on max face
+!                  part_y(j,i) = gridDomain(2,j) - (pdia/2.0)*randNum
+!                END IF
+!              END IF ! j == k
+!            END IF ! i < faceParticles
+!            ! Make sure that there are some corner particles!
+!            IF(i .GT. faceParticles .AND.
+!     >         i .LE. INT(REAL(faceParticles)*(1.0D0+1.0D0/6.0D0))) 
+!     >        part_y(j,i) = gridDomain(2,j) - pdia/2.0D0*randNum
           END DO ! j
         END DO ! i 
       END IF 

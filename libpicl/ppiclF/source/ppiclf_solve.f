@@ -215,7 +215,7 @@
       ppiclf_lintp        = .FALSE.
       ppiclf_lproj        = .FALSE.
       ppiclf_binchanged   = .TRUE.
-      ppiclf_printbinvtu  = .TRUE.
+      ppiclf_printbinvtu  = .FALSE.
       IF(PPICLF_INTERP .EQ. 1)  ppiclf_lintp = .TRUE.
       IF(PPICLF_PROJECT .EQ. 1) ppiclf_lproj = .TRUE.
 
@@ -403,7 +403,7 @@
       RETURN
       END
 !-----------------------------------------------------------------------
-      SUBROUTINE ppiclf_solve_NearestNeighborSB(ip)
+       SUBROUTINE ppiclf_solve_NearestNeighborSB(ip)
 !
       USE ppiclf_DynamicAllocation
 
@@ -418,24 +418,35 @@
      >          dist_total, rnx, rny, rnz, area, rpx1, rpy1, rpz1, rpx2,
      >          rpy2, rpz2, rflip, a_sum, rd, rdist, theta, tri_area,
      >          ab_dot_ac, ab_mag, ac_mag, zdistSQ, rthresh, bin_xMin(3)
+     >          ,seen_xCheck, seen_yCheck, seen_zCheck, seen_tol
       INTEGER*4 i,k, kmax, kp, kkp, kk, j, jp, l, iSB, jSB, kSB,
      >          loopSB, tempSB, iSBin(3), istride, ip, ii, jj
       INTEGER*4 total_SBin, n_SBin(3), binOffset(3), n_SBin12, i_SBin(3)
 
 !trying to fix it
+      REAL*8,    ALLOCATABLE :: seen_x(:)
+      REAL*8,    ALLOCATABLE :: seen_y(:)
+      REAL*8,    ALLOCATABLE :: seen_z(:)
       INTEGER*4, ALLOCATABLE :: seen_id(:)
-      INTEGER*4, ALLOCATABLE ::seen_rank(:)
+      INTEGER*4, ALLOCATABLE :: seen_rank(:)
       INTEGER*4 nseen, iseen
       LOGICAL   already_seen
 !
 !
+      IF(ALLOCATED(seen_x)) DEALLOCATE(seen_x) 
+      IF(ALLOCATED(seen_y)) DEALLOCATE(seen_y) 
+      IF(ALLOCATED(seen_z)) DEALLOCATE(seen_z) 
       IF(ALLOCATED(seen_id)) DEALLOCATE(seen_id) 
       IF(ALLOCATED(seen_rank)) DEALLOCATE(seen_rank)
       i = MAXVAL(ppiclf_ParticleCount)*27
  
+      ALLOCATE(seen_x(ppiclf_npart_gp+i))
+      ALLOCATE(seen_y(ppiclf_npart_gp+i))
+      ALLOCATE(seen_z(ppiclf_npart_gp+i))
       ALLOCATE(seen_id(ppiclf_npart_gp+i))
       ALLOCATE(seen_rank(ppiclf_npart_gp+i))
 
+      seen_tol = 1.0D-12
       distSQ = ppiclf_nndist**2
 
       total_SBin = 1
@@ -488,12 +499,19 @@
                   CYCLE
                 END IF
 
+                seen_xCheck = ppiclf_cp_map(1,j)
+                seen_yCheck = ppiclf_cp_map(2,j)
+                seen_zCheck = ppiclf_cp_map(3,j)
+
                 already_seen = .FALSE.
                 IF(nseen .GT. 0) THEN
                   DO iseen = 1,nseen
                     IF(seen_id(iseen) .EQ. ppiclf_iprop(1,j) .AND.
-     >                 seen_rank(iseen) .EQ. ppiclf_iprop(2,j)) THEN
-                      already_seen = .TRUE.
+     >                 seen_rank(iseen) .EQ. ppiclf_iprop(2,j) .AND.
+     >                ABS(seen_x(iseen)-seen_xCheck) .LT. seen_tol .AND.
+     >                ABS(seen_y(iseen)-seen_yCheck) .LT. seen_tol .AND.
+     >               ABS(seen_z(iseen)-seen_zCheck) .LT. seen_tol) THEN
+                       already_seen = .TRUE.
                       EXIT
                     END IF
                   END DO
@@ -502,7 +520,6 @@
                   CYCLE
                 END IF
  
-
                 xdistSQ = (ppiclf_cp_map(1,ip)-ppiclf_cp_map(1,j))**2
                 IF (xdistSQ .GE. distSQ) CYCLE
                 ydistSQ = (ppiclf_cp_map(2,ip)-ppiclf_cp_map(2,j))**2
@@ -513,10 +530,12 @@
                 dist_total = dist_total+zdistSQ
                 IF (dist_total .GE. distSQ) CYCLE
 
-
                 nseen = nseen + 1
                 seen_id(nseen) = ppiclf_iprop(1,j)
                 seen_rank(nseen) = ppiclf_iprop(2,j)
+                seen_x(nseen) = seen_xCheck
+                seen_y(nseen) = seen_yCheck
+                seen_z(nseen) = seen_zCheck
 
 #ifdef TEST
                 PARTICLE_NN(ip) = PARTICLE_NN(ip) + 1
@@ -539,19 +558,27 @@
                   CYCLE
                 END IF
 
+                seen_xCheck = ppiclf_rprop_gp(1,j)
+                seen_yCheck = ppiclf_rprop_gp(2,j)
+                seen_zCheck = ppiclf_rprop_gp(3,j)
+ 
                 already_seen = .FALSE.
                 IF(nseen .GT. 0) THEN
                   DO iseen = 1,nseen
                     IF(seen_id(iseen) .EQ. ppiclf_iprop_gp(1,j) .AND.
-     >                 seen_rank(iseen) .EQ. ppiclf_iprop_gp(2,j)) THEN
-                      already_seen = .TRUE.
-                      EXIT
+     >                 seen_rank(iseen) .EQ. ppiclf_iprop_gp(2,j) .AND.
+     >                ABS(seen_x(iseen)-seen_xCheck) .LT. seen_tol .AND.
+     >                ABS(seen_y(iseen)-seen_yCheck) .LT. seen_tol .AND.
+     >                ABS(seen_z(iseen)-seen_zCheck) .LT. seen_tol) THEN
+                       already_seen = .TRUE.
+                        EXIT
                     END IF
                   END DO
                 END IF
                 IF(already_seen) THEN
                   CYCLE
                 END IF
+
                 xdistSQ =(ppiclf_cp_map(1,ip)-ppiclf_rprop_gp(1,j))**2
                 IF (xdistSQ .GE. distSQ) CYCLE
                 ydistSQ =(ppiclf_cp_map(2,ip)-ppiclf_rprop_gp(2,j))**2
@@ -565,6 +592,10 @@
                 nseen = nseen + 1
                 seen_id(nseen) = ppiclf_iprop_gp(1,j)
                 seen_rank(nseen) = ppiclf_iprop_gp(2,j)
+                seen_x(nseen) = seen_xCheck
+                seen_y(nseen) = seen_yCheck
+                seen_z(nseen) = seen_zCheck
+
 #ifdef TEST
                 PARTICLE_NN(ip) = PARTICLE_NN(ip) + 1
                 PPICLF_TOTNNDIST(ip) = PPICLF_TOTNNDIST(ip)+dist_total
@@ -895,7 +926,7 @@ c----------------------------------------------------------------------
       ppiclf_time   = time
 
       CALL ppiclf_io_WriteParticleVTU('')
-      CALL ppiclf_io_WriteBinVTU('')
+      !CALL ppiclf_io_WriteBinVTU('')
       ! Output diagnostics
       CALL ppiclf_io_OutputDiagAll
 
@@ -984,7 +1015,7 @@ c----------------------------------------------------------------------
       tfPeriodic = MPI_WTIME()
       PPICLF_TPeriodicity = tfPeriodic - tsPeriodic
 #endif
-      CALL ppiclf_solve_PostTimeStep
+      CALL ppiclf_solve_PostTimeStepPartLB
 #ifdef PERF
       tfinal = MPI_WTIME()
       PPICLF_TTotal = tfinal - tstart
@@ -1301,37 +1332,24 @@ c----------------------------------------------------------------------
 
       CALL ppiclf_comm_PartLoadBalance
 
-      CALL ppiclf_comm_setRankBoundaries
-
-      CALL ppiclf_comm_setEmptyIndicator
-
-      CALL ppiclf_comm_setInterfaceIndicator
-
-
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
       CALL ppiclf_comm_MoveParticlePartLB
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       CALL ppiclf_comm_MapOverlapGridPartLB
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! Copies Grid Cell ID for all Rocflu elements that map
       ! to ppiclf domain for GSLIB Transfer.  This copy is from
       ! MapOverlapGrid.
       CALL ppiclf_solve_InitInterp
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! Makes array (ppiclf_int_fld_input) of all rprop data
       ! for grid cellss that map to ppiclf domain.
       DO j=1,PPICLF_INT_ICNT
          CALL ppiclf_solve_InterpField(j)
       END DO
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
       
       ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
       ! cells that map to ppiclf domain.
       CALL ppiclf_solve_InterpTupleTransfer
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! Done for unit testing
       PPICLF_PPInteractions = .TRUE.
@@ -1339,18 +1357,15 @@ c----------------------------------------------------------------------
         ! Ghost particles are needed 
         CALL ppiclf_comm_CreateGhostPartLB
         CALL ppiclf_comm_MoveGhostPartLB
-        CALL MPI_BARRIER(ppiclf_comm,ierr)
         CALL ppiclf_comm_subbinParticleMap
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
       END IF
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
       CALL ppiclf_comm_subbinCellMap
       CALL ppiclf_solve_SBParticleToCellMap
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
@@ -1461,6 +1476,94 @@ c----------------------------------------------------------------------
       CALL ppiclf_solve_ProjectParticleGrid
 
 
+      RETURN
+      END
+
+!----------------------------------------------------------------------
+
+      SUBROUTINE ppiclf_solve_PostTimeStepPartLB
+!
+      IMPLICIT NONE
+!
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+! 
+
+! Internal: 
+! 
+      INTEGER*4 :: i, j,ierr
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+      tstart = MPI_WTIME()
+#endif
+      ! ppiclf_binchanged set in CreateBin
+      ! ppiclf_binchanged .TRUE. means
+      ! bin coordinates changed
+      CALL ppiclf_comm_CreateBinPartLB
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TCreateBin = tfinal - tstart
+      tstart = MPI_WTIME()
+#endif
+      CALL ppiclf_comm_FindParticlePartLB
+      IF(ppiclf_rebalance) THEN
+        CALL ppiclf_comm_PartLoadBalance
+      END IF
+      IF(ppiclf_particleMoved) THEN
+        CALL ppiclf_comm_setEmptyIndicator
+        CALL ppiclf_comm_MoveParticlePartLB
+      END IF
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TSendParticles = tfinal - tstart
+      PPICLF_TSendGridOverlap = 0.0D0
+#endif
+      IF(ppiclf_binchanged) THEN
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
+        CALL ppiclf_comm_MapOverlapGridPartLB
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TSendGridOverlap = tfinal - tstart
+#endif
+      END IF
+#ifdef PERF
+      PPICLF_TSendGhostParticles = 0.0D0
+#endif
+      IF(PPICLF_PPInteractions) THEN
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+        ! Ghost particles are needed 
+        CALL ppiclf_comm_CreateGhostPartLB
+        CALL ppiclf_comm_MoveGhostPartLB
+        CALL ppiclf_comm_subbinParticleMap
+        ! Zero collisions 
+        ppiclf_ydotc = 0.0D0
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TSendGhostParticles = tfinal-tstart
+#endif
+      END IF
+#ifdef PERF
+      tstart= MPI_WTIME()
+#endif
+      ! Maps up to 27 closest cell centers to particle
+      ! Includes: CellID, total dist, x dist, y dist, z dist
+      CALL ppiclf_comm_subbinCellMap
+      CALL ppiclf_solve_SBParticleToCellMap
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TMapParticlesCells = tfinal - tstart
+      tstart = MPI_WTIME()
+#endif
+      ! Project particle feedback to fluid solver grid
+      CALL ppiclf_solve_ProjectParticleGrid
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TProjection = tfinal - tstart
+#endif
       RETURN
       END
 
