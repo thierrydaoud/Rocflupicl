@@ -12,7 +12,6 @@ MODULE ppiclf_DynamicAllocation
   LOGICAL,   ALLOCATABLE :: ppiclf_LRankBoundary(:,:)
   LOGICAL,   ALLOCATABLE :: ppiclf_LMapFluid(:)
   INTEGER*4 :: ppiclf_dL, ppiclf_dM, ppiclf_dS
-  LOGICAL   :: ppiclf_rebalance
  
 CONTAINS
 
