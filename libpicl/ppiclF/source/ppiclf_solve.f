@@ -422,8 +422,8 @@
      >          A(3),B(3),C(3),AB(3),AC(3), distSQ, xdistSQ, ydistSQ,
      >          dist_total, rnx, rny, rnz, area, rpx1, rpy1, rpz1, rpx2,
      >          rpy2, rpz2, rflip, a_sum, rd, rdist, theta, tri_area,
-     >          ab_dot_ac, ab_mag, ac_mag, zdistSQ, rthresh, bin_xMin(3)
-     >          ,seen_xCheck, seen_yCheck, seen_zCheck, seen_tol
+     >          ab_dot_ac, ab_mag, ac_mag, zdistSQ,rthresh,bin_xMin(3),
+     >          cross_x, cross_y, cross_z, unx, uny, unz
       INTEGER*4 i,k, kmax, kp, kkp, kk, j, jp, l, iSB, jSB, kSB,
      >          loopSB, tempSB, iSBin(3), istride, ip, ii, jj
       INTEGER*4 n_SBin1x2, i_SBin(3)
@@ -447,14 +447,14 @@
       PPICLF_TOTNNDIST(ip) = 0.0D0
 #endif
       ! Loop through real particles
-      DO iSB = 1,3     !to look at -1,current,+1 x-dir subbins
-        ii = i_SBin(1) + (-2+iSB)
+      DO iSB = -1,1     !to look at -1,current,+1 x-dir subbins
+        ii = i_SBin(1) + iSB
         IF(ii .LT. 0 .OR. ii .GT. ppiclf_nSBin(1)-1) CYCLE
-        DO jSB = 1,3   !to look at -1,current,+1 x-dir subbins
-          jj = i_SBin(2) + (-2+jSB)
+        DO jSB = -1,1   !to look at -1,current,+1 x-dir subbins
+          jj = i_SBin(2) + jSB
           IF(jj .LT. 0 .OR. jj .GT. ppiclf_nSBin(2)-1) CYCLE
-          DO kSB = 1,3 !to look at -1,current,+1 x-dir subbins
-            kk = i_SBin(3) + (-2+kSB)
+          DO kSB = -1,1 !to look at -1,current,+1 x-dir subbins
+            kk = i_SBin(3) + kSB
             IF(kk .LT. 0 .OR. kk .GT. ppiclf_nSBin(3)-1) CYCLE
             ! Loops through 27 adjacent subbins
             loopSB = ii + jj*ppiclf_nSBin(1) + kk*n_SBin1x2 
@@ -517,35 +517,32 @@
 #endif
                 jp = j
                 CALL ppiclf_user_EvalNearestNeighbor(ip,jp
-     >                               ,ppiclf_y(1,ip)
-     >                               ,ppiclf_rprop(1,ip)
-     >                               ,ppiclf_rprop_gp(1,j)
-     >                               ,ppiclf_rprop_gp(1+PPICLF_LRS,j))
+     >                             ,ppiclf_y(1,ip)
+     >                             ,ppiclf_rprop(1,ip)
+     >                             ,ppiclf_rprop_gp(1:3,j)
+     >                             ,ppiclf_rprop_gp(4:PPICLF_LRP_GP,j))
               END IF
             END DO !k
           END DO !kSB
         END DO !jSB
       END DO !iSB
+      
+      ! --- PARTICLE-WALL INTERACTION LOOP ---
       istride = ppiclf_ndim
-      do j=1,ppiclf_nwall
-
+      
+      wall_loop: DO j=1,ppiclf_nwall
          rnx  = ppiclf_wall_n(1,j)
          rny  = ppiclf_wall_n(2,j)
-         rnz  = 0.0d0
-         area = ppiclf_wall_n(3,j)
-         rpx1 = ppiclf_y(1,ip)
-         rpy1 = ppiclf_y(2,ip)
-         rpz1 = 0.0d0
-         rpx2 = ppiclf_wall_c(1,j)
-         rpy2 = ppiclf_wall_c(2,j)
-         rpz2 = 0.0d0
-         rpx2 = rpx2 - rpx1
-         rpy2 = rpy2 - rpy1
          rnz  = ppiclf_wall_n(3,j)
          area = ppiclf_wall_n(4,j)
+
+         rpx1 = ppiclf_y(1,ip)
+         rpy1 = ppiclf_y(2,ip)
          rpz1 = ppiclf_y(3,ip)
-         rpz2 = ppiclf_wall_c(3,j)
-         rpz2 = rpz2 - rpz1
+
+         rpx2 = ppiclf_wall_c(1,j) - rpx1
+         rpy2 = ppiclf_wall_c(2,j) - rpy1
+         rpz2 = ppiclf_wall_c(3,j) - rpz1
     
          rflip = rnx*rpx2 + rny*rpy2 + rnz*rpz2
          IF(rflip .GT. 0.0d0) THEN
@@ -553,376 +550,76 @@
             rny = -1.0d0*rny
             rnz = -1.0d0*rnz
          END IF
+ 
+         unx = rnx
+         uny = rny
+         unz = rnz
+ 
+         ! Equation of the plane using the first vertex of the wall
+         rpx1 = ppiclf_wall_c(1,j)
+         rpy1 = ppiclf_wall_c(2,j)
+         rpz1 = ppiclf_wall_c(3,j)
+         rd   = -(rnx*rpx1 + rny*rpy1 + rnz*rpz1)
 
+         ! Orthogonal distance from particle to the infinite plane
+         rdist = abs(rnx*ppiclf_y(1,ip) + rny*ppiclf_y(2,ip)
+     >               + rnz*ppiclf_y(3,ip) + rd)
+         
+         ! If the particle is far from the plane, 
+         ! it cannot interact with ANY facet. Skip wall entirely.
+         IF(rdist .GT. 2.0d0*ppiclf_nndist) CYCLE wall_loop
 
+         ! Mathematically correct projection using unit normal vectors
+         ydum(1) = ppiclf_y(1,ip) - rdist*unx
+         ydum(2) = ppiclf_y(2,ip) - rdist*uny
+         ydum(3) = ppiclf_y(3,ip) - rdist*unz
+         
+         A(1:3) = ydum(1:3)
+         
          a_sum = 0.0d0
          kmax = 3
-         DO k=1,kmax 
+         
+         facet_loop: DO k=1,kmax 
             kp = k+1
-            IF(kp .GT. kmax) kp = kp-kmax ! cycle
+            IF(kp .GT. kmax) kp = kp-kmax 
             
             kk   = istride*(k-1)
             kkp  = istride*(kp-1)
-            rpx1 = ppiclf_wall_c(kk+1,j)
-            rpy1 = ppiclf_wall_c(kk+2,j)
-            rpz1 = 0.0d0
-            rpx2 = ppiclf_wall_c(kkp+1,j)
-            rpy2 = ppiclf_wall_c(kkp+2,j)
-            rpz2 = 0.0d0
+            
+            B(1) = ppiclf_wall_c(kk+1,j)
+            B(2) = ppiclf_wall_c(kk+2,j)
+            B(3) = ppiclf_wall_c(kk+3,j)
+            
+            C(1) = ppiclf_wall_c(kkp+1,j)
+            C(2) = ppiclf_wall_c(kkp+2,j)
+            C(3) = ppiclf_wall_c(kkp+3,j)
+            
+            AB(1:3) = B(1:3) - A(1:3)
+            AC(1:3) = C(1:3) - A(1:3)
 
-            rpz1 = ppiclf_wall_c(kk+3,j)
-            rpz2 = ppiclf_wall_c(kkp+3,j)
+            ! Cross Product for sub-triangle area
+            cross_x = AB(2)*AC(3) - AB(3)*AC(2)
+            cross_y = AB(3)*AC(1) - AB(1)*AC(3)
+            cross_z = AB(1)*AC(2) - AB(2)*AC(1)
 
-            rd   = -(rnx*rpx1 + rny*rpy1 + rnz*rpz1)
-
-            rdist = abs(rnx*ppiclf_y(1,ip)+rny*ppiclf_y(2,ip)
-     >                 +rnz*ppiclf_y(3,ip)+rd)
-            rdist = rdist/sqrt(rnx**2 + rny**2 + rnz**2)
-
-            ! give a little extra room for walls (2x)
-            IF(rdist .GT. 2.0d0*ppiclf_nndist) GOTO 1519
-
-            ydum(1) = ppiclf_y(1,ip) - rdist*rnx
-            ydum(2) = ppiclf_y(2,ip) - rdist*rny
-            ydum(3) = 0.0d0
-
-            A(1) = ydum(1)
-            A(2) = ydum(2)
-            A(3) = 0.0d0
-
-            B(1) = rpx1
-            B(2) = rpy1
-            B(3) = 0.0d0
-
-            C(1) = rpx2
-            C(2) = rpy2
-            C(3) = 0.0d0
-
-            AB(1) = B(1) - A(1)
-            AB(2) = B(2) - A(2)
-            AB(3) = 0.0d0
-
-            AC(1) = C(1) - A(1)
-            AC(2) = C(2) - A(2)
-            AC(3) = 0.0d0
-
-            ydum(3) = ppiclf_y(3,ip) - rdist*rnz
-            A(3) = ydum(3)
-            B(3) = rpz1
-            C(3) = rpz2
-            AB(3) = B(3) - A(3)
-            AC(3) = C(3) - A(3)
-
-            AB_DOT_AC = AB(1)*AC(1) + AB(2)*AC(2) + AB(3)*AC(3)
-            AB_MAG = sqrt(AB(1)**2 + AB(2)**2 + AB(3)**2)
-            AC_MAG = sqrt(AC(1)**2 + AC(2)**2 + AC(3)**2)
-            theta  = acos(AB_DOT_AC/(AB_MAG*AC_MAG))
-            tri_area = 0.5d0*AB_MAG*AC_MAG*sin(theta)
+            tri_area = 0.5d0 * sqrt(cross_x**2 
+     >                              + cross_y**2 + cross_z**2)
             a_sum = a_sum + tri_area
-         END DO
-
-         rthresh = 1.10d0 ! keep it from slipping through crack on edges
-         IF(a_sum .GT. rthresh*area) CYCLE
+         END DO facet_loop
+         
+         rthresh = 1.10d0 
+         IF(a_sum .GT. rthresh*area) CYCLE wall_loop
 
          jp = 0
-         CALL ppiclf_user_EvalNearestNeighbor(ip,jp,ppiclf_y(1,ip)
+         CALL ppiclf_user_EvalNearestNeighbor(ip,jp,ppiclf_cp_map(1,ip)
      >                                 ,ppiclf_rprop(1,ip)
      >                                 ,ydum
      >                                 ,rpropdum)
+      END DO wall_loop
 
- 1519 continue
-      ENDdo
 
       RETURN
       END
-! Comment out one below.	  
-!-----------------------------------------------------------------------
-!      SUBROUTINE ppiclf_solve_NearestNeighborSB(ip)
-!
-!      USE ppiclf_DynamicAllocation
-!      IMPLICIT NONE
-!      INCLUDE "PPICLF"
-!
-!      REAL*8    ydum(PPICLF_LRS), rpropdum(PPICLF_LRP), xp(3)
-!      REAL*8    A(3),B(3),C(3),AB(3),AC(3), distSQ, dist_total
-!      REAL*8    rnx, rny, rnz, area, rpx1, rpy1, rpz1, rpx2, rpy2, rpz2
-!      REAL*8    rflip, a_sum, rd, rdist, theta, tri_area, ab_dot_ac
-!      REAL*8    ab_mag, ac_mag, rthresh
-!      REAL*8    dxSQ, dySQ, dzSQ 
-!      REAL*8    mag_n, unx, uny, unz, cross_x, cross_y, cross_z
-!      INTEGER*4 i,k, kmax, kp, kkp, kk, j, jp, l, iSB, jSB, kSB
-!      INTEGER*4 loopSB, tempSB, i_SBin(3), istride, ii, jj
-!      INTEGER*4 total_SBin, n_SBin(3), binOffset(3), n_SBin1x2
-!      INTEGER*4 id_check, rank_check, cycle_check, iseen, ip
-!      INTEGER*4, ALLOCATABLE, SAVE :: seen_id(:), seen_rank(:)
-!      INTEGER*4, ALLOCATABLE, SAVE :: seen_cycle(:)
-!      INTEGER*4, SAVE :: current_seen_size = 0
-!      INTEGER*4 req_size
-!      INTEGER*4 nseen
-!      LOGICAL   already_seen
-!
-!      IF(ppiclf_npart .LT. 1) RETURN
-!
-!      ! --- Memory Safety Check ---
-!      ! The absolute maximum neighbors a particle could have 
-!      !  in the 3x3x3 grid
-!      req_size = 27 * MAXVAL(ppiclf_binPartCount)
-!      IF(req_size .GT. current_seen_size) THEN
-!         IF(ALLOCATED(seen_id)) 
-!     >      DEALLOCATE(seen_id,seen_rank,seen_cycle)
-!         ALLOCATE(seen_id(req_size), seen_rank(req_size),
-!     >            seen_cycle(req_size))
-!         current_seen_size = req_size
-!      END IF
-!
-!      distSQ = ppiclf_nndist**2
-!      
-!      total_SBin = 1
-!      DO i = 1,3
-!        ! +3 to account for one layer of overlap cells or ghost
-!        ! particles in adjacent bins on either side of rank boundary
-!        n_SBin(i) = ppiclf_binBIndex(2*i)-ppiclf_binBIndex(2*i-1) + 3
-!        binOffset(i) = ppiclf_BinBIndex(2*i-1) - 1
-!        ! Following IF corrects when full particle domain is used
-!        IF(n_SBin(i) .GE. ppiclf_n_bins(i)) THEN
-!          n_SBin(i) = ppiclf_n_bins(i)
-!          binOffset(i) = 0
-!        END IF
-!        total_SBin = total_SBin*n_SBin(i)    
-!      END DO
-!      n_SBin1x2 = n_SBin(1)*n_SBin(2)
-!
-!      xp(1) = ppiclf_y(PPICLF_JX, ip)
-!      xp(2) = ppiclf_y(PPICLF_JY, ip)
-!      xp(3) = ppiclf_y(PPICLF_JZ, ip)
-!      
-!      i_SBin(1) = ppiclf_iprop(5,ip) - binOffset(1)
-!      i_SBin(2) = ppiclf_iprop(6,ip) - binOffset(2)
-!      i_SBin(3) = ppiclf_iprop(7,ip) - binOffset(3)  
-!
-!      nseen = 0
-!#ifdef TEST
-!      PARTICLE_NN(ip) = 0 
-!      PPICLF_TOTNNDIST(ip) = 0.0D0
-!#endif
-!      ! --- PARTICLE-PARTICLE INTERACTION LOOP ---
-!      DO iSB = -1, 1 
-!        ii = i_SBin(1) + iSB
-!        IF (ii .LT. 0 .OR. ii .GT. n_SBin(1)-1) THEN
-!          IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)
-!     >                         .AND. ppiclf_n_bins(1) .GT. 1) THEN
-!            IF(ii .EQ. n_SBin(1)) ii = 0
-!            IF(ii .EQ. -1)  ii = n_SBin(1) - 1
-!          ELSE
-!            CYCLE
-!          END IF
-!        END IF
-!        DO jSB = -1, 1 
-!          jj = i_SBin(2) + jSB
-!          IF (jj .LT. 0 .OR. jj .GT. n_SBin(2)-1) THEN
-!            IF(ppiclf_linperiodic(2) .AND. ppiclf_EqualDomain(2)
-!     >                           .AND. ppiclf_n_bins(2) .GT. 1) THEN
-!              IF(jj .EQ. n_SBin(2)) jj = 0
-!              IF(jj .EQ. -1)  jj = n_SBin(2) - 1
-!            ELSE
-!              CYCLE
-!            END IF
-!          END IF
-!          DO kSB = -1, 1 
-!            kk = i_SBin(3) + kSB
-!            IF (kk .LT. 0 .OR. kk .GT. n_SBin(3)-1) THEN
-!              IF(ppiclf_linperiodic(3) .AND. ppiclf_EqualDomain(3)
-!     >                             .AND. ppiclf_n_bins(3) .GT. 1) THEN
-!                IF(kk .EQ. n_SBin(3)) kk = 0
-!                IF(kk .EQ. -1)  kk = n_SBin(3) - 1
-!              ELSE
-!                CYCLE
-!              END IF
-!            END IF
-!            ! Loops through 27 adjacent subbins
-!            loopSB = ii + jj*n_SBin(1) + kk*n_SBin1x2 
-!            DO k = 1, ppiclf_binPartCount(loopSB) 
-!              j = ppiclf_binPartList(loopSB,k)
-!
-!              IF (j .GT. 0) THEN ! Real Particle
-!                id_check    = ppiclf_iprop(1,j)
-!                rank_check  = ppiclf_iprop(2,j)
-!                cycle_check = ppiclf_iprop(3,j)
-!              ELSE ! Ghost Particle
-!                jp = -j
-!                id_check    = ppiclf_iprop_gp(1,j)
-!                rank_check  = ppiclf_iprop_gp(2,j)
-!                cycle_check = ppiclf_iprop_gp(3,j)
-!              END IF
-!              
-!              ! Cycle when same particle 
-!              IF(id_check    .EQ. ppiclf_iprop(1,ip) .AND.
-!     >           rank_check  .EQ. ppiclf_iprop(2,ip) .AND.
-!     >           cycle_check .EQ. ppiclf_iprop(3,ip)) THEN
-!                CYCLE
-!              END IF
-!              ! Duplicate ghost prevention
-!              already_seen = .FALSE.
-!              DO iseen = 1, nseen
-!                IF(seen_id(iseen)    .EQ. id_check   .AND.
-!     >             seen_rank(iseen)  .EQ. rank_check .AND.
-!     >             seen_cycle(iseen) .EQ. cycle_check) THEN
-!                   already_seen = .TRUE.
-!                   EXIT
-!                END IF
-!              END DO
-!              IF(already_seen) CYCLE
-!
-!              ! Bounding Box Filter
-!              IF (j .GT. 0) THEN
-!                dxSQ = (xp(1) - ppiclf_y(1,j))**2
-!                IF(dxSQ > distSQ) CYCLE
-!                dySQ = (xp(2) - ppiclf_y(2,j))**2
-!                IF(dySQ > distSQ) CYCLE
-!                dzSQ = (xp(3) - ppiclf_y(3,j))**2
-!                IF(dzSQ > distSQ) CYCLE
-!              ELSE
-!                dxSQ = (xp(1) - ppiclf_rprop_gp(1,jp))**2
-!                IF(dxSQ > distSQ) CYCLE
-!                dySQ = (xp(2) - ppiclf_rprop_gp(2,jp))**2
-!                IF(dySQ > distSQ) CYCLE
-!                dzSQ = (xp(3) - ppiclf_rprop_gp(3,jp))**2
-!                IF(dzSQ > distSQ) CYCLE
-!              END IF
-!
-!              ! Spherical distance check
-!              dist_total = dxSQ + dySQ + dzSQ
-!              IF (dist_total >= distSQ) CYCLE
-!
-!              nseen = nseen + 1
-!              seen_id(nseen)    = id_check
-!              seen_rank(nseen)  = rank_check
-!              seen_cycle(nseen) = cycle_check
-!              
-!#ifdef TEST
-!                PARTICLE_NN(ip) = PARTICLE_NN(ip) + 1
-!                PPICLF_TOTNNDIST(ip) = PPICLF_TOTNNDIST(ip)+dist_total
-!                CYCLE !Don't want to call EvalNN. Just testing
-!                      ! nneighbor search
-!#endif
-!
-!              ! Execute User Physics
-!              IF (j .GT. 0) THEN
-!                CALL ppiclf_user_EvalNearestNeighbor(ip,j
-!     >                                 ,ppiclf_cp_map(1,ip)
-!     >                                 ,ppiclf_cp_map(1+PPICLF_LRS,ip)
-!     >                                 ,ppiclf_cp_map(1,j)
-!     >                                 ,ppiclf_cp_map(1+PPICLF_LRP,j))
-!              ELSE
-!                ! Pass negative to denote ghost
-!                CALL ppiclf_user_EvalNearestNeighbor(ip,-jp 
-!     >                             ,ppiclf_cp_map(1,ip)
-!     >                             ,ppiclf_cp_map(1+PPICLF_LRS,ip)
-!     >                             ,ppiclf_rprop_gp(1,jp)
-!     >                             ,ppiclf_rprop_gp(1+PPICLF_LRP_GP,jp))
-!! doublecheck that I should use PPICLF_LRS_GP and not PPICLF_LRS
-!! !********
-!              END IF
-!
-!            END DO !k
-!          END DO !kSB
-!        END DO !jSB
-!      END DO !iSB
-!
-!
-!      ! --- PARTICLE-WALL INTERACTION LOOP ---
-!      istride = ppiclf_ndim
-!      
-!      wall_loop: DO j=1,ppiclf_nwall
-!         rnx  = ppiclf_wall_n(1,j)
-!         rny  = ppiclf_wall_n(2,j)
-!         rnz  = ppiclf_wall_n(3,j)
-!         area = ppiclf_wall_n(4,j)
-!
-!         rpx1 = ppiclf_cp_map(1,ip)
-!         rpy1 = ppiclf_cp_map(2,ip)
-!         rpz1 = ppiclf_cp_map(3,ip)
-!
-!         rpx2 = ppiclf_wall_c(1,j) - rpx1
-!         rpy2 = ppiclf_wall_c(2,j) - rpy1
-!         rpz2 = ppiclf_wall_c(3,j) - rpz1
-!    
-!         rflip = rnx*rpx2 + rny*rpy2 + rnz*rpz2
-!         IF(rflip .GT. 0.0d0) THEN
-!            rnx = -1.0d0*rnx
-!            rny = -1.0d0*rny
-!            rnz = -1.0d0*rnz
-!         END IF
-! 
-!         unx = rnx
-!         uny = rny
-!         unz = rnz
-! 
-!         ! Equation of the plane using the first vertex of the wall
-!         rpx1 = ppiclf_wall_c(1,j)
-!         rpy1 = ppiclf_wall_c(2,j)
-!         rpz1 = ppiclf_wall_c(3,j)
-!         rd   = -(rnx*rpx1 + rny*rpy1 + rnz*rpz1)
-!
-!         ! Orthogonal distance from particle to the infinite plane
-!         rdist = abs(rnx*ppiclf_cp_map(1,ip) + rny*ppiclf_cp_map(2,ip)
-!     >               + rnz*ppiclf_cp_map(3,ip) + rd)
-!         
-!         ! If the particle is far from the plane, 
-!         ! it cannot interact with ANY facet. Skip wall entirely.
-!         IF(rdist .GT. 2.0d0*ppiclf_nndist) CYCLE wall_loop
-!
-!         ! Mathematically correct projection using unit normal vectors
-!         ydum(1) = ppiclf_cp_map(1,ip) - rdist*unx
-!         ydum(2) = ppiclf_cp_map(2,ip) - rdist*uny
-!         ydum(3) = ppiclf_cp_map(3,ip) - rdist*unz
-!         
-!         A(1:3) = ydum(1:3)
-!         
-!         a_sum = 0.0d0
-!         kmax = 3
-!         
-!         facet_loop: DO k=1,kmax 
-!            kp = k+1
-!            IF(kp .GT. kmax) kp = kp-kmax 
-!            
-!            kk   = istride*(k-1)
-!            kkp  = istride*(kp-1)
-!            
-!            B(1) = ppiclf_wall_c(kk+1,j)
-!            B(2) = ppiclf_wall_c(kk+2,j)
-!            B(3) = ppiclf_wall_c(kk+3,j)
-!            
-!            C(1) = ppiclf_wall_c(kkp+1,j)
-!            C(2) = ppiclf_wall_c(kkp+2,j)
-!            C(3) = ppiclf_wall_c(kkp+3,j)
-!            
-!            AB(1:3) = B(1:3) - A(1:3)
-!            AC(1:3) = C(1:3) - A(1:3)
-!
-!            ! Cross Product for sub-triangle area
-!            cross_x = AB(2)*AC(3) - AB(3)*AC(2)
-!            cross_y = AB(3)*AC(1) - AB(1)*AC(3)
-!            cross_z = AB(1)*AC(2) - AB(2)*AC(1)
-!
-!            tri_area = 0.5d0 * sqrt(cross_x**2 
-!     >                              + cross_y**2 + cross_z**2)
-!            a_sum = a_sum + tri_area
-!         END DO facet_loop
-!         
-!         rthresh = 1.10d0 
-!         IF(a_sum .GT. rthresh*area) CYCLE wall_loop
-!
-!         jp = 0
-!         CALL ppiclf_user_EvalNearestNeighbor(ip,jp,ppiclf_cp_map(1,ip)
-!     >                                 ,ppiclf_cp_map(1+PPICLF_LRS,ip)
-!     >                                 ,ydum
-!     >                                 ,rpropdum)
-!      END DO wall_loop
-!
-!      RETURN
-!      END SUBROUTINE
-!
 !-----------------------------------------------------------------------
 
       SUBROUTINE ppiclf_solve_InitWall(xp1,xp2,xp3)
@@ -1283,8 +980,9 @@ c----------------------------------------------------------------------
 !
 
 ! Case 1 - Linear Periodicity in any of 3 directions ; NO Anuglar Periodicity
-      IF(((x_per_flag.EQ.1).OR.(y_per_flag.EQ.1).OR.(z_per_flag.EQ.1))
-     >   .AND.(ang_per_flag.EQ.0)) THEN
+      IF( ( (x_per_flag.EQ.1) .OR. (y_per_flag.EQ.1)
+     >                        .OR. (z_per_flag.EQ.1) ) ) THEN
+!     >   .AND.(ang_per_flag.EQ.0)) THEN
 
         DO j= 1,3
           ! particle leaving min. periodic face -> move it relative to 
@@ -1337,18 +1035,6 @@ c----------------------------------------------------------------------
         ppiclf_rk3coef(1,3) = dt*5.0d0/12.0d0
         ppiclf_rk3coef(2,3) = 1.0d0
         ppiclf_rk3coef(3,3) = dt*3.0d0/4.0d0
-!      ELSE
-!        !BD:Original Code This follows CMT-nek's rk 3 scheme
-!        ppiclf_rk3coef(1,1) = 0.d00
-!        ppiclf_rk3coef(2,1) = 1.0d0 
-!        ppiclf_rk3coef(3,1) = dt
-!        ppiclf_rk3coef(1,2) = 3.0d0/4.0d0
-!        ppiclf_rk3coef(2,2) = 1.0d0/4.0d0 
-!        ppiclf_rk3coef(3,2) = dt/4.0d0
-!        ppiclf_rk3coef(1,3) = 1.0d0/3.0d0
-!        ppiclf_rk3coef(2,3) = 2.0d0/3.0d0
-!        ppiclf_rk3coef(3,3) = dt*2.0d0/3.0d0
-!        !BD: Original Code END
       END IF
 
       RETURN
@@ -1678,91 +1364,6 @@ c----------------------------------------------------------------------
 
 !----------------------------------------------------------------------
 
-      SUBROUTINE ppiclf_solve_PostTimeStep
-!
-      IMPLICIT NONE
-!
-      INCLUDE "PPICLF"
-      INCLUDE "mpif.h"
-! 
-! Internal: 
-! 
-      INTEGER*4 :: i, j,ierr
-#ifdef PERF
-      REAL *8 tstart,tfinal     
-      tstart = MPI_WTIME()
-#endif
-      ! ppiclf_binchanged set in CreateBin
-      ! ppiclf_binchanged .TRUE. means
-      ! bin coordinates changed
-      CALL ppiclf_comm_CreateBin
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TCreateBin = tfinal - tstart
-      tstart = MPI_WTIME()
-#endif
-! Changed to T/F      ! ppiclf_particleMoved set in FindParticle
-      ! ppiclf_particleMoved .EQ. 0 means all particles
-      ! stayed in same bin as previous RK Stage.
-      CALL ppiclf_comm_FindParticle
-!      IF(ppiclf_particleMoved .NE. 0 .OR.
-!     >              ppiclf_binchanged) THEN
-        CALL ppiclf_comm_MoveParticle
-!      END IF
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TSendParticles = tfinal - tstart
-      PPICLF_TSendGridOverlap = 0.0D0
-#endif
-      IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
-#ifdef PERF
-        tstart = MPI_WTIME()
-#endif
-        CALL ppiclf_comm_MapOverlapGrid
-#ifdef PERF
-        tfinal = MPI_WTIME()
-        PPICLF_TSendGridOverlap = tfinal - tstart
-#endif
-      END IF
-#ifdef PERF
-      PPICLF_TSendGhostParticles = 0.0D0
-#endif
-      IF(PPICLF_PPInteractions) THEN
-#ifdef PERF
-      tstart = MPI_WTIME()
-#endif
-        ! Ghost particles are needed 
-        CALL ppiclf_comm_CreateGhost
-        CALL ppiclf_comm_MoveGhost
-        ! Zero collisions 
-        ppiclf_ydotc = 0.0D0
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TSendGhostParticles = tfinal-tstart
-#endif
-      END IF
-#ifdef PERF
-      tstart= MPI_WTIME()
-#endif
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
-      ! Maps up to 27 closest cell centers to particle
-      ! Includes: CellID, total dist, x dist, y dist, z dist
-      CALL ppiclf_solve_SBParticleToCellMap
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TMapParticlesCells = tfinal - tstart
-      tstart = MPI_WTIME()
-#endif
-      ! Project particle feedback to fluid solver grid
-      CALL ppiclf_solve_ProjectParticleGrid
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TProjection = tfinal - tstart
-#endif
-      RETURN
-      END
-
-!-----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InterpFieldUser(jp,infld)
 !
 ! This is called by rocpicl/PICL_TEMP_Runge.F90
@@ -1909,157 +1510,8 @@ c----------------------------------------------------------------------
       END
 
 !
-!_____________________________________________________________________
-! 
-!
-! PaperCode Version
-!      SUBROUTINE ppiclf_solve_SBParticleToCellMap
-!
-!      USE ppiclf_DynamicAllocation
-!
-!      IMPLICIT NONE
-!
-!      INCLUDE "PPICLF"
-!      INCLUDE "mpif.h"
-!
-!      ! Local Variables
-!      INTEGER*4  i, n_SBin(3), total_SBin, iSB, jSB, kSB, loopSB
-!     >          ,maxParticlePerBin, i_SBin(3) 
-!      INTEGER*4 j, k, l, ix, iy, iz, ip, ie, iee, nxyz, nnearest, 
-!     >          CellID_nearest(28), partCount, i_count, ii, jj, kk,
-!     >          n_SBin12
-!      REAL*8    dSQl, dSQi, dSQ(28), xp(3), dl, 
-!     >          CellCenter(3,28), w(27), binblength(3),  
-!     >          Max_CellLen(3), Max_CellLenSQ(3), dSQchk(3)
-!      LOGICAL   added, farAway, alreadyMapped
-! 
-!      REAL*8    bin_Min(3), x_range(3), size_SBin(3)
-!      LOGICAL   remove
-!#ifdef PERF
-!      REAL *8 tstart,tfinal     
-!#endif
-!      !***************************************************************
-!     
-!      IF(ppiclf_npart .LT. 1) RETURN
-!
-!      DO i = 1,3
-!        binblength(i) = ppiclf_binb(2*i) - ppiclf_binb((2*i)-1)
-!        dSQchk(i) = ppiclf_interp_dchk(i)**2
-!      END DO
-!
-!      n_SBin12 = ppiclf_nSBin(1)*ppiclf_nSBin(2)
-!      partCount = 0
-!      DO ip=1,ppiclf_npart !Loop all particles in this bin
-!        nnearest = 0 ! number of nearest elements
-!        DO ie = 1,28
-!          CellID_nearest(ie) = -1 ! index of nearest elements
-!          dSQ(ie) = 1E20 ! distance to center of nearest element
-!        END DO !ie
-!        ! particle centers in all directions
-!        xp(1) = ppiclf_y(PPICLF_JX, ip)
-!        xp(2) = ppiclf_y(PPICLF_JY, ip)
-!        xp(3) = ppiclf_y(PPICLF_JZ, ip)
-!        i_SBin(1) = ppiclf_iprop(5,ip) - ppiclf_binOffset(1)
-!        i_SBin(2) = ppiclf_iprop(6,ip) - ppiclf_binOffset(2)
-!        i_SBin(3) = ppiclf_iprop(7,ip) - ppiclf_binOffset(3)
-!        ! Check distance from particle to overlap cell centroids
-!        DO iSB = 1,3      ! -1,+0,+1 subbin in x-dir
-!          ii = (-2+iSB) + i_SBin(1)
-!          IF(ii .LT. 0 .OR. ii .GT. ppiclf_nSBin(1)-1) CYCLE
-!          DO jSB = 1,3    ! -1,+0,+1 subbin in y-dir
-!            jj = (-2+jSB) + i_SBin(2)
-!            IF(jj .LT. 0 .OR. jj .GT. ppiclf_nSBin(2)-1) CYCLE
-!            DO kSB = 1,3  ! -1,+0,+1 subbin in z-dir
-!              kk = (-2+kSB) + i_SBin(3)
-!              IF(kk .LT. 0 .OR. kk .GT. ppiclf_nSBin(3)-1) CYCLE
-!              loopSB = ii + jj*ppiclf_nSBin(1) + kk*n_SBin12
-!              IF(loopSB .GT. ppiclf_total_SBin-1) CYCLE
-!              DO i_count = 1,ppiclf_binCellCount(loopSB)
-!                ie = ppiclf_binCellList(loopSB,i_count) 
-!                ! get distance from particle to center
-!                dSQi    = 0.0
-!                dSQl    = 0.0
-!                farAway = .FALSE.
-!                DO l=1,3
-!                  IF(ppiclf_linperiodic(l) .AND.
-!     >                                    ppiclf_EqualDomain(l)) THEN
-!                    dSQl = MIN((ppiclf_picl_grid(l,ie) - xp(l))**2, 
-!     >                     (binblength(l)-ABS(ppiclf_picl_grid(l,ie)
-!     >                      - xp(l)))**2)
-!                  ELSE
-!                    dSQl = (ppiclf_picl_grid(l,ie) - xp(l))**2
-!                  END IF
-!                  dSQi = dSQi + dSQl
-!                  IF (dSQl .GT. dSQchk(l)) farAway = .TRUE.
-!                END DO !l
-!                ! skip to next fluid cell if greater than 1.5*max cell
-!                ! distance in respective x,y,z direction.
-!                IF (farAWAY) CYCLE !i_count
-!                ! Sort closest fluid cell centers
-!                added = .FALSE.
-!                alreadyMapped = .FALSE.
-!                DO i = 1,27
-!                  IF(ie .EQ. CellID_nearest(i)) alreadyMapped = .TRUE.
-!                END DO
-!                DO i = 1,27
-!                  IF(alreadyMapped) EXIT ! go to next cell in SB
-!                  j = 27 - i + 1
-!                  IF (dSQi .LT. dSQ(j)) THEN
-!                    dSQ(j+1) = dSQ(j)
-!                    CellID_nearest(j+1) = CellID_nearest(j)
-!                    DO l=1,3
-!                      CellCenter(l, j+1) = CellCenter(l, j)
-!                    END DO
-!                    dSQ(j) = dSQi
-!                    CellID_nearest(j) = ie
-!                    DO l=1,3
-!                      CellCenter(l,j) = ppiclf_picl_grid(l,ie)
-!                    END DO
-!                    added = .TRUE.
-!                  ELSE ! If not within closest cell list
-!                    EXIT !i
-!                  END IF
-!                END DO !i
-!                IF (added) nnearest = nnearest + 1  
-!              END DO ! i_count
-!            END DO !kSB
-!          END DO !jSB
-!        END DO !iSB
-!        nnearest = MIN(nnearest,27)
-!        remove = .FALSE.
-!        IF(nnearest .LT. 1) remove = .TRUE.
-!
-!        IF (remove) THEN
-!          ! Particle is outside of fluid domain.
-!          ! iprop(8,ip) set to -1 means it will be removed
-!          ! from ppiclf_y & ppiclf_rprop, rprop2, rprop3, rprop4, rprop5
-!          ppiclf_iprop(9,ip) = -1
-!          ppiclf_remove_particle = .TRUE.
-!          PRINT*, 'part # on proc # removed.', ppiclf_iprop(1,ip),
-!     >            ppiclf_nid
-!          remove = .FALSE.
-!        ELSE
-!          partCount = partCount + 1
-!          ! use partCount since ip includes possible removed particles
-!          ppiclf_nPart2Cell(partCount) = nnearest
-!          DO i = 1,nnearest
-!            ppiclf_Part2Cell_map(partCount,i) = CellID_nearest(i) ! Cell ID
-!            ! Particle center to cell center distance
-!            ppiclf_Part2Cell_dist(partCount,i) = SQRT(dSQ(i)) 
-!          END DO !i
-!        END IF !nnearest
-!      END DO !ip
-!
-!      IF(ppiclf_remove_particle) THEN
-!        ! Delete particles that are outside of fluid grid
-!        CALL ppiclf_solve_RemoveParticle
-!        ppiclf_remove_particle = .FALSE.
-!      END IF
-!
-!      RETURN
-!      END
-!
 !______________________________________________________________________
+!
       SUBROUTINE ppiclf_solve_SBParticleToCellMap
 
       USE ppiclf_DynamicAllocation
@@ -2467,7 +1919,7 @@ c----------------------------------------------------------------------
 
 !-----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_GetProFld(e,m,fld)
-!
+! 
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
@@ -2490,8 +1942,95 @@ c----------------------------------------------------------------------
       
 !______________________________________________________________________
 !
-      SUBROUTINE ppiclf_solve_ParticleToCellMap
 
+      SUBROUTINE OLDppiclf_solve_PostTimeStep
+!     This is the 1 bin per rank version
+      IMPLICIT NONE
+!
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+! 
+! Internal: 
+! 
+      INTEGER*4 :: i, j,ierr
+#ifdef PERF
+      REAL *8 tstart,tfinal     
+      tstart = MPI_WTIME()
+#endif
+      ! ppiclf_binchanged set in CreateBin
+      ! ppiclf_binchanged .TRUE. means
+      ! bin coordinates changed
+      CALL ppiclf_comm_CreateBin
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TCreateBin = tfinal - tstart
+      tstart = MPI_WTIME()
+#endif
+! Changed to T/F      ! ppiclf_particleMoved set in FindParticle
+      ! ppiclf_particleMoved .EQ. 0 means all particles
+      ! stayed in same bin as previous RK Stage.
+      CALL ppiclf_comm_FindParticle
+!      IF(ppiclf_particleMoved .NE. 0 .OR.
+!     >              ppiclf_binchanged) THEN
+        CALL ppiclf_comm_MoveParticle
+!      END IF
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TSendParticles = tfinal - tstart
+      PPICLF_TSendGridOverlap = 0.0D0
+#endif
+      IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
+#ifdef PERF
+        tstart = MPI_WTIME()
+#endif
+        CALL ppiclf_comm_MapOverlapGrid
+#ifdef PERF
+        tfinal = MPI_WTIME()
+        PPICLF_TSendGridOverlap = tfinal - tstart
+#endif
+      END IF
+#ifdef PERF
+      PPICLF_TSendGhostParticles = 0.0D0
+#endif
+      IF(PPICLF_PPInteractions) THEN
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+        ! Ghost particles are needed 
+        CALL ppiclf_comm_CreateGhost
+        CALL ppiclf_comm_MoveGhost
+        ! Zero collisions 
+        ppiclf_ydotc = 0.0D0
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TSendGhostParticles = tfinal-tstart
+#endif
+      END IF
+#ifdef PERF
+      tstart= MPI_WTIME()
+#endif
+      CALL MPI_BARRIER(ppiclf_comm,ierr)
+      ! Maps up to 27 closest cell centers to particle
+      ! Includes: CellID, total dist, x dist, y dist, z dist
+      CALL ppiclf_solve_SBParticleToCellMap
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TMapParticlesCells = tfinal - tstart
+      tstart = MPI_WTIME()
+#endif
+      ! Project particle feedback to fluid solver grid
+      CALL ppiclf_solve_ProjectParticleGrid
+#ifdef PERF
+      tfinal = MPI_WTIME()
+      PPICLF_TProjection = tfinal - tstart
+#endif
+      RETURN
+      END
+
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_solve_ParticleToCellMap
+!     This one is O(NPART**2) - much slower than subbin NN check
+!     OLD SUBROUTINE!!!
       IMPLICIT NONE
 
       INCLUDE "PPICLF"
@@ -2604,121 +2143,6 @@ c----------------------------------------------------------------------
 
       RETURN
       END
-!
-!----------------------------------------------------------------------
-!      SUBROUTINE OLDppiclf_solve_ProjectParticleGrid
-!
-!      IMPLICIT NONE
-!
-!      INCLUDE "PPICLF"
-!      INCLUDE "mpif.h"
-!
-!      ! Internal:
-!      INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj,
-!     >          nrr, nkey(2), iee
-!      REAL*8    CellVol, GaussianConst, dist, w(27), wsum,
-!     >          x_norm, y_norm, z_norm, PI, eps
-!      LOGICAL   partl 
-!
-!#ifdef PERF
-!      REAL*8    tstart, tfinal
-!#endif
-!
-! 
-!      PI = 4*ATAN(1.0D0)
-!      GaussianConst = 2.305D0 ! Distribution over 2 cell widths
-!      ppiclf_pro_fld_picl = 0.0d0
-!      eps = 1.0D-60
-!      DO ip=1,ppiclf_npart
-!        ! Update volume fraction for feedback - important for 1st RK
-!        ! step at time = 0.0
-!        ppiclf_feedbk(PPICLF_P_JPHIP,ip) =
-!     >  ppiclf_rprop(PPICLF_R_JVOLP,ip) *ppiclf_rprop(PPICLF_R_JSPL,ip)
-!        nCellProj = ppiclf_nPart2Cell(ip)
-!        wsum = 0.0D0
-!        ! Loop to find individual cell weightings
-!        DO i = 1,nCellProj
-!          CellID = ppiclf_Part2Cell_map(ip,i) 
-!          dist = ppiclf_Part2Cell_dist(ip,i) + eps
-!          CellVol = ppiclf_picl_grid(7,CellID)
-!          w(i) = ABS(CellVol*EXP(-GaussianConst*(dist**2)
-!     >              / (CellVol**(2.0D0/3.0D0))))
-!          wsum = wsum + w(i)
-!        END DO !i
-!#ifdef TEST
-!        ! These are same feedback equations used in unit testing
-!        x_norm = (ppiclf_y(PPICLF_JX,ip) - ppiclf_binb(1))
-!     >           / (ppiclf_binb(2) - ppiclf_binb(1))
-!        y_norm = (ppiclf_y(PPICLF_JY, ip) - ppiclf_binb(3))
-!     >           / (ppiclf_binb(4) - ppiclf_binb(3))
-!        z_norm = (ppiclf_y(PPICLF_JZ, ip) - ppiclf_binb(5))
-!     >           / (ppiclf_binb(6) - ppiclf_binb(5))
-!
-!        ppiclf_feedbk(1,ip) = 1
-!        ppiclf_feedbk(2,ip) = SIN(2*PI*x_norm) + 
-!     >                        SIN(2*PI*y_norm) + SIN(2*PI*z_norm)
-!#endif     
-!        DO j=1,PPICLF_LRP_PRO
-!          ! Loop through cells to apply feedback     
-!          DO i = 1,nCellProj
-!            CellID = ppiclf_Part2Cell_map(ip,i)
-!            ppiclf_pro_fld_picl(j,CellID) = 
-!     >         ppiclf_pro_fld_picl(j,CellID) 
-!     >         + ppiclf_feedbk(j,ip)*w(i)/wsum
-!          END DO !i
-!        END DO !j
-!      END DO !ip
-!
-!      ! Now send feedback information to processor that contains 
-!      ! the cell for the fluid solver
-!
-!      ppiclf_nCells_Proj = ppiclf_nCells_FV2PICL
-!      DO i = 1,ppiclf_nCells_Proj
-!        CALL ppiclf_icopy(ppiclf_cell_map_proj(1,i),
-!     >         ppiclf_cell_map(1,i),PPICLF_LRMAX)
-!      END DO
-!
-!      nl = 0
-!      nii = PPICLF_LRMAX
-!      njj = 2 ! original processor with cell for fluid grid
-!      nrr = PPICLF_LRP_PRO
-!      nkey(1) = 2
-!      nkey(2) = 1
-!
-!#ifdef PERF
-!      tstart = MPI_WTIME()
-!#endif
-!
-!      CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl ! Setup
-!     >      ,ppiclf_nCells_Proj, PPICLF_LEE ! Amount of columns to transfer
-!     >      ,ppiclf_cell_map_proj, nii      ! Integer communication
-!     >      ,partl, nl                      ! Logical communication
-!     >      ,ppiclf_pro_fld_picl, nrr       ! Real communication
-!     >      ,njj)                           ! Proc index to send to
-!      CALL pfgslib_crystal_tuple_sort(ppiclf_cr_hndl ! Setup
-!     >      ,ppiclf_nCells_Proj             ! Amount of columns to sort
-!     >      ,ppiclf_cell_map_proj,nii       ! Integer data
-!     >      ,partl,nl                       ! Logical data
-!     >      ,ppiclf_pro_fld_picl,nrr        ! Real data
-!     >      ,nkey,2)                        ! Sorting order
-!
-!#ifdef PERF
-!      tfinal = MPI_WTIME()
-!      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
-!#endif
-!
-!      ppiclf_pro_fld = 0.0d0
-!      DO ie=1,ppiclf_nCells_Proj
-!         iee = ppiclf_cell_map_Proj(1,ie)
-!         DO j=1,PPICLF_LRP_PRO
-!           ! Mapped to the fluid solver domain
-!           ppiclf_pro_fld(iee,j) = ppiclf_pro_fld(iee,j) +
-!     >                                    ppiclf_pro_fld_picl(j,ie)
-!         END DO
-!      END DO
-!
-!      RETURN
-!      END
 !
 !-----------------------------------------------------------------------
 !       SUBROUTINE ppiclf_solve_InvokeAngularPeriodic(i,flag,
@@ -2928,223 +2352,6 @@ c----------------------------------------------------------------------
 !      RETURN
 !      END
 
-!-----------------------------------------------------------------------
-! David's old nearest neighbor method
-!
-!      SUBROUTINE ppiclf_solve_NearestNeighbor(i)
-!!
-!      IMPLICIT NONE
-!!
-!      INCLUDE "PPICLF"
-!! 
-!! Input:
-!! 
-!      INTEGER*4 i
-!! 
-!! Internal: 
-!! 
-!      REAL*8 ydum(PPICLF_LRS), rpropdum(PPICLF_LRP)
-!      REAL*8 A(3),B(3),C(3),AB(3),AC(3), dist2, xdist2, ydist2,
-!     >       dist_total
-!      INTEGER*4 i_iim, i_iip, i_jjm, i_jjp, i_kkm, i_kkp, j, j_ii, j_jj,
-!     >          j_kk, jp
-!      REAL*8 rnx, rny, rnz, area, rpx1, rpy1, rpz1, rpx2, rpy2, rpz2,
-!     >       rflip, a_sum, rd, rdist, theta, tri_area, rthresh,
-!     >       ab_dot_ac, ab_mag, ac_mag, zdist2
-!      INTEGER*4 istride, k, kmax, kp, kkp, kk
-!! 
-!      i_iim = ppiclf_nb_r(1,i) - 1
-!      i_iip = ppiclf_nb_r(1,i) + 1
-!      i_jjm = ppiclf_nb_r(2,i) - 1
-!      i_jjp = ppiclf_nb_r(2,i) + 1
-!      i_kkm = ppiclf_nb_r(3,i) - 1
-!      i_kkp = ppiclf_nb_r(3,i) + 1
-!
-!      dist2 = ppiclf_nndist**2
-!
-!      do j=1,ppiclf_npart
-!         if (j .EQ. i) cycle
-!
-!         j_ii = ppiclf_nb_r(1,j)
-!         j_jj = ppiclf_nb_r(2,j)
-!         j_kk = ppiclf_nb_r(3,j)
-!
-!         if (j_ii .gt. i_iip .or. j_ii .lt. i_iim) cycle
-!         if (j_jj .gt. i_jjp .or. j_jj .lt. i_jjm) cycle
-!         if (ppiclf_ndim .EQ. 3) then
-!         if (j_kk .gt. i_kkp .or. j_kk .lt. i_kkm) cycle
-!         ENDif
-!
-!         xdist2 = (ppiclf_cp_map(1,i)-ppiclf_cp_map(1,j))**2
-!         if (xdist2 .gt. dist2) cycle
-!         ydist2 = (ppiclf_cp_map(2,i)-ppiclf_cp_map(2,j))**2
-!         if (ydist2 .gt. dist2) cycle
-!         dist_total = xdist2 + ydist2
-!         if (ppiclf_ndim .EQ. 3) then
-!         zdist2 = (ppiclf_cp_map(3,i)-ppiclf_cp_map(3,j))**2
-!         if (zdist2 .gt. dist2) cycle
-!         dist_total = dist_total+zdist2
-!         ENDif
-!         if (dist_total .gt. dist2) cycle
-!
-!         CALL ppiclf_user_EvalNearestNeighbor(i,j,ppiclf_cp_map(1,i)
-!     >                                 ,ppiclf_cp_map(1+PPICLF_LRS,i)
-!     >                                 ,ppiclf_cp_map(1,j)
-!     >                                 ,ppiclf_cp_map(1+PPICLF_LRS,j))
-!
-!      ENDdo
-!
-!      do j=1,ppiclf_npart_gp
-!         j_ii = ppiclf_nb_g(1,j)
-!         j_jj = ppiclf_nb_g(2,j)
-!         j_kk = ppiclf_nb_g(3,j)
-!
-!         if (j_ii .gt. i_iip .or. j_ii .lt. i_iim) cycle
-!         if (j_jj .gt. i_jjp .or. j_jj .lt. i_jjm) cycle
-!         if (ppiclf_ndim .EQ. 3) then
-!         if (j_kk .gt. i_kkp .or. j_kk .lt. i_kkm) cycle
-!         ENDif
-!
-!         xdist2 = (ppiclf_cp_map(1,i)-ppiclf_rprop_gp(1,j))**2
-!         if (xdist2 .gt. dist2) cycle
-!         ydist2 = (ppiclf_cp_map(2,i)-ppiclf_rprop_gp(2,j))**2
-!         if (ydist2 .gt. dist2) cycle
-!         dist_total = xdist2 + ydist2
-!         if (ppiclf_ndim .EQ. 3) then
-!         zdist2 = (ppiclf_cp_map(3,i)-ppiclf_rprop_gp(3,j))**2
-!         if (zdist2 .gt. dist2) cycle
-!         dist_total = dist_total+zdist2
-!         ENDif
-!         if (dist_total .gt. dist2) cycle
-!
-!         jp = -1*j
-!         CALL ppiclf_user_EvalNearestNeighbor(i,jp,ppiclf_cp_map(1,i)
-!     >                                 ,ppiclf_cp_map(1+PPICLF_LRS,i)
-!     >                                 ,ppiclf_rprop_gp(1,j)
-!     >                                 ,ppiclf_rprop_gp(1+PPICLF_LRS,j))
-!
-!      ENDdo
-!
-!      istride = ppiclf_ndim
-!      do j=1,ppiclf_nwall
-!
-!         rnx  = ppiclf_wall_n(1,j)
-!         rny  = ppiclf_wall_n(2,j)
-!         rnz  = 0.0d0
-!         area = ppiclf_wall_n(3,j)
-!         rpx1 = ppiclf_cp_map(1,i)
-!         rpy1 = ppiclf_cp_map(2,i)
-!         rpz1 = 0.0d0
-!         rpx2 = ppiclf_wall_c(1,j)
-!         rpy2 = ppiclf_wall_c(2,j)
-!         rpz2 = 0.0d0
-!         rpx2 = rpx2 - rpx1
-!         rpy2 = rpy2 - rpy1
-!
-!         if (ppiclf_ndim .EQ. 3) then
-!            rnz  = ppiclf_wall_n(3,j)
-!            area = ppiclf_wall_n(4,j)
-!            rpz1 = ppiclf_cp_map(3,i)
-!            rpz2 = ppiclf_wall_c(3,j)
-!            rpz2 = rpz2 - rpz1
-!         ENDif
-!    
-!         rflip = rnx*rpx2 + rny*rpy2 + rnz*rpz2
-!         if (rflip .gt. 0.0d0) then
-!            rnx = -1.0d0*rnx
-!            rny = -1.0d0*rny
-!            rnz = -1.0d0*rnz
-!         ENDif
-!
-!
-!         a_sum = 0.0d0
-!         kmax = 2
-!         if (ppiclf_ndim .EQ. 3) kmax = 3
-!         do k=1,kmax 
-!            kp = k+1
-!            if (kp .gt. kmax) kp = kp-kmax ! cycle
-!            
-!            kk   = istride*(k-1)
-!            kkp  = istride*(kp-1)
-!            rpx1 = ppiclf_wall_c(kk+1,j)
-!            rpy1 = ppiclf_wall_c(kk+2,j)
-!            rpz1 = 0.0d0
-!            rpx2 = ppiclf_wall_c(kkp+1,j)
-!            rpy2 = ppiclf_wall_c(kkp+2,j)
-!            rpz2 = 0.0d0
-!
-!            if (ppiclf_ndim .EQ. 3) then
-!               rpz1 = ppiclf_wall_c(kk+3,j)
-!               rpz2 = ppiclf_wall_c(kkp+3,j)
-!            ENDif
-!
-!            rd   = -(rnx*rpx1 + rny*rpy1 + rnz*rpz1)
-!
-!            rdist = abs(rnx*ppiclf_cp_map(1,i)+rny*ppiclf_cp_map(2,i)
-!     >                 +rnz*ppiclf_cp_map(3,i)+rd)
-!            rdist = rdist/sqrt(rnx**2 + rny**2 + rnz**2)
-!
-!            ! give a little extra room for walls (2x)
-!            if (rdist .gt. 2.0d0*ppiclf_nndist) goto 1511
-!
-!            ydum(1) = ppiclf_cp_map(1,i) - rdist*rnx
-!            ydum(2) = ppiclf_cp_map(2,i) - rdist*rny
-!            ydum(3) = 0.0d0
-!
-!            A(1) = ydum(1)
-!            A(2) = ydum(2)
-!            A(3) = 0.0d0
-!
-!            B(1) = rpx1
-!            B(2) = rpy1
-!            B(3) = 0.0d0
-!
-!            C(1) = rpx2
-!            C(2) = rpy2
-!            C(3) = 0.0d0
-!
-!            AB(1) = B(1) - A(1)
-!            AB(2) = B(2) - A(2)
-!            AB(3) = 0.0d0
-!
-!            AC(1) = C(1) - A(1)
-!            AC(2) = C(2) - A(2)
-!            AC(3) = 0.0d0
-!
-!            if (ppiclf_ndim .EQ. 3) then
-!               ydum(3) = ppiclf_cp_map(3,i) - rdist*rnz
-!               A(3) = ydum(3)
-!               B(3) = rpz1
-!               C(3) = rpz2
-!               AB(3) = B(3) - A(3)
-!               AC(3) = C(3) - A(3)
-!
-!               AB_DOT_AC = AB(1)*AC(1) + AB(2)*AC(2) + AB(3)*AC(3)
-!               AB_MAG = sqrt(AB(1)**2 + AB(2)**2 + AB(3)**2)
-!               AC_MAG = sqrt(AC(1)**2 + AC(2)**2 + AC(3)**2)
-!               theta  = acos(AB_DOT_AC/(AB_MAG*AC_MAG))
-!               tri_area = 0.5d0*AB_MAG*AC_MAG*sin(theta)
-!            elseif (ppiclf_ndim .EQ. 2) then
-!               AB_MAG = sqrt(AB(1)**2 + AB(2)**2)
-!               tri_area = AB_MAG
-!            ENDif
-!            a_sum = a_sum + tri_area
-!         ENDdo
-!
-!         rthresh = 1.10d0 ! keep it from slipping through crack on edges
-!         if (a_sum .gt. rthresh*area) cycle
-!
-!         jp = 0
-!         CALL ppiclf_user_EvalNearestNeighbor(i,jp,ppiclf_cp_map(1,i)
-!     >                                 ,ppiclf_cp_map(1+PPICLF_LRS,i)
-!     >                                 ,ydum
-!     >                                 ,rpropdum)
-!
-! 1511 continue
-!      ENDdo
-!
-!      RETURN
-!      END
 !!-----------------------------------------------------------------------
 !
 !
@@ -3215,98 +2422,3 @@ c----------------------------------------------------------------------
 !      RETURN
 !      END
 !!-----------------------------------------------------------------------
-!      SUBROUTINE ppiclf_solve_IntegrateRK3(iout)
-!!
-!      IMPLICIT NONE
-!!
-!      INCLUDE "PPICLF"
-!! 
-!! Internal: 
-!! 
-!      INTEGER*4 i, nstage, istage
-!!
-!! Output:
-!!
-!      LOGICAL iout
-!!
-!      ! save stage 1 solution
-!      DO i = 1, ppiclf_npart
-!        DO j = 1,PPICLF_LRS
-!          ppiclf_y1(j,i) = ppiclf_y(j,i)
-!        END DO
-!      END DO
-!
-!      ! get rk3 coeffs
-!      CALL ppiclf_solve_SetRK3Coeff(ppiclf_dt)
-!
-!      nstage = 3
-!      DO istage=1,nstage
-!         ! evaluate ydot
-!         CALL ppiclf_solve_SetYdot
-!
-!         ! rk3 integrate
-!         DO i= 1,npart
-!           DO j = 1,PPICLF_LRS
-!            ppiclf_y(j,i) =  ppiclf_rk3coef(1,istage)*ppiclf_y1   (j,i)
-!     >                     + ppiclf_rk3coef(2,istage)*ppiclf_y    (j,i)
-!     >                     + ppiclf_rk3coef(3,istage)*ppiclf_ydot (j,i)
-!         END DO
-!      END DO
-!
-!      iout = .TRUE.
-!
-!      RETURN
-!      END
-!c----------------------------------------------------------------------
-!      SUBROUTINE ppiclf_solve_IntegrateRK3s(iout)
-!!
-!      IMPLICIT NONE
-!!
-!      INCLUDE "PPICLF"
-!! 
-!! Internal: 
-!! 
-!      INTEGER*4 i, ndum, nstage, istage
-!      INTEGER*4 icalld
-!      save      icalld
-!      data      icalld /0/
-!!
-!! Output:
-!!
-!      LOGICAL iout
-!!
-!      icalld = icalld + 1
-!
-!
-!      ! get rk3 coeffs
-!      CALL ppiclf_solve_SetRK3Coeff(ppiclf_dt)
-!
-!      nstage = 3
-!      istage = mod(icalld,nstage)
-!      IF(istage .EQ. 0) istage = 3
-!      iout = .FALSE.
-!      IF(istage .EQ. nstage) iout = .TRUE.
-!
-!      ! save stage 1 solution
-!      IF(istage .EQ. 1) THEN
-!        DO i = 1,ppiclf_npart
-!          DO j = 1,PPICLF_LRS
-!           ppiclf_y1(j,i) = ppiclf_y(j,i)
-!          END DO
-!        END DO
-!      END IF
-!
-!      ! evaluate ydot
-!      CALL ppiclf_solve_SetYdot
-!
-!      ! rk3 integrate
-!      DO i = 1,npart
-!        DO j = 1,PPICLF_LRS
-!         ppiclf_y(j,i) =  ppiclf_rk3coef(1,istage)*ppiclf_y1   (j,i)
-!     >                  + ppiclf_rk3coef(2,istage)*ppiclf_y    (j,i)
-!     >                  + ppiclf_rk3coef(3,istage)*ppiclf_ydot (j,i)
-!        END DO
-!      END DO
-!
-!      RETURN
-!      END

@@ -471,18 +471,12 @@
 
       ppiclf_total_SBin = 1
       DO i = 1,3
-        ! Calculate Sub-Bin Array Dimensions
-        ppiclf_nSBin(i) = ppiclf_binBIndex(2*i) - 
-     >                    ppiclf_binBIndex(2*i-1) + 3 
-        ppiclf_binOffset(i) = ppiclf_BinBIndex(2*i-1) - 1
-
-        IF(ppiclf_nSBin(i) .GT. ppiclf_n_bins(i)) THEN
-          ppiclf_nSBin(i) = ppiclf_n_bins(i)
-          ppiclf_binOffset(i) = 0
-        END IF
-        ppiclf_total_SBin = ppiclf_total_SBin * ppiclf_nSBin(i)    
+        ppiclf_binOffset(i) = MAX(0,ppiclf_binBIndex(2*i-1)-1)
+        ppiclf_nSBin(i) = MIN(ppiclf_n_bins(i) - 1,
+     >                        ppiclf_binBIndex(2*i) + 1)
+     >                  - MAX(0,ppiclf_binBIndex(2*i-1)-1) + 1
+        ppiclf_total_SBin = ppiclf_total_SBin*ppiclf_nSBin(i)
       END DO
-
  
       RETURN
       END SUBROUTINE
@@ -1188,13 +1182,15 @@
           DO sb_x = 0, ppiclf_nSBin(1)-1
             tempSBin = sb_x + ppiclf_nSBin(1)*sb_y +
      >                 ppiclf_nSBin(1)*ppiclf_nSBin(2)*sb_z
-           
-            ! These are the bins - not subbins
-            ! Only difference is nBins>nSubbins (memory management) 
+
             iip = sb_x + ppiclf_binOffset(1)
             jjp = sb_y + ppiclf_binOffset(2)
             kkp = sb_z + ppiclf_binOffset(3)
             iBin = iip + nb1*jjp + nb1xnb2*kkp
+
+            IF(iip .LT. 0 .OR. iip .GE. nb1) CYCLE
+            IF(jjp .LT. 0 .OR. jjp .GE. nb2) CYCLE
+            IF(kkp .LT. 0 .OR. kkp .GE. nb3) CYCLE
 
             ! Instant bailout for empty bins
             IF(ppiclf_ParticleCount(iBin) .EQ. 0) CYCLE
@@ -1343,8 +1339,22 @@
                       END IF
                     END IF
 
+                    ! This determines what rank(s) need the GP
                     nbin  = iig + nb1*jjg + nb1xnb2*kkg
                     nrank = ppiclf_BinToRankMap(nbin)
+
+                    IF(.NOT. wrapped_x) THEN
+                      iig = iip
+                    END IF
+                    IF(.NOT. wrapped_y) THEN
+                      jjg = jjp
+                    END IF
+                    IF(.NOT. wrapped_z) THEN
+                      kkg = kkp
+                    END IF
+                    ! This is the bin of the "real" particle,
+                    ! which may be shifted when periodic.
+                    nbin  = iig + nb1*jjg + nb1xnb2*kkg
 
                     IF     ((.NOT. wrapped_x) .AND. 
      >                      (.NOT. wrapped_y) .AND.
@@ -1398,10 +1408,10 @@
                     ppiclf_iprop_gp(1:3, ppiclf_npart_gp) =
      >                                      ppiclf_iprop(1:3, ip)
                     ppiclf_iprop_gp(4, ppiclf_npart_gp)   = nrank
-                    ppiclf_iprop_gp(5, ppiclf_npart_gp)   = iig
-                    ppiclf_iprop_gp(6, ppiclf_npart_gp)   = jjg
-                    ppiclf_iprop_gp(7, ppiclf_npart_gp)   = kkg
-                    ppiclf_iprop_gp(8, ppiclf_npart_gp)   = nbin
+                    ppiclf_iprop_gp(5, ppiclf_npart_gp) = iig
+                    ppiclf_iprop_gp(6, ppiclf_npart_gp) = jjg
+                    ppiclf_iprop_gp(7, ppiclf_npart_gp) = kkg
+                    ppiclf_iprop_gp(8, ppiclf_npart_gp) = nbin
 
                     ppiclf_rprop_gp(4:PPICLF_LRP_GP, 
      >                              ppiclf_npart_gp   ) = 
