@@ -645,7 +645,7 @@ END DO !i
 
 !     CALL MPI_Barrier(global%mpiComm,errorFlag)
 
-MinFluidCells = 2.00D0 !Number of fluid cells for Minimum Bin Size and ppiclf_filter(1:3)
+MinFluidCells = 1.51D0 !Number of fluid cells for Minimum Bin Size and ppiclf_filter(1:3)
 DO l = 1,3
   filter_local(l) = MinFluidCells*Max_CellLen(l) 
   ! Find max x,y,z cell lengths across all MPI ranks (entire rocflu domain)

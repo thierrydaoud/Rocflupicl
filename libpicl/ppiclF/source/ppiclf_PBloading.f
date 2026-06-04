@@ -61,49 +61,47 @@
         ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
       END DO
 
-!For now, assume bins always change
-!
+
+      ppiclf_binchanged = .FALSE.
+
+      ! If all particles are within last RK Stage binboundaries,
+      ! do not calculate bins again and do not remap overlap grid
+      DO i = 1,3
+        IF((ppiclf_binb(2*i-1) + BinBuffer(i)) .LT.
+     >             ppiclf_previousbinb(2*i-1)) THEN
+          ppiclf_binchanged = .TRUE.
+          EXIT
+        END IF
+        IF((ppiclf_binb(2*i)   - BinBuffer(i)) .GT.
+     >             ppiclf_previousbinb(2*i))   THEN
+          ppiclf_binchanged = .TRUE.
+          EXIT
+        END IF
+      END DO
+
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE,ppiclf_binchanged,1
+     >                   ,MPI_LOGICAL, MPI_LOR
+     >                   ,ppiclf_comm, ierr)
+
+#ifdef TEST
       ppiclf_binchanged = .TRUE.
-!
-!      ppiclf_binchanged = .FALSE.
-!
-!      ! If all particles are within last RK Stage binboundaries,
-!      ! do not calculate bins again and do not remap overlap grid
-!      DO i = 1,3
-!        IF((ppiclf_binb(2*i-1) + BinBuffer(i)) .LT.
-!     >             ppiclf_previousbinb(2*i-1)) THEN
-!          ppiclf_binchanged = .TRUE.
-!          EXIT
-!        END IF
-!        IF((ppiclf_binb(2*i)   - BinBuffer(i)) .GT.
-!     >             ppiclf_previousbinb(2*i))   THEN
-!          ppiclf_binchanged = .TRUE.
-!          EXIT
-!        END IF
-!      END DO
-!
-!      CALL MPI_ALLREDUCE(MPI_IN_PLACE,ppiclf_binchanged,1
-!     >                   ,MPI_LOGICAL, MPI_LOR
-!     >                   ,ppiclf_comm, ierr)
-!
-!#ifdef TEST
-!      ppiclf_binchanged = .TRUE.
-!#endif
-!
-!      IF(.NOT. ppiclf_binchanged) THEN
-!        ! Reset due to possible lack of full buffer
-!        DO i = 1,3
-!          ppiclf_binb(2*i-1)  = ppiclf_previousbinb(2*i-1)
-!          ppiclf_binb(2*i)    = ppiclf_previousbinb(2*i)
-!          ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
-!        END DO
-!        ppiclf_printbinvtu = .FALSE.
-!        RETURN
-!      ELSE
-!        ppiclf_printbinvtu = .TRUE.
-!      END IF
+#endif
+
+      IF(.NOT. ppiclf_binchanged) THEN
+        ! Reset due to possible lack of full buffer
+        DO i = 1,3
+          ppiclf_binb(2*i-1)  = ppiclf_previousbinb(2*i-1)
+          ppiclf_binb(2*i)    = ppiclf_previousbinb(2*i)
+          ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
+        END DO
+        ppiclf_printbinvtu = .FALSE.
+      ELSE
 ! Never print bins, since it isn't one per rank...
 ! the bin print out doesn't make much sense anymore
+! Maybe re-attack later if we want to see the full binning picture?
+! Will require printing new information in the printbin subroutine.
+        ppiclf_printbinvtu = .FALSE.
+      END IF
 
       ppiclf_EqualDomain(1:3) = .FALSE.
 
@@ -186,11 +184,11 @@
       nb1xnb2 = nb1 * nb2
 
       ppiclf_ParticleCount(0:(ppiclf_totalBins - 1)) = 0
-!      ppiclf_particleMoved = .FALSE.
+      ppiclf_particleMoved = .FALSE.
 
-!#ifdef TEST
-!      ppiclf_particleMoved = .TRUE.
-!#endif
+#ifdef TEST
+      ppiclf_particleMoved = .TRUE.
+#endif
 
       ! Pre-compute inverse of dx to avoid slow division in loop
       inv_dx(1) = 1.0D0 / ppiclf_bins_dx(1)
@@ -215,13 +213,11 @@
         ppiclf_iprop(6,i) = jj    ! y bin #
         ppiclf_iprop(7,i) = kk    ! z bin #
         ppiclf_iprop(8,i) = bin   ! total bin number
-! For now, always assume a particle has moved between ranks
-!        nRank = ppiclf_BinToRankMap(bin) 
-!        IF(nRank .NE. ppiclf_iprop(4,i)) THEN
-!          ppiclf_particleMoved = .TRUE.
-!          ppiclf_iprop(4,i) = nRank
-!        END IF
-
+        nRank = ppiclf_BinToRankMap(bin) 
+        IF(nRank .NE. ppiclf_iprop(4,i)) THEN
+          ppiclf_particleMoved = .TRUE.
+          ppiclf_iprop(4,i) = nRank
+        END IF
         ppiclf_ParticleCount(bin) = ppiclf_ParticleCount(bin) + 1
       END DO
 
@@ -230,62 +226,63 @@
      >                   ,ppiclf_totalBins ,MPI_INTEGER4, MPI_SUM
      >                   ,ppiclf_comm, ierr)
 
-! For now, always assume a particle has moved between ranks
-      ppiclf_particleMoved = .TRUE.
-!
-!      ! Logical OR comparison across MPI Ranks
-!      CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_particleMoved
-!     >                   ,1, MPI_LOGICAL, MPI_LOR
-!     >                   ,ppiclf_comm, ierr)
+      ! Logical OR comparison across MPI Ranks
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_particleMoved
+     >                   ,1, MPI_LOGICAL, MPI_LOR
+     >                   ,ppiclf_comm, ierr)
 
-!For now, always re-load balance
-!
-      ppiclf_rebalance = .TRUE.
-!      ! Check if new BTRM required
-!      ! If NumPart > LB_criteria*TargetNumPart -> Reassign BTRM
-!      LB_criteria = 1.2D0
-!      LB_target   = CEILING(DBLE(ppiclf_glnpart)/DBLE(ppiclf_np))
-!      LB_criteria = LB_criteria*LB_target
-!      ppiclf_rebalance = .FALSE.
+      ! Check if new BTRM required
+      ! If NumPart > LB_criteria*TargetNumPart -> Reassign BTRM
+      LB_criteria = 1.2D0
+      LB_target   = CEILING(DBLE(ppiclf_glnpart)/DBLE(ppiclf_np))
+      LB_criteria = LB_criteria*LB_target
+      ppiclf_rebalance = .FALSE.
 
-!      !Map dimensions to strides to avoid IFs inside the loops.
-!      stride(1) = 1
-!      stride(2) = nb1
-!      stride(3) = nb1xnb2
-!
-!      stride_L = stride(ppiclf_dL)
-!      stride_M = stride(ppiclf_dM)
-!      stride_S = stride(ppiclf_dS)
-!
-!      LB_local = 0.0D0 
-!      bin = 0 
-!
-!      outer_loop: DO iloop = 0,(ppiclf_n_bins(ppiclf_dL) - 1)
-!        bin_L = iloop * stride_L
-!        
-!        DO jloop = 0,(ppiclf_n_bins(ppiclf_dM) - 1)
-!          bin_M = bin_L + jloop * stride_M
-!          
-!          DO kloop = 0,(ppiclf_n_bins(ppiclf_dS) - 1)
-!            prevBin = bin
-!            !A single fast addition replaces all IF/ELSE tracking logic
-!            bin = bin_M + kloop * stride_S
-!
-!            IF(ppiclf_BinToRankMap(prevBin) .NE.
-!     >         ppiclf_BinToRankMap(bin)       ) THEN
-!              LB_local = 0.0D0 ! new Rank
-!            END IF
-!
-!            LB_local = LB_local + DBLE(ppiclf_ParticleCount(bin))
-!
-!            IF(LB_local .GT. LB_criteria) THEN
-!              ppiclf_rebalance = .TRUE.
-!              EXIT outer_loop
-!            END IF
-!
-!          END DO
-!        END DO
-!      END DO outer_loop
+      !Map dimensions to strides to avoid IFs inside the loops.
+      stride(1) = 1
+      stride(2) = nb1
+      stride(3) = nb1xnb2
+
+      stride_L = stride(ppiclf_dL)
+      stride_M = stride(ppiclf_dM)
+      stride_S = stride(ppiclf_dS)
+
+      LB_local = 0.0D0 
+      bin = 0 
+
+      outer_loop: DO iloop = 0,(ppiclf_n_bins(ppiclf_dL) - 1)
+        bin_L = iloop * stride_L
+        
+        DO jloop = 0,(ppiclf_n_bins(ppiclf_dM) - 1)
+          bin_M = bin_L + jloop * stride_M
+          
+          DO kloop = 0,(ppiclf_n_bins(ppiclf_dS) - 1)
+            prevBin = bin
+            !A single fast addition replaces all IF/ELSE tracking logic
+            bin = bin_M + kloop * stride_S
+
+            IF(ppiclf_BinToRankMap(prevBin) .NE.
+     >         ppiclf_BinToRankMap(bin)       ) THEN
+              LB_local = 0.0D0 ! new Rank
+            END IF
+
+            LB_local = LB_local + DBLE(ppiclf_ParticleCount(bin))
+
+            IF(LB_local .GT. LB_criteria) THEN
+              ppiclf_rebalance = .TRUE.
+              EXIT outer_loop
+            END IF
+
+          END DO
+        END DO
+      END DO outer_loop
+
+      ! Logical OR comparison across MPI Ranks
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_rebalance
+     >                   ,1, MPI_LOGICAL, MPI_LOR
+     >                   ,ppiclf_comm, ierr)
+      ! Ensure remap particles since BTRM will change
+      IF(ppiclf_rebalance) ppiclf_particleMoved = .TRUE.
       
       RETURN
       END SUBROUTINE
@@ -929,7 +926,7 @@
                   rank_is_mapped(irank) = .TRUE.
                   nRankMaps             = nRankMaps + 1
                   RankMaps(nRankMaps,1) = irank ! Receiving Rank
-                  RankMaps(nRankMaps,2) = nbin   
+                  RankMaps(nRankMaps,2) = bin   ! Original bin index
                   RankMaps(nRankMaps,3) = ibin  ! Original index
                   RankMaps(nRankMaps,4) = jbin  ! Original index
                   RankMaps(nRankMaps,5) = kbin  ! Original index
@@ -1043,7 +1040,7 @@
       ! Update ppiclf filter, which is important as bin 
       ! boundaries grow and captures larger cells
       DO l = 1,3
-        ppiclf_filter(l) = Max_CellLen(l)*2.0D0
+        ppiclf_filter(l) = Max_CellLen(l)*1.51D0
       END DO
       ! Find max filter across processors (all overlap cells considered)
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_filter
@@ -1110,20 +1107,9 @@
           i_SBin(3) = ppiclf_iprop(7,i) - ppiclf_binOffset(3)
           tempSBin = i_SBin(1) + ppiclf_nSBin(1)*i_SBin(2) + 
      >               ppiclf_nSBin(1)*ppiclf_nSBin(2)*i_SBin(3)
-          IF(tempSBin .GT. SIZE(ppiclf_binPartCount)) THEN
-            PRINT*, 'ERROR - tempSBIN > size(binPartCount)',
-     >              'tempSBin:',tempSBin,'size:'
-     >              ,SIZE(ppiclf_binPartCount)
-          END IF
           ppiclf_binPartCount(tempSBin) = 
      >                        ppiclf_binPartCount(tempSBin) + 1
           IF(iterationLoop .EQ. 2) THEN
-            IF(ppiclf_binPartCount(tempSBin) .GT. 
-     >         SIZE(ppiclf_binPartList, 2)) THEN
-              PRINT*, 'ERROR - count > size(binPartList)'
-     >            ,' count:',ppiclf_binPartCount(tempSBin)
-     >            ,'size', SIZE(ppiclf_binPartList, 2)
-            END IF
             ppiclf_binPartList(tempSBin, 
      >                       ppiclf_binPartCount(tempSBin)) = i
           END IF
@@ -1143,9 +1129,10 @@
 
 
       REAL*8     PeriodicShift(3), distchk, xlo(3), xhi(3)
+      REAL*8     gp_x, gp_y, gp_z
       INTEGER*4  ip, iip, jjp, kkp, iig, jjg, kkg, nrank, l, nbin
       INTEGER*4  nb1, nb2, nb3, nb1xnb2, ix, iy, iz, iBin
-      INTEGER*4  sb_x, sb_y, sb_z, tempSBin, pIdx
+      INTEGER*4  sb_x, sb_y, sb_z, tempSBin, pIdx, p_id
       INTEGER*4  ierr, i, j, PeriodicityCase
       LOGICAL    wrap_x, wrap_y, wrap_z, wrapped_x, wrapped_y, wrapped_z
       LOGICAL    bnd_x_neg, bnd_x_pos, bnd_y_neg, bnd_y_pos 
@@ -1182,11 +1169,10 @@
           DO sb_x = 0, ppiclf_nSBin(1)-1
             tempSBin = sb_x + ppiclf_nSBin(1)*sb_y +
      >                 ppiclf_nSBin(1)*ppiclf_nSBin(2)*sb_z
-
-            iip = sb_x + ppiclf_binOffset(1)
-            jjp = sb_y + ppiclf_binOffset(2)
-            kkp = sb_z + ppiclf_binOffset(3)
-            iBin = iip + nb1*jjp + nb1xnb2*kkp
+            iip  = sb_x + ppiclf_binOffset(1)
+            jjp  = sb_y + ppiclf_binOffset(2)
+            kkp  = sb_z + ppiclf_binOffset(3)
+            iBin = iip + jjp*nb1 + nb1xnb2*kkp
 
             IF(iip .LT. 0 .OR. iip .GE. nb1) CYCLE
             IF(jjp .LT. 0 .OR. jjp .GE. nb2) CYCLE
@@ -1267,13 +1253,13 @@
                     jjg = jjp + iy
                     kkg = kkp + iz
                     
-                    ! Write directly to global array
-                    ppiclf_npart_gp = ppiclf_npart_gp + 1
-                    ppiclf_rprop_gp(1:3, ppiclf_npart_gp) = 
-     >                                                ppiclf_y(1:3, ip)
                     wrapped_x = .FALSE. 
                     wrapped_y = .FALSE. 
                     wrapped_z = .FALSE. 
+
+                    gp_x = ppiclf_y(1,ip)
+                    gp_y = ppiclf_y(2,ip)
+                    gp_z = ppiclf_y(3,ip)
 
                     ! --- Periodic Wrapping Logic ---
                     IF(iig .LT. 0 .OR. iig .GE. nb1) THEN
@@ -1281,18 +1267,12 @@
                         wrapped_x = .TRUE.
                         IF(iig .LT. 0) THEN
                           iig = nb1 - 1
-                          ppiclf_rprop_gp(1, ppiclf_npart_gp) = 
-     >                             ppiclf_rprop_gp(1, ppiclf_npart_gp)
-     >                             + PeriodicShift(1)
+                          gp_x = gp_x + PeriodicShift(1)
                         ELSE
                           iig = 0
-                          ppiclf_rprop_gp(1, ppiclf_npart_gp) = 
-     >                             ppiclf_rprop_gp(1, ppiclf_npart_gp)
-     >                             - PeriodicShift(1)
+                          gp_x = gp_x - PeriodicShift(1)
                         END IF
                       ELSE
-                        ! No GP needed
-                        ppiclf_npart_gp = ppiclf_npart_gp - 1
                         CYCLE
                       END IF
                     END IF
@@ -1302,18 +1282,13 @@
                         wrapped_y = .TRUE.
                         IF(jjg .LT. 0) THEN
                           jjg = nb2 - 1
-                          ppiclf_rprop_gp(2, ppiclf_npart_gp) = 
-     >                            ppiclf_rprop_gp(2, ppiclf_npart_gp) 
-     >                            + PeriodicShift(2)
+                          gp_y = gp_y + PeriodicShift(2)
                         ELSE
                           jjg = 0
-                          ppiclf_rprop_gp(2, ppiclf_npart_gp) = 
-     >                            ppiclf_rprop_gp(2, ppiclf_npart_gp)
-     >                            - PeriodicShift(2)
+                          gp_y = gp_y - PeriodicShift(2)
                         END IF
                       ELSE
                         ! No GP needed
-                        ppiclf_npart_gp = ppiclf_npart_gp - 1
                         CYCLE
                       END IF
                     END IF
@@ -1323,18 +1298,13 @@
                         wrapped_z = .TRUE.
                         IF(kkg .LT. 0) THEN
                           kkg = nb3 - 1
-                          ppiclf_rprop_gp(3, ppiclf_npart_gp) =
-     >                            ppiclf_rprop_gp(3, ppiclf_npart_gp)
-     >                            + PeriodicShift(3)
-                        ELSE
+                          gp_z = gp_z + PeriodicShift(3)
+                         ELSE
                           kkg = 0
-                          ppiclf_rprop_gp(3, ppiclf_npart_gp) =
-     >                            ppiclf_rprop_gp(3, ppiclf_npart_gp)
-     >                            - PeriodicShift(3)
-                        END IF
+                          gp_z = gp_z - PeriodicShift(3)
+                         END IF
                       ELSE
                         ! No GP needed
-                        ppiclf_npart_gp = ppiclf_npart_gp - 1
                         CYCLE
                       END IF
                     END IF
@@ -1392,30 +1362,31 @@
 
                     ! Skip if it belongs to this rank AND it didn't wrap periodically
                     IF(nrank .EQ. ppiclf_nid .AND. 
-     >                 PeriodicityCase .EQ. 1) THEN
-                        ppiclf_npart_gp = ppiclf_npart_gp - 1
-                        CYCLE
-                    END IF
+     >                 PeriodicityCase .EQ. 1) CYCLE 
 
-                    IF(sent_Rank(nrank,PeriodicityCase)) THEN
-                      ppiclf_npart_gp = ppiclf_npart_gp - 1
-                      CYCLE
-                    ELSE
-                      sent_Rank(nrank,PeriodicityCase) = .TRUE.
-                    END IF
+                    IF(sent_Rank(nrank,PeriodicityCase)) CYCLE
 
-                    ! Store Integers
-                    ppiclf_iprop_gp(1:3, ppiclf_npart_gp) =
-     >                                      ppiclf_iprop(1:3, ip)
-                    ppiclf_iprop_gp(4, ppiclf_npart_gp)   = nrank
+                    sent_Rank(nrank,PeriodicityCase) = .TRUE.
+                    ppiclf_npart_gp = ppiclf_npart_gp + 1
+                    ppiclf_iprop_gp(1, ppiclf_npart_gp) =
+     >                                      ppiclf_iprop(1, ip)  
+                    ppiclf_iprop_gp(2, ppiclf_npart_gp) =
+     >                                      ppiclf_iprop(2, ip)  
+                    ppiclf_iprop_gp(3, ppiclf_npart_gp) =
+     >                                      ppiclf_iprop(3, ip)  
+                    ppiclf_iprop_gp(4, ppiclf_npart_gp) = nrank
                     ppiclf_iprop_gp(5, ppiclf_npart_gp) = iig
                     ppiclf_iprop_gp(6, ppiclf_npart_gp) = jjg
                     ppiclf_iprop_gp(7, ppiclf_npart_gp) = kkg
                     ppiclf_iprop_gp(8, ppiclf_npart_gp) = nbin
 
-                    ppiclf_rprop_gp(4:PPICLF_LRP_GP, 
+
+                    ppiclf_rprop_gp(1, ppiclf_npart_gp) = gp_x
+                    ppiclf_rprop_gp(2, ppiclf_npart_gp) = gp_y
+                    ppiclf_rprop_gp(3, ppiclf_npart_gp) = gp_z 
+                    ppiclf_rprop_gp(4:PPICLF_LRP+3, 
      >                              ppiclf_npart_gp   ) = 
-     >                                ppiclf_rprop(4:PPICLF_LRP_GP, ip)
+     >                                ppiclf_rprop(1:PPICLF_LRP, ip)
                   END DO !iz
                 END DO !iy
               END DO !ix
@@ -1487,11 +1458,21 @@
 
       ! Single pass: Append ghosts
       DO i = 1, ppiclf_npart_gp
-        ! This is not the bin of the original particle
-        ! This is the bin of the SHIFTED ghost particle
         i_SBin(1) = ppiclf_iprop_gp(5,i) - ppiclf_binOffset(1)
         i_SBin(2) = ppiclf_iprop_gp(6,i) - ppiclf_binOffset(2)
         i_SBin(3) = ppiclf_iprop_gp(7,i) - ppiclf_binOffset(3)
+
+        ! These can be out-of-bounds since ppiclf_binOffsets on this
+        ! rank is different from the values on the rank that sent the 
+        ! ghost particle
+        IF(i_SBin(1) .LT. -1 .OR. i_SBin(1) .GT. ppiclf_nSBin(1)) CYCLE
+        IF(i_SBin(2) .LT. -1 .OR. i_SBin(2) .GT. ppiclf_nSBin(2)) CYCLE
+        IF(i_SBin(3) .LT. -1 .OR. i_SBin(3) .GT. ppiclf_nSBin(3)) CYCLE
+
+        i_SBin(1) = MAX(0, MIN(i_SBin(1), ppiclf_nSBin(1)-1))
+        i_SBin(2) = MAX(0, MIN(i_SBin(2), ppiclf_nSBin(2)-1))
+        i_SBin(3) = MAX(0, MIN(i_SBin(3), ppiclf_nSBin(3)-1))
+
         tempSBin = i_SBin(1) + ppiclf_nSBin(1)*i_SBin(2) + 
      >             ppiclf_nSBin(1)*ppiclf_nSBin(2)*i_SBin(3)
         ppiclf_binPartCount(tempSBin) = 
@@ -1499,12 +1480,13 @@
         IF(ppiclf_binPartCount(tempSBin) 
      >     .GT. ppiclf_maxParticlePerBin) THEN
           ! Scale aggressively to prevent a cascade of slow reAllocs
-          newMax = INT(DBLE(ppiclf_maxParticlePerBin) * 2.50D0) + 1
+          newMax = INT(DBLE(ppiclf_maxParticlePerBin) * 2.0D0) + 1
           CALL ppiclf_reallocate_BTP(ppiclf_total_SBin,
      >                               ppiclf_maxParticlePerBin,
      >                               newMax)
           ppiclf_maxParticlePerBin = newMax
         END IF
+
         ! Negative index indicates ghost particle
         ppiclf_binPartList(tempSBin, 
      >                     ppiclf_binPartCount(tempSBin)) = -i
@@ -1714,6 +1696,8 @@
         WRITE(series+iteration,*) ppiclf_np, Pmax - Pavg, 
      >                            (Pmax - Pavg)/Pavg*100.0 
       END IF
+    
+      DEALLOCATE(LB_Count)
      
       RETURN
 

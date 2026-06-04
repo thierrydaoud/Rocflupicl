@@ -527,7 +527,6 @@
             fcx  = ppiclf_ydotc(PPICLF_JVX,i)
             fcy  = ppiclf_ydotc(PPICLF_JVY,i)
             fcz  = ppiclf_ydotc(PPICLF_JVZ,i) 
-
          endif ! collisional_flag >= 1
 
 
@@ -672,31 +671,31 @@
           !  ****************************************************
 
           ! 07/21/2025 - Thierry - Added Reynolds Subgrid Stress Feedback
-          ppiclf_feedbk(PPICLF_P_JRSG11,i) = Rsg(1,1) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JRSG12,i) = Rsg(1,2) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JRSG13,i) = Rsg(1,3) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JRSG21,i) = Rsg(2,1) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JRSG22,i) = Rsg(2,2) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JRSG23,i) = Rsg(2,3) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JRSG31,i) = Rsg(3,1) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JRSG32,i) = Rsg(3,2) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JRSG33,i) = Rsg(3,3)  
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-
-          ppiclf_feedbk(PPICLF_P_JTSG1,i) = T_par(1) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JTSG2,i) = T_par(2) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
-          ppiclf_feedbk(PPICLF_P_JTSG3,i) = T_par(3) 
-     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG11,i) = Rsg(1,1) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG12,i) = Rsg(1,2) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG13,i) = Rsg(1,3) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG21,i) = Rsg(2,1) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG22,i) = Rsg(2,2) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG23,i) = Rsg(2,3) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG31,i) = Rsg(3,1) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG32,i) = Rsg(3,2) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JRSG33,i) = Rsg(3,3)  
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!
+!          ppiclf_feedbk(PPICLF_P_JTSG1,i) = T_par(1) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JTSG2,i) = T_par(2) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
+!          ppiclf_feedbk(PPICLF_P_JTSG3,i) = T_par(3) 
+!     >                                   * ppiclf_rprop(PPICLF_R_JSPL,i)
 
         END IF ! Feedback flag
 

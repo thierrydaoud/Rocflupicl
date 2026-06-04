@@ -2,7 +2,6 @@ MODULE ppiclf_DynamicAllocation
 
   IMPLICIT NONE
 
-
   INTEGER*4 :: ppiclf_dL, ppiclf_dM, ppiclf_dS
   INTEGER*4 :: ppiclf_total_SBin,ppiclf_nSBin(3)
   INTEGER*4 :: ppiclf_maxParticlePerBin
@@ -111,9 +110,8 @@ CONTAINS
     temp_list = 0
     
     ! Copy the old data into the new, larger array
-    temp_list(:, 1:currentMax) = ppiclf_binPartList(:, 1:currentMax)
+    temp_list(:, 1:currentMax) = ppiclf_binPartList(:,:)
 
-    DEALLOCATE(ppiclf_binPartList)
     ! Move pointers. 'temp_list' is automatically deallocated.
     CALL MOVE_ALLOC(FROM=temp_list, TO=ppiclf_binPartList)
     

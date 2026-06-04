@@ -520,7 +520,7 @@
      >                             ,ppiclf_y(1,ip)
      >                             ,ppiclf_rprop(1,ip)
      >                             ,ppiclf_rprop_gp(1:3,j)
-     >                             ,ppiclf_rprop_gp(4:PPICLF_LRP_GP,j))
+     >                             ,ppiclf_rprop_gp(4:PPICLF_LRP+3,j))
               END IF
             END DO !k
           END DO !kSB
@@ -1134,16 +1134,8 @@ c----------------------------------------------------------------------
 ! Internal: 
 ! 
       INTEGER*4 :: j,ierr
-      ! ppiclf_binchanged set in CreateBin
-      ! ppiclf_binchanged .TRUE. means
-      ! bin coordinates changed
       CALL ppiclf_comm_CreateBinPartLB
-
-      ! ppiclf_particleMoved set in FindParticle
-      ! ppiclf_particleMoved FALSE means all particles
-      ! stayed in same rank as previous RK Stage.
       CALL ppiclf_comm_FindParticlePartLB
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
       CALL ppiclf_comm_PartLoadBalance
       CALL ppiclf_comm_MoveParticlePartLB
       CALL ppiclf_comm_subbinRealParticleMap
@@ -1164,13 +1156,11 @@ c----------------------------------------------------------------------
       ! cells that map to ppiclf domain.
       CALL ppiclf_solve_InterpTupleTransfer
 
-      ! Done for unit testing
       IF(PPICLF_PPInteractions) THEN
         ! Ghost particles are needed 
         CALL ppiclf_comm_CreateGhostPartLB
         CALL ppiclf_comm_MoveGhostPartLB
         CALL ppiclf_comm_subbinGhostParticleMap
-
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
       END IF
@@ -1309,6 +1299,11 @@ c----------------------------------------------------------------------
       REAL *8 tstart,tfinal     
       tstart = MPI_WTIME()
 #endif
+
+! There is some error in the binchanged, particleMoved, or rebalance
+! logic below.  Commenting out for now, but could be an efficiency
+! gain later after troubleshooting.
+
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
       ! bin coordinates changed
@@ -1319,29 +1314,30 @@ c----------------------------------------------------------------------
       tstart = MPI_WTIME()
 #endif
       CALL ppiclf_comm_FindParticlePartLB
-      IF(ppiclf_rebalance) THEN
+!      IF(ppiclf_rebalance) THEN
          CALL ppiclf_comm_PartLoadBalance
-      END IF
-      IF(ppiclf_particleMoved) THEN
-        IF(.NOT. ppiclf_rebalance) THEN
+!      END IF
+!      IF(ppiclf_particleMoved) THEN
+!        IF(.NOT. ppiclf_rebalance) THEN
           ! Already called when ppiclf_rebalance=.TRUE.
-          CALL ppiclf_comm_setEmptyIndicator
-        END IF
+!          CALL ppiclf_comm_setEmptyIndicator
+!          CALL ppiclf_comm_setInterfaceIndicator
+!        END IF
         CALL ppiclf_comm_MoveParticlePartLB
-      END IF
+!      END IF
       CALL ppiclf_comm_subbinRealParticleMap
 #ifdef PERF
       tfinal = MPI_WTIME()
       PPICLF_TSendParticles = tfinal - tstart
       PPICLF_TSendGridOverlap = 0.0D0
 #endif
-      IF(ppiclf_binchanged) THEN
+!      IF(ppiclf_binchanged) THEN
 #ifdef PERF
         tstart = MPI_WTIME()
 #endif
         CALL ppiclf_comm_MapOverlapGridPartLB
-        CALL ppiclf_comm_subbinCellMap
-      END IF
+!      END IF
+      CALL ppiclf_comm_subbinCellMap
 #ifdef PERF
       tstart= MPI_WTIME()
 #endif
@@ -1747,19 +1743,19 @@ c----------------------------------------------------------------------
      >          (ppiclf_ydotc (1,icount), ppiclf_ydotc(1,i), PPICLF_LRS)
                CALL ppiclf_copy
      >          (ppiclf_rprop (1,icount), ppiclf_rprop(1,i), PPICLF_LRP)
-               IF(PPICLF_LRP2 .GT. 1) THEN
+               IF(PPICLF_LRP2 .GT. 0) THEN
                  CALL ppiclf_copy
      >          (ppiclf_rprop2(1,icount),ppiclf_rprop2(1,i),PPICLF_LRP2)
                END IF
-               IF(PPICLF_LRP3 .GT. 1) THEN
+               IF(PPICLF_LRP3 .GT. 0) THEN
                  CALL ppiclf_copy
      >          (ppiclf_rprop3(1,icount),ppiclf_rprop3(1,i),PPICLF_LRP3)
                END IF
-               IF(PPICLF_LRP4 .GT. 1) THEN
+               IF(PPICLF_LRP4 .GT. 0) THEN
                  CALL ppiclf_copy
      >          (ppiclf_rprop4(1,icount),ppiclf_rprop4(1,i),PPICLF_LRP4)
                END IF
-               IF(PPICLF_LRP5 .GT. 1) THEN
+               IF(PPICLF_LRP5 .GT. 0) THEN
                  CALL ppiclf_copy
      >          (ppiclf_rprop5(1,icount),ppiclf_rprop5(1,i),PPICLF_LRP5)
                END IF
