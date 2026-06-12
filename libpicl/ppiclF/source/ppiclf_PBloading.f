@@ -94,14 +94,12 @@
           ppiclf_binb(2*i)    = ppiclf_previousbinb(2*i)
           ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
         END DO
-        ppiclf_printbinvtu = .FALSE.
-      ELSE
+      END IF
 ! Never print bins, since it isn't one per rank...
 ! the bin print out doesn't make much sense anymore
 ! Maybe re-attack later if we want to see the full binning picture?
 ! Will require printing new information in the printbin subroutine.
-        ppiclf_printbinvtu = .FALSE.
-      END IF
+      ppiclf_printbinvtu = .FALSE.
 
       ppiclf_EqualDomain(1:3) = .FALSE.
 
@@ -183,7 +181,7 @@
       nb3  = ppiclf_n_bins(3)
       nb1xnb2 = nb1 * nb2
 
-      ppiclf_ParticleCount(0:(ppiclf_totalBins - 1)) = 0
+      ppiclf_ParticleCount = 0
       ppiclf_particleMoved = .FALSE.
 
 #ifdef TEST
@@ -298,9 +296,10 @@
       INTEGER*4   ierr, i, bin, irank, particleSum
      >           ,targetParticleCnt, prevParticleSum
      >           ,nb1, nb2, nb1xnb2, j, k
-     >           ,iloop, jloop, kloop
+     >           ,iloop, jloop, kloop, remainingParticles
       INTEGER*4   stride(3), stride_L, stride_M, stride_S
       INTEGER*4   bin_L, bin_M
+      REAL*8      max_dp
 
       ! Calculate BTRM on root processor and broadcast
       ! to all others. This ensures all processors have same
@@ -321,6 +320,7 @@
         stride_S = stride(ppiclf_dS)
 
         targetParticleCnt =CEILING(DBLE(ppiclf_glnpart)/DBLE(ppiclf_np))
+        remainingParticles = ppiclf_glnpart 
         particleSum = 0
         irank = 0
         !Iterate through all bins using the fast, branchless stride logic
@@ -338,6 +338,9 @@
                   ! than the current state (overshoot)
                   IF((targetParticleCnt - prevParticleSum) .LE.
      >               (particleSum - targetParticleCnt)         ) THEN
+
+                    remainingParticles = remainingParticles 
+     >                                   - prevParticleSum
                     ! Assign the current bin to the NEXT rank.
                     irank = irank + 1
                     ppiclf_BinToRankMap(bin) = irank
@@ -345,11 +348,16 @@
                     particleSum = ppiclf_ParticleCount(bin) 
                   ELSE
                     ! Keep this bin on the current rank.
+                    remainingParticles = remainingParticles
+     >                                   - particleSum
                     ppiclf_BinToRankMap(bin) = irank
                     irank = irank + 1
                     ! Reset particle counter for the next rank
                     particleSum = 0 
                   END IF
+                  targetParticleCnt = CEILING(DBLE(remainingParticles) /
+     >                                        DBLE(ppiclf_np - irank))
+
                 ELSE
                   ! This is the last rank, so can't increase ranks
                   ppiclf_BinToRankMap(bin) = irank
@@ -364,6 +372,23 @@
 
       END IF ! root Processor
 
+!        IF(ppiclf_nid .EQ. 0) THEN
+!          PRINT*, ''
+!          max_dp = MAXVAL(ppiclf_rprop(PPICLF_R_JDP,:))
+!          PRINT*, 'Bin_dx/max_particle_dp: ', 
+!     >             ppiclf_bins_dx(1)/max_dp
+!          PRINT*, 'Bin_dy/max_particle_dp: ', 
+!     >             ppiclf_bins_dx(2)/max_dp
+!          PRINT*, 'Bin_dz/max_particle_dp: ', 
+!     >             ppiclf_bins_dx(3)/max_dp
+!          PRINT*, 'Max number of particles per bin: ',
+!     >                              MAXVAL(ppiclf_ParticleCount)
+!          PRINT*,'Global particles, number of',
+!     >         ' processors, target number of particles per processor:'
+!     >         ,ppiclf_glnpart, ppiclf_np, targetParticleCnt
+!          PRINT *, ''
+!        END IF
+ 
       ! Share BTRM to all processors 
       CALL MPI_BCAST(ppiclf_BinToRankMap,ppiclf_totalBins,MPI_INTEGER4,
      >               0, ppiclf_comm, ierr) 
@@ -1475,6 +1500,12 @@
 
         tempSBin = i_SBin(1) + ppiclf_nSBin(1)*i_SBin(2) + 
      >             ppiclf_nSBin(1)*ppiclf_nSBin(2)*i_SBin(3)
+
+        IF(tempSBin .GT. SIZE(ppiclf_binPartCount)) THEN
+          PRINT*, 'WARNING - tempSBin > counter size in gp map'
+          CYCLE
+        END IF
+
         ppiclf_binPartCount(tempSBin) = 
      >                    ppiclf_binPartCount(tempSBin) + 1
         IF(ppiclf_binPartCount(tempSBin) 
