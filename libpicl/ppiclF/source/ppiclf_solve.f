@@ -519,8 +519,8 @@
                 CALL ppiclf_user_EvalNearestNeighbor(ip,jp
      >                             ,ppiclf_y(1,ip)
      >                             ,ppiclf_rprop(1,ip)
-     >                             ,ppiclf_rprop_gp(1:3,j)
-     >                             ,ppiclf_rprop_gp(4:PPICLF_LRP+3,j))
+     >                             ,ppiclf_rprop_gp(1:PPICLF_LRS,j)
+     >      ,ppiclf_rprop_gp(1+PPICLF_LRS:PPICLF_LRP+PPICLF_LRS,j))
               END IF
             END DO !k
           END DO !kSB

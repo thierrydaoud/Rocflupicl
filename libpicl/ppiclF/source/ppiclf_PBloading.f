@@ -1408,8 +1408,10 @@
 
                     ppiclf_rprop_gp(1, ppiclf_npart_gp) = gp_x
                     ppiclf_rprop_gp(2, ppiclf_npart_gp) = gp_y
-                    ppiclf_rprop_gp(3, ppiclf_npart_gp) = gp_z 
-                    ppiclf_rprop_gp(4:PPICLF_LRP+3, 
+                    ppiclf_rprop_gp(3, ppiclf_npart_gp) = gp_z
+                    ppiclf_rprop_gp(4:PPICLF_LRS, ppiclf_npart_gp) =
+     >                                         ppiclf_y(4:PPICLF_LRS,ip)
+                    ppiclf_rprop_gp(1+PPICLF_LRS:PPICLF_LRP+PPICLF_LRS, 
      >                              ppiclf_npart_gp   ) = 
      >                                ppiclf_rprop(1:PPICLF_LRP, ip)
                   END DO !iz
