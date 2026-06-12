@@ -55,7 +55,7 @@
 #endif
 
 #ifndef PPICLF_LRP_GP
-#define PPICLF_LRP_GP PPICLF_LRS+PPICLF_LRP+PPICLF_LRP_PRO
+#define PPICLF_LRP_GP 3+PPICLF_LRP
 #endif
 
 #ifndef PPICLF_LIP_GP
