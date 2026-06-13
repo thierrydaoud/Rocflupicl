@@ -6,7 +6,7 @@ c Particle options
      >       ,PPICLF_LSUBSUBBIN,PPICLF_EQUALDOMAIN(3)
      >       ,PPICLF_LINPERIODIC(3), PPICLF_REMOVE_PARTICLE
      >       ,PPICLF_BINCHANGED, PPICLF_PRINTBINVTU
-     >       ,PPICLF_READYTOSOLVE
+     >       ,PPICLF_READYTOSOLVE,PPICLF_BINORDERSET
       COMMON /PPICLF_OPT_PARAM_L/ PPICLF_RESTART, PPICLF_OVERLAP
      >                           ,PPICLF_LCOMM, PPICLF_LINIT
      >                           ,PPICLF_LINTP
@@ -18,6 +18,7 @@ c Particle options
      >                           ,PPICLF_BINCHANGED
      >                           ,PPICLF_PRINTBINVTU
      >                           ,PPICLF_READYTOSOLVE
+     >                           ,PPICLF_BINORDERSET
       DATA PPICLF_LCOMM /.false./
       DATA PPICLF_RESTART /.false./
 
