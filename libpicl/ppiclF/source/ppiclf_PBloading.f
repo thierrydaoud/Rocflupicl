@@ -131,20 +131,40 @@
 
       ! Perform on root processor only to ensure no rounding errors
       IF(ppiclf_nid .EQ. 0) THEN
-        ! Sorting the domain lengths
-        temp_dSize(1) = 1
-        temp_dSize(2) = 2
-        temp_dSize(3) = 3
-        DO i = 1,2
-          DO j = i+1,3
-            IF(ppiclf_BinDomLen(temp_dSize(j)) .GT.
-     >         ppiclf_BinDomLen(temp_dSize(i))) THEN
-              itemp = temp_dSize(i)
-              temp_dSize(i) = temp_dSize(j)
-              temp_dSize(j) = itemp
-            END IF
-          END DO
-        END DO
+        IF(ppiclf_binorderset) THEN
+          ! Not the first time sorting    
+          ! Sorting the domain lengths
+          ! Don't want to constantly flip - do has to be 1.25x bigger
+          temp_dSize(1) = ppiclf_dL
+          temp_dSize(2) = ppiclf_dM
+          temp_dSize(3) = ppiclf_dS
+          DO i = 1,2
+            DO j = i+1,3
+              IF(ppiclf_BinDomLen(temp_dSize(j)) .GT.
+     >           ppiclf_BinDomLen(temp_dSize(i))*1.25) THEN
+                itemp = temp_dSize(i)
+                temp_dSize(i) = temp_dSize(j)
+                temp_dSize(j) = itemp
+              END IF
+            END DO !j
+          END DO !i
+         ELSE
+          ! First time sorting    
+          ! Sorting the domain lengths
+          temp_dSize(1) = 1
+          temp_dSize(2) = 2
+          temp_dSize(3) = 3
+          DO i = 1,2
+            DO j = i+1,3
+              IF(ppiclf_BinDomLen(temp_dSize(j)) .GT.
+     >           ppiclf_BinDomLen(temp_dSize(i))) THEN
+                itemp = temp_dSize(i)
+                temp_dSize(i) = temp_dSize(j)
+                temp_dSize(j) = itemp
+              END IF
+            END DO !j
+          END DO !i
+        END IF !binorderset
       END IF
 
       CALL MPI_BCAST(temp_dSize,3,MPI_INTEGER4,0,ppiclf_comm,ierr)
@@ -152,7 +172,7 @@
       ppiclf_dL = temp_dSize(1) 
       ppiclf_dM = temp_dSize(2) 
       ppiclf_dS = temp_dSize(3)
- 
+      ppiclf_binorderset = .TRUE.
       ! Allocate all arrays dependant on number of bins or processors
       CALL ppiclf_dyn_alloc(ppiclf_totalBins, ppiclf_np)
 
@@ -965,6 +985,12 @@
             ! Counter for overlap cells created by this processor
             ppiclf_nCells_FV2PICL = ppiclf_nCells_FV2PICL + 1
             IF(ppiclf_nCells_FV2PICL .GT. PPICLF_LEE) THEN
+              PRINT*, '***ERROR*** Issue when creating overlap',
+     >                ' cell mapping. Either increase ppiclf cell',
+     >                ' limit, decrease total cell in fluid grid, or',
+     >                ' increase number of particles.'
+              PRINT*, '***ERROR*** Due to rocflu domain cell partition',
+     >                ' and not the ppiclf domain overlap cells.'
               PRINT*, '***ERROR*** PPICLF_LEE',PPICLF_LEE, 'in', 
      >         'MapOverlapGrid must be greater than',
      >          ppiclf_nCells_FV2PICL 
