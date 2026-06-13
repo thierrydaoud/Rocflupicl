@@ -4255,7 +4255,8 @@ IF ( global%casename .EQ. "cyldet" .OR. &
      global%casename .EQ. "wedge"  .OR. &
      global%casename .EQ. "sqdet"  .OR. &
      global%casename .EQ. "hass"   .OR. &
-     global%casename .EQ. "xdsp"    ) THEN
+     global%casename .EQ. "xdsp"    .OR. &
+     global%casename .EQ. "SphereExp"  ) THEN
 
   IF (global%moduleType .EQ. MODULE_TYPE_SOLVER)THEN
     CALL RFLU_WriteVTK(pRegion)

@@ -1008,8 +1008,8 @@ MODULE RFLU_ModJWL
        mcv = (shcvTNT-shcvair)/(rhoTNT-ra) 
     END IF
     
-    w = max(mp*(r-ra)+0.4_RFREAL,wTNT)
-    cv = max(mcv*(r-ra)+shcvair,shcvTNT)
+    w  = max(mp*(r-ra)+0.4_RFREAL, wTNT)
+    cv = max(mcv*(r-ra)+shcvair,   shcvair)
 
     IF (r > rhoTNT) THEN
        mp = 0.0_RFREAL
