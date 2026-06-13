@@ -212,6 +212,7 @@
       ppiclf_time   = 0.0d0
 
 !      ppiclf_readytosolve = .FALSE.
+      ppiclf_binorderset  = .FALSE.
       ppiclf_overlap      = .FALSE.
       ppiclf_linit        = .FALSE.
       ppiclf_lintp        = .FALSE.
@@ -1109,6 +1110,8 @@ c----------------------------------------------------------------------
         ! values are updated.
         CALL ppiclf_comm_CreateGhostPartLB
         CALL ppiclf_comm_MoveGhostPartLB
+        !seeing if this fixes error
+        CALL MPI_BARRIER(ppiclf_comm,ierr) 
         CALL ppiclf_comm_subbinGhostParticleMap
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
@@ -1160,6 +1163,8 @@ c----------------------------------------------------------------------
         ! Ghost particles are needed 
         CALL ppiclf_comm_CreateGhostPartLB
         CALL ppiclf_comm_MoveGhostPartLB
+        !seeing if this fixes error
+        CALL MPI_BARRIER(ppiclf_comm,ierr) 
         CALL ppiclf_comm_subbinGhostParticleMap
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0

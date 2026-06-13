@@ -1131,13 +1131,14 @@
 
       INTEGER*4  i, tempSBin, i_SBin(3), iterationLoop 
       
-      IF(ppiclf_npart .LT. 1) RETURN
 
       ppiclf_maxParticlePerBin = 1
       CALL ppiclf_allocate_BTP(ppiclf_total_SBin,
      >                         ppiclf_maxParticlePerBin)
       ppiclf_binPartCount = 0
        
+      IF(ppiclf_npart .LT. 1) RETURN
+
       ! Two-Pass Allocation for REAL particles
       DO iterationLoop = 1,2
         IF(iterationLoop .EQ. 2) THEN
@@ -1507,6 +1508,7 @@
 
       INTEGER*4  i, tempSBin, i_SBin(3), newMax
 
+      IF(ppiclf_npart .LT. 1) RETURN
       IF(ppiclf_npart_gp .LT. 1) RETURN
 
       ! Single pass: Append ghosts
@@ -1529,7 +1531,7 @@
         tempSBin = i_SBin(1) + ppiclf_nSBin(1)*i_SBin(2) + 
      >             ppiclf_nSBin(1)*ppiclf_nSBin(2)*i_SBin(3)
 
-        IF(tempSBin .GT. SIZE(ppiclf_binPartCount)) THEN
+        IF(tempSBin .GT. SIZE(ppiclf_binPartCount)-1) THEN
           PRINT*, 'WARNING - tempSBin > counter size in gp map'
           CYCLE
         END IF
