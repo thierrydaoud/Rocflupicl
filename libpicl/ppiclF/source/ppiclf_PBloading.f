@@ -20,7 +20,7 @@
 
       DO i = 1,3
         BinMinLen(i) = MAX(ppiclf_filter(i), ppiclf_nndist)
-        BinBuffer(i) = MAX(ppiclf_filter(i), ppiclf_nndist)
+        BinBuffer(i) = 2.0D0*MAX(ppiclf_filter(i), ppiclf_nndist)
       END DO
 
       local_max(1:3) = -1.0D10 ! Fast memset
@@ -36,11 +36,6 @@
         local_min(3) = MIN(local_min(3), ppiclf_y(3,i) - BinBuffer(3))
         local_max(3) = MAX(local_max(3), ppiclf_y(3,i) + BinBuffer(3))
        END DO
-
-      ! Finds global number of particles
-      CALL MPI_ALLREDUCE(ppiclf_npart,ppiclf_glnpart,1
-     >                   ,MPI_INTEGER4, MPI_SUM
-     >                   ,ppiclf_comm, ierr)
 
       ! Finds global bin domain boundaries across MPI ranks
       CALL MPI_ALLREDUCE(local_min, global_min, 3
@@ -61,18 +56,17 @@
         ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
       END DO
 
-
       ppiclf_binchanged = .FALSE.
 
       ! If all particles are within last RK Stage binboundaries,
-      ! do not calculate bins again and do not remap overlap grid
+      ! do not calculate bins again
       DO i = 1,3
-        IF((ppiclf_binb(2*i-1) + BinBuffer(i)) .LT.
+        IF((ppiclf_binb(2*i-1) + 0.4D0*BinMinLen(i)) .LT.
      >             ppiclf_previousbinb(2*i-1)) THEN
           ppiclf_binchanged = .TRUE.
           EXIT
         END IF
-        IF((ppiclf_binb(2*i)   - BinBuffer(i)) .GT.
+        IF((ppiclf_binb(2*i)   - 0.4D0*BinMinLen(i)) .GT.
      >             ppiclf_previousbinb(2*i))   THEN
           ppiclf_binchanged = .TRUE.
           EXIT
@@ -94,7 +88,14 @@
           ppiclf_binb(2*i)    = ppiclf_previousbinb(2*i)
           ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
         END DO
+        ! Other data stays consistent - return from subroutine
+        RETURN
       END IF
+
+      ! Since bins changed, need make new BTRM and move particles
+      ppiclf_particleMoved = .TRUE.
+      ppiclf_rebalance     = .TRUE.
+
 ! Never print bins, since it isn't one per rank...
 ! the bin print out doesn't make much sense anymore
 ! Maybe re-attack later if we want to see the full binning picture?
@@ -114,8 +115,12 @@
           ppiclf_binb(i*2-1) = ppiclf_xdrange(1,i)
           ppiclf_binb(i*2)   = ppiclf_xdrange(2,i)
           ppiclf_EqualDomain(i) = .TRUE.
-          ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1) 
         END IF
+        ! Ensure particle domain bin boundaries do not exceed fluid boundaries
+        ppiclf_binb(i*2-1) = MAX(ppiclf_binb(i*2-1),ppiclf_xdrange(1,i))
+        ppiclf_binb(i*2)   = MIN(ppiclf_binb(i*2),ppiclf_xdrange(2,i))
+        ! Update Bin Domain Length
+        ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1) 
       END DO
 
       ! Set previous bin boundaries for next RK Stage check
@@ -165,7 +170,7 @@
             END DO !j
           END DO !i
         END IF !binorderset
-      END IF
+      END IF !root processor
 
       CALL MPI_BCAST(temp_dSize,3,MPI_INTEGER4,0,ppiclf_comm,ierr)
 
@@ -193,8 +198,7 @@
       INTEGER*4  iloop, jloop, kloop, nRank
       INTEGER*4  stride(3), stride_L, stride_M, stride_S
       INTEGER*4  bin_L, bin_M
-      REAL*8     LB_local, LB_criteria, LB_target, inv_dx(3)
-
+      REAL*8     LB_iterationCount, LB_criteria, LB_target, inv_dx(3)
      
       nb1  = ppiclf_n_bins(1)
       nb2  = ppiclf_n_bins(2)
@@ -202,7 +206,9 @@
       nb1xnb2 = nb1 * nb2
 
       ppiclf_ParticleCount = 0
-      ppiclf_particleMoved = .FALSE.
+      IF(.NOT. ppiclf_binchanged) THEN
+        ppiclf_particleMoved = .FALSE.
+      END IF
 
 #ifdef TEST
       ppiclf_particleMoved = .TRUE.
@@ -231,18 +237,29 @@
         ppiclf_iprop(6,i) = jj    ! y bin #
         ppiclf_iprop(7,i) = kk    ! z bin #
         ppiclf_iprop(8,i) = bin   ! total bin number
-        nRank = ppiclf_BinToRankMap(bin) 
-        IF(nRank .NE. ppiclf_iprop(4,i)) THEN
-          ppiclf_particleMoved = .TRUE.
-          ppiclf_iprop(4,i) = nRank
+        IF(.NOT. ppiclf_binchanged) THEN
+          ! This is based on previous BTRM
+          ! Skip if bins changed since BTRM will update
+          nRank = ppiclf_BinToRankMap(bin) 
+          IF(nRank .NE. ppiclf_iprop(4,i)) THEN
+            ppiclf_particleMoved = .TRUE.
+            ppiclf_iprop(4,i) = nRank
+          END IF
         END IF
         ppiclf_ParticleCount(bin) = ppiclf_ParticleCount(bin) + 1
       END DO
-
       ! Sum particles per bin across MPI Ranks
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_ParticleCount
      >                   ,ppiclf_totalBins ,MPI_INTEGER4, MPI_SUM
      >                   ,ppiclf_comm, ierr)
+
+      ppiclf_glnpart = SUM(ppiclf_ParticleCount)
+
+      IF(ppiclf_binchanged) THEN
+        ppiclf_rebalance     = .TRUE.
+        ppiclf_particleMoved = .TRUE.
+        RETURN
+      END IF
 
       ! Logical OR comparison across MPI Ranks
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_particleMoved
@@ -256,7 +273,6 @@
       LB_criteria = LB_criteria*LB_target
       ppiclf_rebalance = .FALSE.
 
-      !Map dimensions to strides to avoid IFs inside the loops.
       stride(1) = 1
       stride(2) = nb1
       stride(3) = nb1xnb2
@@ -265,7 +281,7 @@
       stride_M = stride(ppiclf_dM)
       stride_S = stride(ppiclf_dS)
 
-      LB_local = 0.0D0 
+      LB_iterationCount = 0.0D0 
       bin = 0 
 
       outer_loop: DO iloop = 0,(ppiclf_n_bins(ppiclf_dL) - 1)
@@ -276,17 +292,17 @@
           
           DO kloop = 0,(ppiclf_n_bins(ppiclf_dS) - 1)
             prevBin = bin
-            !A single fast addition replaces all IF/ELSE tracking logic
             bin = bin_M + kloop * stride_S
 
             IF(ppiclf_BinToRankMap(prevBin) .NE.
      >         ppiclf_BinToRankMap(bin)       ) THEN
-              LB_local = 0.0D0 ! new Rank
+              LB_iterationCount = 0.0D0 ! new Rank
             END IF
 
-            LB_local = LB_local + DBLE(ppiclf_ParticleCount(bin))
+            LB_iterationCount = LB_iterationCount 
+     >                          + DBLE(ppiclf_ParticleCount(bin))
 
-            IF(LB_local .GT. LB_criteria) THEN
+            IF(LB_iterationCount .GT. LB_criteria) THEN
               ppiclf_rebalance = .TRUE.
               EXIT outer_loop
             END IF
@@ -299,9 +315,10 @@
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_rebalance
      >                   ,1, MPI_LOGICAL, MPI_LOR
      >                   ,ppiclf_comm, ierr)
+
       ! Ensure remap particles since BTRM will change
       IF(ppiclf_rebalance) ppiclf_particleMoved = .TRUE.
-      
+
       RETURN
       END SUBROUTINE
 !----------------------------------------------------------------------
@@ -377,7 +394,6 @@
                   END IF
                   targetParticleCnt = CEILING(DBLE(remainingParticles) /
      >                                        DBLE(ppiclf_np - irank))
-
                 ELSE
                   ! This is the last rank, so can't increase ranks
                   ppiclf_BinToRankMap(bin) = irank
@@ -392,23 +408,6 @@
 
       END IF ! root Processor
 
-!        IF(ppiclf_nid .EQ. 0) THEN
-!          PRINT*, ''
-!          max_dp = MAXVAL(ppiclf_rprop(PPICLF_R_JDP,:))
-!          PRINT*, 'Bin_dx/max_particle_dp: ', 
-!     >             ppiclf_bins_dx(1)/max_dp
-!          PRINT*, 'Bin_dy/max_particle_dp: ', 
-!     >             ppiclf_bins_dx(2)/max_dp
-!          PRINT*, 'Bin_dz/max_particle_dp: ', 
-!     >             ppiclf_bins_dx(3)/max_dp
-!          PRINT*, 'Max number of particles per bin: ',
-!     >                              MAXVAL(ppiclf_ParticleCount)
-!          PRINT*,'Global particles, number of',
-!     >         ' processors, target number of particles per processor:'
-!     >         ,ppiclf_glnpart, ppiclf_np, targetParticleCnt
-!          PRINT *, ''
-!        END IF
- 
       ! Share BTRM to all processors 
       CALL MPI_BCAST(ppiclf_BinToRankMap,ppiclf_totalBins,MPI_INTEGER4,
      >               0, ppiclf_comm, ierr) 
@@ -535,6 +534,7 @@
      >           ,ii, jj, kk, nb1, nb2, nb3, nb1xnb2 
      >           ,di, dj, dk, ni, nj, nk, neighborBin
       LOGICAL    wrap_i, wrap_j, wrap_k
+      LOGICAL, ALLOCATABLE, SAVE :: LMapFluid_prev(:)
 
       nb1 = ppiclf_n_bins(1)
       nb2 = ppiclf_n_bins(2)
@@ -604,6 +604,32 @@
         END DO
       END DO
 
+      ! --- Flag whether bin occupancy changed since the prev stage ---
+      ! ppiclf_LMapFluid is globally identical on every rank (built from
+      ! the already-allreduced ppiclf_ParticleCount), so this is a purely
+      ! local comparison -- no extra collective. The flag lets
+      ! ppiclf_solve_PostTimeStepPartLB skip the overlap-grid / cell
+      ! remaps on stages where no bin flips occupied<->empty.
+      IF(.NOT. ALLOCATED(LMapFluid_prev)) THEN
+        ppiclf_emptyChanged = .TRUE.
+      ELSE IF(SIZE(LMapFluid_prev) .NE. SIZE(ppiclf_LMapFluid)) THEN
+        ppiclf_emptyChanged = .TRUE.
+      ELSE
+        ppiclf_emptyChanged =
+     >        ANY(ppiclf_LMapFluid .NEQV. LMapFluid_prev)
+      END IF
+
+      ! Refresh the saved copy for next stage. Reallocate only when the
+      ! bin count changed (a binchanged stage, where the remaps rerun
+      ! regardless of this flag).
+      IF(ALLOCATED(LMapFluid_prev)) THEN
+        IF(SIZE(LMapFluid_prev) .NE. SIZE(ppiclf_LMapFluid))
+     >    DEALLOCATE(LMapFluid_prev)
+      END IF
+      IF(.NOT. ALLOCATED(LMapFluid_prev))
+     >  ALLOCATE(LMapFluid_prev(0:SIZE(ppiclf_LMapFluid)-1))
+      LMapFluid_prev = ppiclf_LMapFluid
+
       RETURN
       END SUBROUTINE
 !----------------------------------------------------------------------
@@ -635,11 +661,6 @@
           DO ii = 0, nb1-1
             iRank = ppiclf_BinToRankMap(iBin) 
             ppiclf_LRankBoundary(iBin, 1:6) = .FALSE.
-            !Skip empty bins. They won't send/need overlap cells or GPs
-            IF(.NOT. ppiclf_LMapFluid(iBin)) THEN
-              iBin = iBin + 1
-              CYCLE
-            END IF
             ! Single pass through all 26 neighbors
             DO dk = -1, 1
               nk = kk + dk
@@ -680,25 +701,22 @@
                   END IF
 
                   neighborBin = ni + nb1*nj + nb1xnb2*nk
-                  ! Only check rank if the neighbor fluid is mapped
-                  IF(ppiclf_LMapFluid(neighborBin)) THEN
-                    nRank = ppiclf_BinToRankMap(neighborBin)
-                    IF(nRank .NE. iRank) THEN
-                      ! Identify which specific faces this neighbor touches
-                      ! Diagonals will correctly trigger multiple faces
-                      IF(di .EQ. -1) 
-     >                  ppiclf_LRankBoundary(iBin,1) = .TRUE.
-                      IF(di .EQ.  1) 
-     >                  ppiclf_LRankBoundary(iBin,2) = .TRUE.
-                      IF(dj .EQ. -1) 
-     >                  ppiclf_LRankBoundary(iBin,3) = .TRUE.
-                      IF(dj .EQ.  1) 
-     >                  ppiclf_LRankBoundary(iBin,4) = .TRUE.
-                      IF(dk .EQ. -1) 
-     >                  ppiclf_LRankBoundary(iBin,5) = .TRUE.
-                      IF(dk .EQ.  1) 
-     >                  ppiclf_LRankBoundary(iBin,6) = .TRUE.
-                     END IF
+                  nRank = ppiclf_BinToRankMap(neighborBin)
+                  IF(nRank .NE. iRank) THEN
+                    ! Identify which specific faces this neighbor touches
+                    ! Diagonals will correctly trigger multiple faces
+                    IF(di .EQ. -1) 
+     >                ppiclf_LRankBoundary(iBin,1) = .TRUE.
+                    IF(di .EQ.  1) 
+     >                ppiclf_LRankBoundary(iBin,2) = .TRUE.
+                    IF(dj .EQ. -1) 
+     >                ppiclf_LRankBoundary(iBin,3) = .TRUE.
+                    IF(dj .EQ.  1) 
+     >                ppiclf_LRankBoundary(iBin,4) = .TRUE.
+                    IF(dk .EQ. -1) 
+     >                ppiclf_LRankBoundary(iBin,5) = .TRUE.
+                    IF(dk .EQ.  1) 
+     >              ppiclf_LRankBoundary(iBin,6) = .TRUE.
                   END IF
 
                 END DO !di
@@ -777,20 +795,15 @@
       tstart = MPI_WTIME()
 #endif
 !
-      ! Not sure MPI BARRIER is necessary, but shouldn't slow too much
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl
      >             ,ppiclf_npart,PPICLF_LPART ! Setup
      >             ,ppiclf_iprop,PPICLF_LIP   ! Integer Comm
      >             ,partl,0                   ! Logical Comm
      >             ,rtemp,rtempLim            ! Real Comm
      >             ,j0)                       ! Receiver processor index
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
-      ! Not sure MPI BARRIER is necessary, but shouldn't slow too much
 !
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
 #endif
 
       IF(ppiclf_npart .GT. PPICLF_LPART .OR. ppiclf_npart .LT. 0) THEN
@@ -849,9 +862,9 @@
       INCLUDE "PPICLF"
       INCLUDE 'mpif.h'
 !
-      INTEGER*4 icalld
-      SAVE      icalld
-      DATA      icalld /0/
+!      INTEGER*4 icalld
+!      SAVE      icalld
+!      DATA      icalld /0/
       INTEGER*4 nkey(2), i, j, k, l, ie, iee, ii, jj, kk, irank,
      >          nl, nii, njj, nrr, iic, jjc, kkc, ierr, nb1, nb2,
      >          nb3, nb1xnb2 
@@ -869,6 +882,7 @@
 ! Code Start:
 !
       ALLOCATE(rank_is_mapped(0:ppiclf_np-1))
+      rank_is_mapped = .FALSE.
       ! Number of fluid finite volume cells that map to particle bins
       ppiclf_nCells_FV2PICL = 0 
       
@@ -883,7 +897,6 @@
       
       ! Loops through number of fluid FV cells on this processor
       DO ie=1,ppiclf_nFVCells  
-        rank_is_mapped = .FALSE.
         centeri(1) = ppiclf_fluid_grid(1,ie)
         centeri(2) = ppiclf_fluid_grid(2,ie)
         centeri(3) = ppiclf_fluid_grid(3,ie)
@@ -905,6 +918,9 @@
         kbin = MAX(0, MIN(kbin, nb3-1))
         ! Calculates processor rank
         bin  = ibin + nb1*jbin + nb1xnb2*kbin
+        ! Only map if fluid cell is needed for interpolation 
+        ! or projection (when particle nearby).
+        IF(.NOT. ppiclf_LMapFluid(bin)) CYCLE 
         ! Will loop through cell mapping once if all below stay as 0
         ixLow  = 0
         ixHigh = 0
@@ -961,9 +977,7 @@
 
               nbin  = ii + nb1*jj + nb1xnb2*kk
               irank = ppiclf_BinToRankMap(nbin)
-              ! Only map if fluid cell is needed for interpolation 
-              ! or projection (when particle nearby).
-              IF(ppiclf_LMapFluid(nbin)) THEN
+              IF(ppiclf_LMapFluid(nbin)) THEN 
                 ! Only need cell once per rank.
                 ! Min distance takes care of periodicity
                 ! in particle to cell mapping 
@@ -975,8 +989,8 @@
                   RankMaps(nRankMaps,3) = ibin  ! Original index
                   RankMaps(nRankMaps,4) = jbin  ! Original index
                   RankMaps(nRankMaps,5) = kbin  ! Original index
-                 END IF !rank_is_mapped
-              END IF !ppiclf_LMapFluid
+                END IF !rank_is_mapped
+              END IF !ppiclf_LMapFluid(nbin)
             END DO !iz
           END DO !iy
         END DO !ix
@@ -1010,6 +1024,9 @@
             ppiclf_cell_map(7,ppiclf_nCells_FV2PICL) = RankMaps(i,5)
           END DO !nRankMaps
         END IF
+        DO i = 1,nRankMaps
+          rank_is_mapped(RankMaps(i,1)) = .FALSE.
+        END DO
       END DO !ie
       
       DEALLOCATE(rank_is_mapped)
@@ -1050,9 +1067,6 @@
       tstart = MPI_WTIME()
 #endif
 
-!
-      ! Not sure MPI BARRIER is necessary, but shouldn't slow too much
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
       CALL pfgslib_crystal_tuple_transfer(
      >        ppiclf_cr_hndl,ppiclf_nCells_FV2PICL,PPICLF_LEE !setup
      >        ,ppiclf_cell_map,nii ! Integer Comm
@@ -1065,13 +1079,9 @@
      >        ,partl,nl                 !Logical to sort
      >        ,ppiclf_picl_grid,nrr      !Real to sort
      >        ,nkey,2)                  !sorting method
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
-      ! Not sure MPI BARRIER is necessary, but shouldn't slow too much
-!
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
 #endif
 
       ! Find distance check for interpolation.
@@ -1105,19 +1115,6 @@
         ppiclf_interp_dchk(l) = Max_CellLen(l)*1.5D0
       END DO
 
-! From David - don't think it's used
-      IF (icalld .EQ. 0) THEN 
-         icalld = icalld + 1
-         CALL ppiclf_prints('   *Begin mpi_comm_split$')
-            CALL mpi_comm_split(ppiclf_comm
-     >                         ,ppiclf_nid
-     >                         ,0
-     >                         ,ppiclf_comm_nid
-     >                         ,ierr)
-         CALL ppiclf_prints('    End mpi_comm_split$')
-         CALL ppiclf_io_OutputDiagGrid
-      END IF
-
       RETURN
       END SUBROUTINE 
 !-----------------------------------------------------------------------
@@ -1129,44 +1126,31 @@
       INCLUDE "mpif.h"
 
 
-      INTEGER*4  i, tempSBin, i_SBin(3), iterationLoop 
-      
+      INTEGER*4  i, tempSBin, i_SBin(3) 
+     
+      ! Quadruple it for ghost particles in the future 
+      ppiclf_maxParticlePerBin = MAX(ppiclf_maxParticlePerBin,
+     >                               4*MAXVAL(ppiclf_ParticleCount))
 
-      ppiclf_maxParticlePerBin = 1
       CALL ppiclf_allocate_BTP(ppiclf_total_SBin,
      >                         ppiclf_maxParticlePerBin)
-      ppiclf_binPartCount = 0
        
       IF(ppiclf_npart .LT. 1) RETURN
 
-      ! Two-Pass Allocation for REAL particles
-      DO iterationLoop = 1,2
-        IF(iterationLoop .EQ. 2) THEN
-          ppiclf_maxParticlePerBin = INT(DBLE(MAX(1, 
-     >                               MAXVAL(ppiclf_binPartCount)))
-     >                               * 2.0D0)
-          
-          CALL ppiclf_allocate_BTP(ppiclf_total_SBin,
-     >                             ppiclf_maxParticlePerBin)
-          ppiclf_binPartList  = 0
-          ppiclf_binPartCount = 0
-        END IF
-
-        ! Process Real Particles
-        DO i = 1,ppiclf_npart
-          i_SBin(1) = ppiclf_iprop(5,i) - ppiclf_binOffset(1)
-          i_SBin(2) = ppiclf_iprop(6,i) - ppiclf_binOffset(2)
-          i_SBin(3) = ppiclf_iprop(7,i) - ppiclf_binOffset(3)
-          tempSBin = i_SBin(1) + ppiclf_nSBin(1)*i_SBin(2) + 
-     >               ppiclf_nSBin(1)*ppiclf_nSBin(2)*i_SBin(3)
-          ppiclf_binPartCount(tempSBin) = 
-     >                        ppiclf_binPartCount(tempSBin) + 1
-          IF(iterationLoop .EQ. 2) THEN
-            ppiclf_binPartList(tempSBin, 
-     >                       ppiclf_binPartCount(tempSBin)) = i
-          END IF
-        END DO ! i
-      END DO ! iterationloop
+      ! This creates a list of local particles contained within
+      ! each bin that resides on this rank.
+      ppiclf_binPartCount = 0
+      DO i = 1,ppiclf_npart
+        i_SBin(1) = ppiclf_iprop(5,i) - ppiclf_binOffset(1)
+        i_SBin(2) = ppiclf_iprop(6,i) - ppiclf_binOffset(2)
+        i_SBin(3) = ppiclf_iprop(7,i) - ppiclf_binOffset(3)
+        tempSBin = i_SBin(1) + ppiclf_nSBin(1)*i_SBin(2) + 
+     >             ppiclf_nSBin(1)*ppiclf_nSBin(2)*i_SBin(3)
+        ppiclf_binPartCount(tempSBin) = 
+     >                      ppiclf_binPartCount(tempSBin) + 1
+        ppiclf_binPartList(tempSBin, 
+     >                     ppiclf_binPartCount(tempSBin)) = i
+      END DO ! i
 
       RETURN
       END SUBROUTINE
@@ -1179,23 +1163,30 @@
       INCLUDE "PPICLF"
       INCLUDE "mpif.h"
 
-
       REAL*8     PeriodicShift(3), distchk, xlo(3), xhi(3)
       REAL*8     gp_x, gp_y, gp_z
       INTEGER*4  ip, iip, jjp, kkp, iig, jjg, kkg, nrank, l, nbin
       INTEGER*4  nb1, nb2, nb3, nb1xnb2, ix, iy, iz, iBin
       INTEGER*4  sb_x, sb_y, sb_z, tempSBin, pIdx, p_id
-      INTEGER*4  ierr, i, j, PeriodicityCase
+      INTEGER*4  ierr, i, j
+      INTEGER*4  sx, sy, sz, shiftKey
       LOGICAL    wrap_x, wrap_y, wrap_z, wrapped_x, wrapped_y, wrapped_z
       LOGICAL    bnd_x_neg, bnd_x_pos, bnd_y_neg, bnd_y_pos 
       LOGICAL    bnd_z_neg, bnd_z_pos, ghost_x_neg, ghost_x_pos
       LOGICAL    ghost_y_neg, ghost_y_pos, ghost_z_neg, ghost_z_pos
-      LOGICAL, ALLOCATABLE :: sent_Rank(:,:)
+      INTEGER*4, ALLOCATABLE, SAVE :: sent_stamp(:,:)
+      INTEGER*4, SAVE :: gpStamp = 0
   
       IF(ppiclf_npart .LT. 1) RETURN
-      ! sent_Rank columns mark periodic conditions.
-      ! 1-none, 2-x, 3-y, 4-z,5-xy, 6-xz, 7-yz, 8-xyz
-      ALLOCATE(sent_Rank(0:ppiclf_np-1,8))
+      ! sent_stamp columns mark the SIGNED periodic shift applied to the
+      ! ghost: shiftKey = (sx+1) + 3*(sy+1) + 9*(sz+1), sx/sy/sz in
+      ! {-1,0,+1}. 13 == no wrap. Two ghosts to one rank are identical
+      ! only if they share this shift vector, so this is the correct
+      ! dedup key.
+      IF(.NOT. ALLOCATED(sent_stamp)) THEN
+        ALLOCATE(sent_stamp(0:ppiclf_np-1,0:26))
+        sent_stamp = 0
+      END IF 
       nb1 = ppiclf_n_bins(1)
       nb2 = ppiclf_n_bins(2)
       nb3 = ppiclf_n_bins(3)
@@ -1263,7 +1254,7 @@
             ! subbin on MPI or periodic boundary.
             DO pIdx = 1, ppiclf_binPartCount(tempSBin)
               ip = ppiclf_binPartList(tempSBin, pIdx)
-              sent_Rank = .FALSE.
+              gpStamp = gpStamp + 1
               ghost_x_neg = bnd_x_neg .AND.
      >                      (ppiclf_y(1,ip) - xlo(1) .LT. distchk)
               ghost_x_pos = bnd_x_pos .AND. 
@@ -1378,47 +1369,22 @@
                     ! which may be shifted when periodic.
                     nbin  = iig + nb1*jjg + nb1xnb2*kkg
 
-                    IF     ((.NOT. wrapped_x) .AND. 
-     >                      (.NOT. wrapped_y) .AND.
-     >                      (.NOT. wrapped_z) ) THEN
-                      PeriodicityCase = 1 
-                    ELSE IF((      wrapped_x) .AND. 
-     >                      (.NOT. wrapped_y) .AND.
-     >                      (.NOT. wrapped_z) ) THEN
-                      PeriodicityCase = 2 
-                    ELSE IF((.NOT. wrapped_x) .AND. 
-     >                      (      wrapped_y) .AND.
-     >                      (.NOT. wrapped_z) ) THEN
-                      PeriodicityCase = 3 
-                    ELSE IF((.NOT. wrapped_x) .AND. 
-     >                      (.NOT. wrapped_y) .AND.
-     >                      (      wrapped_z) ) THEN
-                      PeriodicityCase = 4 
-                    ELSE IF((      wrapped_x) .AND. 
-     >                      (      wrapped_y) .AND.
-     >                      (.NOT. wrapped_z) ) THEN
-                      PeriodicityCase = 5 
-                    ELSE IF((      wrapped_x) .AND. 
-     >                      (.NOT. wrapped_y) .AND.
-     >                      (      wrapped_z) ) THEN
-                      PeriodicityCase = 6 
-                    ELSE IF((.NOT. wrapped_x) .AND. 
-     >                      (      wrapped_y) .AND.
-     >                      (      wrapped_z) ) THEN
-                      PeriodicityCase = 7 
-                    ELSE IF((      wrapped_x) .AND. 
-     >                      (      wrapped_y) .AND.
-     >                      (      wrapped_z) ) THEN
-                      PeriodicityCase = 8 
-                    END IF
+                    sx = 0
+                    sy = 0
+                    sz = 0
+                    IF(wrapped_x) sx = ix
+                    IF(wrapped_y) sy = iy
+                    IF(wrapped_z) sz = iz
+                    shiftKey = (sx+1) + 3*(sy+1) + 9*(sz+1) ! 0..26
 
-                    ! Skip if it belongs to this rank AND it didn't wrap periodically
-                    IF(nrank .EQ. ppiclf_nid .AND. 
-     >                 PeriodicityCase .EQ. 1) CYCLE 
+                    ! Skip if it belongs to this rank AND it didn't wrap
+                    ! periodically (shiftKey==13 is the no-wrap center).
+                    IF(nrank .EQ. ppiclf_nid .AND. shiftKey .EQ. 13) 
+     >                CYCLE
 
-                    IF(sent_Rank(nrank,PeriodicityCase)) CYCLE
+                    IF(sent_stamp(nrank,shiftKey) .EQ. gpStamp) CYCLE
 
-                    sent_Rank(nrank,PeriodicityCase) = .TRUE.
+                    sent_stamp(nrank,shiftKey) = gpStamp
                     ppiclf_npart_gp = ppiclf_npart_gp + 1
                     ppiclf_iprop_gp(1, ppiclf_npart_gp) =
      >                                      ppiclf_iprop(1, ip)  
@@ -1450,9 +1416,6 @@
         END DO ! sb_y
       END DO ! sb_z
 
-      DEALLOCATE(sent_Rank)
-
-
       RETURN
       END SUBROUTINE
 !      
@@ -1478,22 +1441,15 @@
       tstart = MPI_WTIME()
 #endif
 
-!
-      ! Not sure MPI BARRIER is necessary, but shouldn't slow too much
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl
      >             ,ppiclf_npart_gp,PPICLF_LPART_GP ! Setup
      >             ,ppiclf_iprop_gp,PPICLF_LIP_GP   ! Integer Comm
      >             ,partl,0                         ! Logical Comm
      >             ,ppiclf_rprop_gp,PPICLF_LRP_GP   ! Real Comm
      >             ,iprop_proc_index)               ! Receiver processor index
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
-      ! Not sure MPI BARRIER is necessary, but shouldn't slow too much
-!
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
 #endif
       RETURN
       END SUBROUTINE
@@ -1532,7 +1488,6 @@
      >             ppiclf_nSBin(1)*ppiclf_nSBin(2)*i_SBin(3)
 
         IF(tempSBin .GT. SIZE(ppiclf_binPartCount)-1) THEN
-          PRINT*, 'WARNING - tempSBin > counter size in gp map'
           CYCLE
         END IF
 
@@ -1556,6 +1511,148 @@
       RETURN
       END SUBROUTINE
 !-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_comm_subbinFineParticleMap
+!
+!     Build a FINE sub-bin grid sized by the particle-particle search
+!     cutoff (ppiclf_nndist) and map BOTH real and ghost particles into
+!     it by POSITION. This is a separate, finer grid than the coarse
+!     iprop sub-bins (sized by ppiclf_filter) used for communication and
+!     ghost creation. Using it for the nearest-neighbor search shrinks
+!     the 27-cell candidate set by roughly (ppiclf_filter/nndist)**3.
+!
+!     Storage convention (matches ppiclf_solve_NearestNeighborSB):
+!       real  particle i -> stored as +i (position ppiclf_y(1:3,i))
+!       ghost particle i -> stored as -i (position ppiclf_rprop_gp(1:3,i))
+!
+!     The fine/coarse DECISION (ppiclf_useFineGrid) is made by the
+!     CALLER (the driver, e.g. ppiclf_solve_SetYdot) BEFORE this routine
+!     is called; this routine only BUILDS the grid. The search then
+!     locates a particle's own fine cell FROM ITS POSITION using
+!       ppiclf_fineLo / ppiclf_fineInvLen / ppiclf_nFine
+!     and sweeps the 27 neighbor cells of
+!       ppiclf_finePartCount / ppiclf_finePartList.
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+!
+! Internal:
+!
+      INTEGER*4  i, d, fi(3), tempBin, ng, icount, newMax
+      REAL*8     xlo(3), xhi(3), boxLen(3), fineCut, fineLen(3), pad
+
+      IF(ppiclf_npart .LT. 1) RETURN
+
+      ng = ppiclf_npart_gp
+      IF(ng .LT. 0) ng = 0
+
+      ! Search cutoff = radius used in ppiclf_solve_NearestNeighborSB
+      ! (driver guarantees ppiclf_nndist > 0 before calling).
+      fineCut = ppiclf_nndist
+
+      ! Built from actual positions (not the coarse halo) so every
+      ! particle is guaranteed inside and no clamp can ever drop one.
+      xlo(1) = ppiclf_y(1,1)
+      xlo(2) = ppiclf_y(2,1)
+      xlo(3) = ppiclf_y(3,1)
+      xhi(1) = xlo(1)
+      xhi(2) = xlo(2)
+      xhi(3) = xlo(3)
+      DO i = 1,ppiclf_npart
+        DO d = 1,3
+          xlo(d) = MIN(xlo(d), ppiclf_y(d,i))
+          xhi(d) = MAX(xhi(d), ppiclf_y(d,i))
+        END DO
+      END DO
+      DO i = 1,ng
+        DO d = 1,3
+          xlo(d) = MIN(xlo(d), ppiclf_rprop_gp(d,i))
+          xhi(d) = MAX(xhi(d), ppiclf_rprop_gp(d,i))
+        END DO
+      END DO
+
+      ! Build the fine grid. Cell length must be >= cutoff so the
+      ! 27-cell stencil is complete (standard cell-list invariant).
+      ! FLOOR(boxLen/cut) maximizes cells while keeping len >= cut.
+      pad = 0.5D0*fineCut
+      ppiclf_total_fineBin = 1
+      DO d = 1,3
+        xlo(d) = xlo(d) - pad
+        xhi(d) = xhi(d) + pad
+        boxLen(d) = xhi(d) - xlo(d)
+        ppiclf_nFine(d) = MAX(1, FLOOR(boxLen(d)/fineCut))
+        fineLen(d) = boxLen(d)/DBLE(ppiclf_nFine(d))
+        ppiclf_fineLo(d) = xlo(d)
+        ppiclf_fineInvLen(d) = 1.0D0/fineLen(d)
+        ppiclf_total_fineBin = ppiclf_total_fineBin*ppiclf_nFine(d)
+      END DO
+
+      ! Per-fine-bin capacity. Keep the cheap data-driven estimate but
+      ! never shrink it across calls; grow-on-demand below covers any
+      ! residual overflow, so correctness no longer depends on it.
+      ppiclf_maxPartPerFineBin =
+     >     MAX(ppiclf_maxPartPerFineBin, 5*MAXVAL(ppiclf_ParticleCount))
+      IF(ppiclf_maxPartPerFineBin .LT. 1) ppiclf_maxPartPerFineBin = 20
+      CALL ppiclf_allocate_FineBTP(ppiclf_total_fineBin,
+     >                            ppiclf_maxPartPerFineBin)
+      ppiclf_finePartCount = 0
+
+      DO i = 1,ppiclf_npart
+        fi(1)=FLOOR((ppiclf_y(1,i)-ppiclf_fineLo(1))
+     >              *ppiclf_fineInvLen(1))
+        fi(2)=FLOOR((ppiclf_y(2,i)-ppiclf_fineLo(2))
+     >              *ppiclf_fineInvLen(2))
+        fi(3)=FLOOR((ppiclf_y(3,i)-ppiclf_fineLo(3))
+     >              *ppiclf_fineInvLen(3))
+        fi(1)=MAX(0,MIN(fi(1),ppiclf_nFine(1)-1))
+        fi(2)=MAX(0,MIN(fi(2),ppiclf_nFine(2)-1))
+        fi(3)=MAX(0,MIN(fi(3),ppiclf_nFine(3)-1))
+        tempBin = fi(1) + ppiclf_nFine(1)*fi(2)
+     >          + ppiclf_nFine(1)*ppiclf_nFine(2)*fi(3)
+        icount = ppiclf_finePartCount(tempBin) + 1
+        ppiclf_finePartCount(tempBin) = icount
+        ! Grow on demand. icount rises by 1 per hit, so one doubling
+        ! always restores capacity (newMax >= icount).
+        IF(icount .GT. ppiclf_maxPartPerFineBin) THEN
+          newMax = 2*ppiclf_maxPartPerFineBin + 1
+          CALL ppiclf_reallocate_FineBTP(ppiclf_total_fineBin,
+     >                                   ppiclf_maxPartPerFineBin,
+     >                                   newMax)
+          ppiclf_maxPartPerFineBin = newMax
+        END IF
+        ppiclf_finePartList(tempBin,icount) = i
+      END DO
+
+      ! Ghost particles -> -i (shifted position ppiclf_rprop_gp)
+      DO i = 1,ng
+        fi(1)=FLOOR((ppiclf_rprop_gp(1,i)-ppiclf_fineLo(1))
+     >              *ppiclf_fineInvLen(1))
+        fi(2)=FLOOR((ppiclf_rprop_gp(2,i)-ppiclf_fineLo(2))
+     >              *ppiclf_fineInvLen(2))
+        fi(3)=FLOOR((ppiclf_rprop_gp(3,i)-ppiclf_fineLo(3))
+     >              *ppiclf_fineInvLen(3))
+        fi(1)=MAX(0,MIN(fi(1),ppiclf_nFine(1)-1))
+        fi(2)=MAX(0,MIN(fi(2),ppiclf_nFine(2)-1))
+        fi(3)=MAX(0,MIN(fi(3),ppiclf_nFine(3)-1))
+        tempBin = fi(1) + ppiclf_nFine(1)*fi(2)
+     >          + ppiclf_nFine(1)*ppiclf_nFine(2)*fi(3)
+        icount = ppiclf_finePartCount(tempBin) + 1
+        ppiclf_finePartCount(tempBin) = icount
+        ! Grow on demand -- no ghost is ever dropped.
+        IF(icount .GT. ppiclf_maxPartPerFineBin) THEN
+          newMax = 2*ppiclf_maxPartPerFineBin + 1
+          CALL ppiclf_reallocate_FineBTP(ppiclf_total_fineBin,
+     >                                   ppiclf_maxPartPerFineBin,
+     >                                   newMax)
+          ppiclf_maxPartPerFineBin = newMax
+        END IF
+        ppiclf_finePartList(tempBin,icount) = -i
+      END DO
+
+      RETURN
+      END SUBROUTINE
+!-----------------------------------------------------------------------
 !
       SUBROUTINE ppiclf_comm_subbinCellMap
 
@@ -1569,8 +1666,7 @@
 ! Input:
 !
       INTEGER*4  ie, i, j, k, iTemp_SBin(3)
-     >          ,maxCellsPerBin, tempSBin, i_SBin(3)
-     >          , iterationLoop 
+     >          ,tempSBin, i_SBin(3), icount, newMax
       
       IF(ppiclf_npart .LT. 1) RETURN
 
@@ -1582,44 +1678,57 @@
      >                      0.D0,0)
       END IF
 
-      ! iterationLoop 1 -> Find the maximum cell count per bin for array
-      ! allocation
-      ! iterationLoop 2 -> Creates list of cells per bin
-      maxCellsPerBin = 1
-      DO iterationLoop = 1,2
-        IF(iterationLoop .EQ. 2) THEN
-          maxCellsPerBin = MAX(1,MAXVAL(ppiclf_binCellCount))
-        END IF
-        ! Allocated binCellList and binCellCount Arrays
-        CALL ppiclf_allocate_BTC(ppiclf_total_SBin,maxCellsPerBin)
-        ! Assign Subbin counters to 0
-        ppiclf_binCellList  = 0
-        ppiclf_binCellCount = 0
+      ! 92 was chosen with the assumption that min_cell = 3*max_cell
+      ! in all 3 dimension (3*3*3*1.5*1.5*1.5=91)
+      IF(ppiclf_maxCellsPerBin .LT. 1) ppiclf_maxCellsPerBin = 92
+      CALL ppiclf_allocate_BTC(ppiclf_total_SBin, ppiclf_maxCellsPerBin)
+      ppiclf_binCellCount = 0
 
-        ! NOTE: Overlap cells have not been shifted for periodicity
-        !       Both the cell centroid and cell bin indices are of the
-        !       original fluid cell.
-        ! Map each overlap cells to subbins
-        ! In the i,j,k loops below, 0 takes care of non-periodic mapping
-        ! and 1 takes care of periodic mapping.  If a cell is in corner,
-        ! it'll be mapped to 2*2*2=8 subbins.
-        DO ie = 1,ppiclf_nCells_FV2PICL
-          i_SBin(1) = ppiclf_cell_map(5,ie) - ppiclf_binOffset(1)
-          i_SBin(2) = ppiclf_cell_map(6,ie) - ppiclf_binOffset(2)
-          i_SBin(3) = ppiclf_cell_map(7,ie) - ppiclf_binOffset(3)
-          DO i = 0,1
-            IF(i .EQ. 0) THEN
-              iTemp_SBin(1) = i_SBin(1)
-              IF(iTemp_SBin(1) .LT. 0 .OR. 
-     >           iTemp_SBin(1) .GT. ppiclf_nSBin(1) - 1) CYCLE 
-            ELSE ! i .EQ. 1
-              IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)) THEN
-                IF(i_SBin(1) .LE. 0) THEN
-                  iTemp_SBin(1) = ppiclf_nSBin(1) - 1
-                  IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE 
-                ELSE IF(i_SBin(1) .GE. ppiclf_nSBin(1) - 1) THEN
-                  iTemp_SBin(1) = 0
-                  IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE
+      ! NOTE: Overlap cells have not been shifted for periodicity
+      !       Both the cell centroid and cell bin indices are of the
+      !       original fluid cell.
+      ! Creates a list of overlap cells for a given bin on this rank.
+      ! In the i,j,k loops below, 0 takes care of non-periodic mapping
+      ! and 1 takes care of periodic mapping.  If a cell is in corner,
+      ! it can be mapped to a maximum of 2*2*2=8 bins.
+      DO ie = 1,ppiclf_nCells_FV2PICL
+        i_SBin(1) = ppiclf_cell_map(5,ie) - ppiclf_binOffset(1)
+        i_SBin(2) = ppiclf_cell_map(6,ie) - ppiclf_binOffset(2)
+        i_SBin(3) = ppiclf_cell_map(7,ie) - ppiclf_binOffset(3)
+        DO i = 0,1
+          IF(i .EQ. 0) THEN
+            iTemp_SBin(1) = i_SBin(1)
+            IF(iTemp_SBin(1) .LT. 0 .OR. 
+     >         iTemp_SBin(1) .GT. ppiclf_nSBin(1) - 1) CYCLE 
+          ELSE ! i .EQ. 1
+            IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)) THEN
+              IF(i_SBin(1) .LE. 0) THEN
+                iTemp_SBin(1) = ppiclf_nSBin(1) - 1
+                IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE 
+              ELSE IF(i_SBin(1) .GE. ppiclf_nSBin(1) - 1) THEN
+                iTemp_SBin(1) = 0
+                IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE
+              ELSE
+                CYCLE
+              END IF
+            ELSE 
+              CYCLE
+            END IF
+          END IF
+          DO j = 0,1
+            IF(j .EQ. 0) THEN
+              iTemp_SBin(2) = i_SBin(2)
+              IF(iTemp_SBin(2) .LT. 0 .OR.  
+     >           iTemp_SBin(2) .GT. ppiclf_nSBin(2) - 1) CYCLE
+            ELSE ! j .EQ. 1
+              ! This takes care of periodicity for single processor
+              IF(ppiclf_linperiodic(2).AND.ppiclf_EqualDomain(2)) THEN
+                IF(i_SBin(2) .LE. 0) THEN
+                  iTemp_SBin(2) = ppiclf_nSBin(2) - 1
+                  IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
+                ELSE IF(i_SBin(2) .GE. ppiclf_nSBin(2) - 1) THEN
+                  iTemp_SBin(2) = 0
+                  IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
                 ELSE
                   CYCLE
                 END IF
@@ -1627,20 +1736,21 @@
                 CYCLE
               END IF
             END IF
-            DO j = 0,1
-              IF(j .EQ. 0) THEN
-                iTemp_SBin(2) = i_SBin(2)
-                IF(iTemp_SBin(2) .LT. 0 .OR.  
-     >             iTemp_SBin(2) .GT. ppiclf_nSBin(2) - 1) CYCLE
-              ELSE ! j .EQ. 1
+            DO k = 0,1
+              IF(k .EQ. 0) THEN
+                iTemp_SBin(3) = i_SBin(3)
+                IF(iTemp_SBin(3) .LT. 0 .OR. 
+     >             iTemp_SBin(3) .GT. ppiclf_nSBin(3) - 1) CYCLE
+              ELSE ! k .EQ. 1
                 ! This takes care of periodicity for single processor
-                IF(ppiclf_linperiodic(2).AND.ppiclf_EqualDomain(2)) THEN
-                  IF(i_SBin(2) .LE. 0) THEN
-                    iTemp_SBin(2) = ppiclf_nSBin(2) - 1
-                    IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
-                  ELSE IF(i_SBin(2) .GE. ppiclf_nSBin(2) - 1) THEN
-                    iTemp_SBin(2) = 0
-                    IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
+                IF(ppiclf_linperiodic(3) .AND. 
+     >                                    ppiclf_EqualDomain(3)) THEN 
+                  IF(i_SBin(3) .LE. 0) THEN
+                    iTemp_SBin(3) = ppiclf_nSBin(3) - 1
+                    IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
+                  ELSE IF(i_SBin(3) .GE. ppiclf_nSBin(3) - 1) THEN
+                    iTemp_SBin(3) = 0
+                    IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
                   ELSE
                     CYCLE
                   END IF
@@ -1648,53 +1758,34 @@
                   CYCLE
                 END IF
               END IF
-              DO k = 0,1
-                IF(k .EQ. 0) THEN
-                  iTemp_SBin(3) = i_SBin(3)
-                  IF(iTemp_SBin(3) .LT. 0 .OR. 
-     >               iTemp_SBin(3) .GT. ppiclf_nSBin(3) - 1) CYCLE
-                ELSE ! k .EQ. 1
-                  ! This takes care of periodicity for single processor
-                  IF(ppiclf_linperiodic(3) .AND. 
-     >                                      ppiclf_EqualDomain(3)) THEN 
-                    IF(i_SBin(3) .LE. 0) THEN
-                      iTemp_SBin(3) = ppiclf_nSBin(3) - 1
-                      IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
-                    ELSE IF(i_SBin(3) .GE. ppiclf_nSBin(3) - 1) THEN
-                      iTemp_SBin(3) = 0
-                      IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
-                    ELSE
-                      CYCLE
-                    END IF
-                  ELSE 
-                    CYCLE
-                  END IF
-                END IF
-                ! Finally, add the cell to a subbin 
-                tempSBin = iTemp_SBin(1) + ppiclf_nSBin(1)*iTemp_SBin(2)
-     >                   + ppiclf_nSBin(1)*ppiclf_nSBin(2)*iTemp_SBin(3)
-                IF(tempSBin .LT. 0 .OR. 
-     >             tempSBin .GT. ppiclf_total_SBin-1) THEN
-                PRINT*, 'ERROR:Bad Subbin Index in Overlap Cell Mapping'
-     >                   , tempSBin
-                  CALL ppiclf_exittr('',0.0D0,0)
-                END IF
-                ppiclf_binCellCount(tempSBin) = 
-     >                        ppiclf_binCellCount(tempSBin) + 1
-                IF(iterationLoop .EQ. 2) THEN
-                  IF(ppiclf_binCellCount(tempSBin) 
-     >                                    .GT. maxCellsPerBin) THEN
-                    PRINT*, 'ERROR: More Cells per Subbin than expected'
-                    CALL ppiclf_exittr('',0.0D0,0)
-                  END IF
-                  ppiclf_binCellList(tempSBin,
-     >                               ppiclf_binCellCount(tempSBin)) = ie
-                END IF
-              END DO !k
-            END DO !j 
-          END DO !i
-        END DO !ie
-      END DO !iterationLoop
+              ! Finally, add the cell to a subbin 
+              tempSBin = iTemp_SBin(1) + ppiclf_nSBin(1)*iTemp_SBin(2)
+     >                 + ppiclf_nSBin(1)*ppiclf_nSBin(2)*iTemp_SBin(3)
+              IF(tempSBin .LT. 0 .OR. 
+     >           tempSBin .GT. ppiclf_total_SBin-1) THEN
+               PRINT*, 'ERROR:Bad Subbin Index in Overlap Cell Mapping'
+     >                 , tempSBin
+                CALL ppiclf_exittr('',0.0D0,0)
+              END IF
+
+              icount = ppiclf_binCellCount(tempSBin) + 1
+              ppiclf_binCellCount(tempSBin) = icount
+
+              ! Grow on demand. icount rises by 1 per hit, so a single
+              ! doubling always restores capacity (newMax >= icount).
+              IF(icount .GT. ppiclf_maxCellsPerBin) THEN
+                newMax = 2*ppiclf_maxCellsPerBin + 1
+                CALL ppiclf_reallocate_BTC(ppiclf_total_SBin,
+     >                                     ppiclf_maxCellsPerBin,
+     >                                     newMax)
+                ppiclf_maxCellsPerBin = newMax
+              END IF
+
+              ppiclf_binCellList(tempSBin, icount) = ie
+            END DO !k
+          END DO !j 
+        END DO !i
+      END DO !ie
 
       RETURN
       END SUBROUTINE

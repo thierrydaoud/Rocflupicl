@@ -177,6 +177,7 @@
 !-----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InitParam(imethod,ndim,iendian)
 !
+      USE ppiclf_DynamicAllocation
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
@@ -212,13 +213,16 @@
       ppiclf_time   = 0.0d0
 
 !      ppiclf_readytosolve = .FALSE.
-      ppiclf_binorderset  = .FALSE.
-      ppiclf_overlap      = .FALSE.
-      ppiclf_linit        = .FALSE.
-      ppiclf_lintp        = .FALSE.
-      ppiclf_lproj        = .FALSE.
-      ppiclf_binchanged   = .TRUE.
-      ppiclf_printbinvtu  = .FALSE.
+      ppiclf_binorderset   = .FALSE.
+      ppiclf_overlap       = .FALSE.
+      ppiclf_linit         = .FALSE.
+      ppiclf_lintp         = .FALSE.
+      ppiclf_lproj         = .FALSE.
+      ppiclf_particleMoved = .TRUE.
+      ppiclf_binchanged    = .TRUE.
+      ppiclf_emptyChanged  = .TRUE.
+      ppiclf_rebalance     = .TRUE.
+      ppiclf_printbinvtu   = .FALSE.
       IF(PPICLF_INTERP .EQ. 1)  ppiclf_lintp = .TRUE.
       IF(PPICLF_PROJECT .EQ. 1) ppiclf_lproj = .TRUE.
 
@@ -236,6 +240,7 @@
       ppiclf_interp_dchk(1) = 0.0D0
       ppiclf_interp_dchk(2) = 0.0D0
       ppiclf_interp_dchk(3) = 0.0D0
+      ppiclf_maxPartPerFineBin = 1
  
       ppiclf_n_bins(1) = 1
       ppiclf_n_bins(2) = 1
@@ -409,7 +414,11 @@
 !
 !-----------------------------------------------------------------------
 !
-      SUBROUTINE ppiclf_solve_NearestNeighborSB(ip)
+#ifdef TEST
+       SUBROUTINE ppiclf_solve_NearestNeighborSB(ip,FineGridInput)
+#else
+       SUBROUTINE ppiclf_solve_NearestNeighborSB(ip)
+#endif
 !
       USE ppiclf_DynamicAllocation
 
@@ -427,21 +436,51 @@
      >          cross_x, cross_y, cross_z, unx, uny, unz
       INTEGER*4 i,k, kmax, kp, kkp, kk, j, jp, l, iSB, jSB, kSB,
      >          loopSB, tempSB, iSBin(3), istride, ip, ii, jj
-      INTEGER*4 n_SBin1x2, i_SBin(3)
+      INTEGER*4 n_SBin1x2, i_SBin(3), nS1, nS2, nS3, cnt
+#ifdef TEST
+      LOGICAL   FineGridInput
+
+      ppiclf_useFineGrid = FineGridInput
+!      IF(ip .EQ. 1 .AND. ppiclf_nid .EQ. 0) PRINT*, 
+!     >     'ppiclf_useFineGrid:',ppiclf_useFineGrid
+#endif
 
 !
 !
       distSQ = ppiclf_nndist**2
 
-      n_SBin1x2 = ppiclf_nSBin(1)*ppiclf_nSBin(2)
       ! particle centers in all directions
       xp(1) = ppiclf_y(PPICLF_JX, ip)
       xp(2) = ppiclf_y(PPICLF_JY, ip)
       xp(3) = ppiclf_y(PPICLF_JZ, ip)
-      i_SBin(1) = ppiclf_iprop(5,ip) - ppiclf_binOffset(1)
-      i_SBin(2) = ppiclf_iprop(6,ip) - ppiclf_binOffset(2)
-      i_SBin(3) = ppiclf_iprop(7,ip) - ppiclf_binOffset(3)  
-      tempSB = i_SBin(1) + i_SBin(2)*ppiclf_nSBin(1) 
+
+      ! Select FINE (nndist-sized) or COARSE (filter-sized) sub-bin
+      ! grid. Fine path finds the own cell FROM POSITION; coarse path
+      ! uses the precomputed iprop indices. The 27-cell sweep below is
+      ! shared via nS1/nS2/nS3 and the active count/list arrays.
+      IF(ppiclf_useFineGrid) THEN
+        nS1 = ppiclf_nFine(1)
+        nS2 = ppiclf_nFine(2)
+        nS3 = ppiclf_nFine(3)
+        i_SBin(1) = FLOOR((xp(1)-ppiclf_fineLo(1))
+     >                    *ppiclf_fineInvLen(1))
+        i_SBin(2) = FLOOR((xp(2)-ppiclf_fineLo(2))
+     >                    *ppiclf_fineInvLen(2))
+        i_SBin(3) = FLOOR((xp(3)-ppiclf_fineLo(3))
+     >                    *ppiclf_fineInvLen(3))
+        i_SBin(1) = MAX(0, MIN(i_SBin(1), nS1-1))
+        i_SBin(2) = MAX(0, MIN(i_SBin(2), nS2-1))
+        i_SBin(3) = MAX(0, MIN(i_SBin(3), nS3-1))
+      ELSE
+        nS1 = ppiclf_nSBin(1)
+        nS2 = ppiclf_nSBin(2)
+        nS3 = ppiclf_nSBin(3)
+        i_SBin(1) = ppiclf_iprop(5,ip) - ppiclf_binOffset(1)
+        i_SBin(2) = ppiclf_iprop(6,ip) - ppiclf_binOffset(2)
+        i_SBin(3) = ppiclf_iprop(7,ip) - ppiclf_binOffset(3)
+      END IF
+      n_SBin1x2 = nS1*nS2
+      tempSB = i_SBin(1) + i_SBin(2)*nS1
      >         + i_SBin(3)*n_SBin1x2
 #ifdef TEST
       PARTICLE_NN(ip) = 0 
@@ -450,17 +489,27 @@
       ! Loop through real particles
       DO iSB = -1,1     !to look at -1,current,+1 x-dir subbins
         ii = i_SBin(1) + iSB
-        IF(ii .LT. 0 .OR. ii .GT. ppiclf_nSBin(1)-1) CYCLE
+        IF(ii .LT. 0 .OR. ii .GT. nS1-1) CYCLE
         DO jSB = -1,1   !to look at -1,current,+1 x-dir subbins
           jj = i_SBin(2) + jSB
-          IF(jj .LT. 0 .OR. jj .GT. ppiclf_nSBin(2)-1) CYCLE
+          IF(jj .LT. 0 .OR. jj .GT. nS2-1) CYCLE
           DO kSB = -1,1 !to look at -1,current,+1 x-dir subbins
             kk = i_SBin(3) + kSB
-            IF(kk .LT. 0 .OR. kk .GT. ppiclf_nSBin(3)-1) CYCLE
+            IF(kk .LT. 0 .OR. kk .GT. nS3-1) CYCLE
             ! Loops through 27 adjacent subbins
-            loopSB = ii + jj*ppiclf_nSBin(1) + kk*n_SBin1x2 
-            DO k = 1,ppiclf_binPartCount(loopSB) 
-              j = ppiclf_binPartList(loopSB,k)
+            loopSB = ii + jj*nS1 + kk*n_SBin1x2 
+            ! Read candidates from the active grid (fine or coarse)
+            IF(ppiclf_useFineGrid) THEN
+              cnt = ppiclf_finePartCount(loopSB)
+            ELSE
+              cnt = ppiclf_binPartCount(loopSB)
+            END IF
+            DO k = 1,cnt
+              IF(ppiclf_useFineGrid) THEN
+                j = ppiclf_finePartList(loopSB,k)
+              ELSE
+                j = ppiclf_binPartList(loopSB,k)
+              END IF
               IF (j .GT. 0) THEN ! Real particle
                 ! Cycle when same particle         
                 IF(ppiclf_iprop(1,j) .EQ. ppiclf_iprop(1,ip) .AND.
@@ -734,7 +783,6 @@
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TWriteSolution = tfinal - tstart
 #endif
 
       RETURN
@@ -768,21 +816,21 @@ c----------------------------------------------------------------------
       REAL*8    tsPeriodic, tfPeriodic
 
       ! Reset timers at start of each RK stage
-      PPICLF_TCreateBin              = 0.0D0
-      PPICLF_TSendParticles          = 0.0D0
-      PPICLF_TSendGridOverlap        = 0.0D0               
-      PPICLF_TSendFluidFields        = 0.0D0             
-      PPICLF_TParticleParticleModels = 0.0D0       
-      PPICLF_TFluidParticleModels    = 0.0D0     
-      PPICLF_TSendGhostParticles     = 0.0D0     
-      PPICLF_TMapParticlesCells      = 0.0D0    
-      PPICLF_TInterpolation          = 0.0D0    
-      PPICLF_TProjection             = 0.0D0     
-      PPICLF_TWriteSolution          = 0.0D0                  
-      PPICLF_TIntegration            = 0.0D0    
-      PPICLF_TPeriodicity            = 0.0D0       
-      PPICLF_TDataTransfers          = 0.0D0        
-      PPICLF_TTotal                  = 0.0D0
+!      PPICLF_TCreateBin              = 0.0D0
+!      PPICLF_TSendParticles          = 0.0D0
+!      PPICLF_TSendGridOverlap        = 0.0D0               
+!      PPICLF_TSendFluidFields        = 0.0D0             
+!      PPICLF_TParticleParticleModels = 0.0D0       
+!      PPICLF_TFluidParticleModels    = 0.0D0     
+!      PPICLF_TSendGhostParticles     = 0.0D0     
+!      PPICLF_TMapParticlesCells      = 0.0D0    
+!      PPICLF_TInterpolation          = 0.0D0    
+!      PPICLF_TProjection             = 0.0D0     
+!      PPICLF_TWriteSolution          = 0.0D0                  
+!      PPICLF_TIntegration            = 0.0D0    
+!      PPICLF_TPeriodicity            = 0.0D0       
+!      PPICLF_TDataTransfers          = 0.0D0        
+!      PPICLF_TTotal                  = 0.0D0
 
       tstart = MPI_WTIME()
 #endif
@@ -815,12 +863,10 @@ c----------------------------------------------------------------------
       END IF
 #ifdef PERF
       tfPeriodic = MPI_WTIME()
-      PPICLF_TPeriodicity = tfPeriodic - tsPeriodic
 #endif
       CALL ppiclf_solve_PostTimeStepPartLB
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TTotal = tfinal - tstart
       CALL ppiclf_io_WritePerformance()
 #endif
       RETURN
@@ -870,7 +916,6 @@ c----------------------------------------------------------------------
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TIntegration = tfinal - tstart
 #endif
       ! evaluate ydot
       CALL ppiclf_solve_SetYdot
@@ -909,7 +954,6 @@ c----------------------------------------------------------------------
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TIntegration = PPICLF_TIntegration + (tfinal - tstart)
 #endif
 
       RETURN
@@ -1044,6 +1088,7 @@ c----------------------------------------------------------------------
 !----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_SetYdot
 !
+      USE ppiclf_DynamicAllocation
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
@@ -1078,11 +1123,9 @@ c----------------------------------------------------------------------
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TSendFluidFields = tfinal - tstart    
       tstart = MPI_WTIME()
 #endif
 
-      !CALL MPI_BARRIER(ppiclf_comm,ierr)
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
 
@@ -1091,15 +1134,12 @@ c----------------------------------------------------------------------
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TInterpolation = tfinal - tstart    
 #endif
 
 #ifdef PERF
         tfinal = MPI_WTIME()
-        PPICLF_TSendGridOverlap = tfinal - tstart
 #endif
 #ifdef PERF
-      PPICLF_TSendGhostParticles = 0.0D0
 #endif
       IF(PPICLF_PPInteractions) THEN
 #ifdef PERF
@@ -1110,14 +1150,31 @@ c----------------------------------------------------------------------
         ! values are updated.
         CALL ppiclf_comm_CreateGhostPartLB
         CALL ppiclf_comm_MoveGhostPartLB
-        !seeing if this fixes error
-        CALL MPI_BARRIER(ppiclf_comm,ierr) 
-        CALL ppiclf_comm_subbinGhostParticleMap
+        ! ----------------------------------------------------------
+        ! Decide FINE (nndist) vs COARSE (filter) sub-bin grid for the
+        ! P2P search. Made HERE -- after the ghost data transfer
+        ! (MoveGhostPartLB) and before the ghost sub-bin mapping. The
+        ! fine grid pays off only when the coarse bins are notably
+        ! larger than the search cutoff; threshold ~2x (tunable).
+        ! bins_dx and nndist are global, so this is identical on every
+        ! rank.
+        ! ----------------------------------------------------------
+        ppiclf_useFineGrid = (ppiclf_nndist .GT. 0.0D0) .AND.
+     >    (MAX(ppiclf_bins_dx(1),MAX(ppiclf_bins_dx(2),
+     >         ppiclf_bins_dx(3))) .GE. 2.0D0*ppiclf_nndist)
+     
+        IF(ppiclf_useFineGrid) THEN
+          ! Fine path: map BOTH reals and ghosts to the nndist grid
+          CALL ppiclf_comm_subbinFineParticleMap
+        ELSE
+          ! Coarse (original) path: append ghosts to the filter-sized
+          ! sub-bins that already hold the real particles
+          CALL ppiclf_comm_subbinGhostParticleMap
+        END IF
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TSendGhostParticles = tfinal-tstart
 #endif
       END IF
       CALL ppiclf_user_SetYdot
@@ -1127,6 +1184,7 @@ c----------------------------------------------------------------------
 !----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_InitSolvePartLB
 !
+      USE ppiclf_DynamicAllocation
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
@@ -1137,6 +1195,12 @@ c----------------------------------------------------------------------
 ! Internal: 
 ! 
       INTEGER*4 :: j,ierr
+
+      ! Finds global number of particles
+      CALL MPI_ALLREDUCE(ppiclf_npart,ppiclf_glnpart,1
+     >                   ,MPI_INTEGER4, MPI_SUM
+     >                   ,ppiclf_comm, ierr)
+
       CALL ppiclf_comm_CreateBinPartLB
       CALL ppiclf_comm_FindParticlePartLB
       CALL ppiclf_comm_PartLoadBalance
@@ -1163,9 +1227,10 @@ c----------------------------------------------------------------------
         ! Ghost particles are needed 
         CALL ppiclf_comm_CreateGhostPartLB
         CALL ppiclf_comm_MoveGhostPartLB
-        !seeing if this fixes error
-        CALL MPI_BARRIER(ppiclf_comm,ierr) 
         CALL ppiclf_comm_subbinGhostParticleMap
+        ! Initialization ALWAYS uses the original (coarse, filter-sized)
+        ! sub-bin map for the P2P search.
+        ppiclf_useFineGrid = .FALSE.
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
       END IF
@@ -1230,23 +1295,12 @@ c----------------------------------------------------------------------
 ! Internal: 
 ! 
       INTEGER*4 :: j
-      ! ppiclf_binchanged set in CreateBin
-      ! ppiclf_binchanged .TRUE. means
-      ! bin coordinates changed
       CALL ppiclf_comm_CreateBin
 
-!changed to T/F      ! ppiclf_particleMoved set in FindParticle
-      ! ppiclf_particleMoved .EQ. 0 means all particles
-      ! stayed in same bin as previous RK Stage.
       CALL ppiclf_comm_FindParticle
-!      IF(ppiclf_particleMoved .NE. 0 .OR.
-!     >              ppiclf_binchanged) THEN
-        CALL ppiclf_comm_MoveParticle
-!      END IF
+      CALL ppiclf_comm_MoveParticle
 
-      IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
-        CALL ppiclf_comm_MapOverlapGrid
-      END IF
+      CALL ppiclf_comm_MapOverlapGrid
 
       ! Copies Grid Cell ID for all Rocflu elements that map
       ! to ppiclf domain for GSLIB Transfer.  This copy is from
@@ -1305,13 +1359,9 @@ c----------------------------------------------------------------------
       tstart = MPI_WTIME()
 #endif
 
-! There is some error in the binchanged, particleMoved, or rebalance
-! logic below.  Commenting out for now, but could be an efficiency
-! gain later after troubleshooting.
-
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
-      ! bin coordinates changed
+      ! bin boundaries changed
       CALL ppiclf_comm_CreateBinPartLB
 #ifdef PERF
       tfinal = MPI_WTIME()
@@ -1319,30 +1369,27 @@ c----------------------------------------------------------------------
       tstart = MPI_WTIME()
 #endif
       CALL ppiclf_comm_FindParticlePartLB
-!      IF(ppiclf_rebalance) THEN
-         CALL ppiclf_comm_PartLoadBalance
-!      END IF
-!      IF(ppiclf_particleMoved) THEN
-!        IF(.NOT. ppiclf_rebalance) THEN
-          ! Already called when ppiclf_rebalance=.TRUE.
-!          CALL ppiclf_comm_setEmptyIndicator
-!          CALL ppiclf_comm_setInterfaceIndicator
-!        END IF
-        CALL ppiclf_comm_MoveParticlePartLB
-!      END IF
+      IF(ppiclf_rebalance) THEN
+        CALL ppiclf_comm_PartLoadBalance
+      ELSE        
+        CALL ppiclf_comm_setEmptyIndicator
+      END IF
+      IF(ppiclf_particleMoved) THEN
+        CALL ppiclf_comm_MoveParticlePartLB    
+      END IF
       CALL ppiclf_comm_subbinRealParticleMap
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TSendParticles = tfinal - tstart
-      PPICLF_TSendGridOverlap = 0.0D0
 #endif
-!      IF(ppiclf_binchanged) THEN
+
+      IF(ppiclf_binchanged .OR. ppiclf_rebalance
+     >   .OR. ppiclf_emptyChanged) THEN
 #ifdef PERF
         tstart = MPI_WTIME()
 #endif
         CALL ppiclf_comm_MapOverlapGridPartLB
-!      END IF
-      CALL ppiclf_comm_subbinCellMap
+        CALL ppiclf_comm_subbinCellMap
+      END IF
 #ifdef PERF
       tstart= MPI_WTIME()
 #endif
@@ -1351,14 +1398,12 @@ c----------------------------------------------------------------------
       CALL ppiclf_solve_SBParticleToCellMap
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TMapParticlesCells = tfinal - tstart
       tstart = MPI_WTIME()
 #endif
       ! Project particle feedback to fluid solver grid
       CALL ppiclf_solve_ProjectParticleGrid
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TProjection = tfinal - tstart
 #endif
       RETURN
       END
@@ -1504,7 +1549,6 @@ c----------------------------------------------------------------------
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
 #endif
 
       RETURN
@@ -1769,6 +1813,7 @@ c----------------------------------------------------------------------
                CALL ppiclf_icopy
      >          (ppiclf_iprop(1,icount) , ppiclf_iprop(1,i), PPICLF_LIP)
             END IF
+         ELSE
          ! Else - don't copy particle column if marked for removal
          ! Particles marked for removal if outside fluid domain, which
          ! is found in the particle to cell mapping during interpolation
@@ -1902,7 +1947,6 @@ c----------------------------------------------------------------------
      >      ,nkey,2)                        ! Sorting order
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
 #endif
 
       ppiclf_pro_fld = 0.0d0
@@ -1977,8 +2021,6 @@ c----------------------------------------------------------------------
 !      END IF
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TSendParticles = tfinal - tstart
-      PPICLF_TSendGridOverlap = 0.0D0
 #endif
       IF(ppiclf_overlap .AND. ppiclf_binchanged) THEN
 #ifdef PERF
@@ -1987,11 +2029,9 @@ c----------------------------------------------------------------------
         CALL ppiclf_comm_MapOverlapGrid
 #ifdef PERF
         tfinal = MPI_WTIME()
-        PPICLF_TSendGridOverlap = tfinal - tstart
 #endif
       END IF
 #ifdef PERF
-      PPICLF_TSendGhostParticles = 0.0D0
 #endif
       IF(PPICLF_PPInteractions) THEN
 #ifdef PERF
@@ -2004,26 +2044,22 @@ c----------------------------------------------------------------------
         ppiclf_ydotc = 0.0D0
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TSendGhostParticles = tfinal-tstart
 #endif
       END IF
 #ifdef PERF
       tstart= MPI_WTIME()
 #endif
-      CALL MPI_BARRIER(ppiclf_comm,ierr)
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
       CALL ppiclf_solve_SBParticleToCellMap
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TMapParticlesCells = tfinal - tstart
       tstart = MPI_WTIME()
 #endif
       ! Project particle feedback to fluid solver grid
       CALL ppiclf_solve_ProjectParticleGrid
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TProjection = tfinal - tstart
 #endif
       RETURN
       END
