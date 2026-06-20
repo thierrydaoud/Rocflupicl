@@ -1,6 +1,12 @@
 FC               = mpif90 # Valid MPI Fortran compiler
 CC               = mpicc  # Valid MPI C compiler
-FFLAGS          += -cpp -w -O3 -std=legacy -g -fmax-errors=1#-fallow-argument-mismatch -fcheck=all
+FFLAGS          += -w -cpp -O3 -std=legacy -g -fno-math-errno -funroll-loops
+
+# Add for Turin
+# FFLAGS += -march=znver5
+# Add for Milan 
+FFLAGS += -march=znver3 
+
 CPFLAGS         += -E
 ifeq ($(TEST),1)
     FFLAGS += -DTEST

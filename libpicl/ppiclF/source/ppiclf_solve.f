@@ -200,6 +200,7 @@
       ppiclf_imethod      = imethod
       ppiclf_ndim         = ndim
       ppiclf_iendian      = iendian
+      ppiclf_istage       = 1
 
       ppiclf_linperiodic(1) = .FALSE.    
       ppiclf_linperiodic(2) = .FALSE.   
@@ -773,9 +774,11 @@
 !
 #ifdef PERF
       tstart = MPI_WTIME()
+      IF(time .GT. 2.0E-9) THEN
+        CALL ppiclf_solve_LogPerformanceLocal
+      END IF
 #endif
       ppiclf_time   = time
-
       CALL ppiclf_io_WriteParticleVTU('')
       !CALL ppiclf_io_WriteBinVTU('')
       ! Output diagnostics
@@ -812,27 +815,38 @@ c----------------------------------------------------------------------
       LOGICAL iout
 
 #ifdef PERF
-      REAL*8    tstart, tfinal
-      REAL*8    tsPeriodic, tfPeriodic
-
-      ! Reset timers at start of each RK stage
-!      PPICLF_TCreateBin              = 0.0D0
-!      PPICLF_TSendParticles          = 0.0D0
-!      PPICLF_TSendGridOverlap        = 0.0D0               
-!      PPICLF_TSendFluidFields        = 0.0D0             
-!      PPICLF_TParticleParticleModels = 0.0D0       
-!      PPICLF_TFluidParticleModels    = 0.0D0     
-!      PPICLF_TSendGhostParticles     = 0.0D0     
-!      PPICLF_TMapParticlesCells      = 0.0D0    
-!      PPICLF_TInterpolation          = 0.0D0    
-!      PPICLF_TProjection             = 0.0D0     
-!      PPICLF_TWriteSolution          = 0.0D0                  
-!      PPICLF_TIntegration            = 0.0D0    
-!      PPICLF_TPeriodicity            = 0.0D0       
-!      PPICLF_TDataTransfers          = 0.0D0        
-!      PPICLF_TTotal                  = 0.0D0
-
-      tstart = MPI_WTIME()
+      REAL*8 ppiclf_pt0
+      PPICLF_TCreateBin      = 0.0D0
+      PPICLF_TFindPart       = 0.0D0
+      PPICLF_TLoadBalance    = 0.0D0
+      PPICLF_TEmptyInd       = 0.0D0
+      PPICLF_TInterfaceInd   = 0.0D0
+      PPICLF_TRankBounds     = 0.0D0
+      PPICLF_TMapOverlap     = 0.0D0
+      PPICLF_TCreateGhost    = 0.0D0
+      PPICLF_TMoveGhost      = 0.0D0
+      PPICLF_TsubbinRealMap  = 0.0D0
+      PPICLF_TsubbinGhostMap = 0.0D0
+      PPICLF_TsubbinFineMap  = 0.0D0
+      PPICLF_TsubbinCellMap  = 0.0D0
+      PPICLF_TPCNNSearch     = 0.0D0
+      PPICLF_TPPNNSearch     = 0.0D0
+      PPICLF_TProject        = 0.0D0
+      PPICLF_TInterp         = 0.0D0
+      PPICLF_TMPI_allreduces = 0.0D0
+      PPICLF_TMPI_moveRP     = 0.0D0
+      PPICLF_TMPI_moveGP     = 0.0D0
+      PPICLF_TMPI_moveInt    = 0.0D0
+      PPICLF_TMPI_movePro    = 0.0D0
+      PPICLF_TMPI_moveOvlp   = 0.0D0
+      PPICLF_TIntegrate      = 0.0D0
+      PPICLF_TTotal          = 0.0D0
+      PPICLF_TQuasiSteady    = 0.0D0
+      PPICLF_TAddedMass      = 0.0D0
+      PPICLF_TPresGrad       = 0.0D0
+      PPICLF_THeatTransfer   = 0.0D0
+      PPICLF_TUserYdot       = 0.0D0
+      ppiclf_pt0 = MPI_WTIME()
 #endif
 
       ppiclf_cycle  = istep
@@ -854,20 +868,14 @@ c----------------------------------------------------------------------
         PRINT*, 'ERROR: Wrong RK selected for rocpicl. Use RK3!'
         CALL ppiclf_exittr('Wrong RK for rocpicl',0.D0,0)
       END IF
-#ifdef PERF
-      tsPeriodic = MPI_WTIME()
-#endif
       IF(ppiclf_linperiodic(1) .OR. ppiclf_linperiodic(2) .OR.
      >                             ppiclf_linperiodic(3)) THEN
         CALL ppiclf_solve_PeriodicParticleShift
       END IF
-#ifdef PERF
-      tfPeriodic = MPI_WTIME()
-#endif
       CALL ppiclf_solve_PostTimeStepPartLB
 #ifdef PERF
-      tfinal = MPI_WTIME()
-      CALL ppiclf_io_WritePerformance()
+      PPICLF_TTotal = PPICLF_TTotal
+     >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
       RETURN
       END
@@ -897,12 +905,9 @@ c----------------------------------------------------------------------
 !
       LOGICAL iout
 #ifdef PERF
-      REAL *8 tstart,tfinal     
+      REAL*8 ppiclf_pt0
 #endif
 !
-#ifdef PERF
-      tstart = MPI_WTIME()
-#endif
       icalld = icalld + 1
 
       ! get rk3 coeffs
@@ -911,17 +916,15 @@ c----------------------------------------------------------------------
       nstage = 3
       istage = MOD(icalld,nstage)
       if (istage .EQ. 0) istage = 3
+      ppiclf_istage = istage
       iout = .FALSE.
       if (istage .EQ. nstage) iout = .TRUE.
 
-#ifdef PERF
-      tfinal = MPI_WTIME()
-#endif
       ! evaluate ydot
       CALL ppiclf_solve_SetYdot
 
 #ifdef PERF
-      tstart = MPI_WTIME()
+      ppiclf_pt0 = MPI_WTIME()
 #endif
 
       !Zero out for first stage
@@ -953,7 +956,8 @@ c----------------------------------------------------------------------
       END IF
 
 #ifdef PERF
-      tfinal = MPI_WTIME()
+      PPICLF_TIntegrate = PPICLF_TIntegrate
+     >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
 
       RETURN
@@ -1096,19 +1100,19 @@ c----------------------------------------------------------------------
 !
       INTEGER*4 j, ierr
 #ifdef PERF
-      REAL *8 tstart,tfinal     
+      REAL*8 ppiclf_pt0
 #endif
 ! 
 ! Assumes cells have already been mapped to particles
 !
 
-#ifdef PERF
-      tstart = MPI_WTIME()     
-#endif
 
       ! Copies Grid Cell ID for all Rocflu elements that map
       ! to ppiclf domain for GSLIB Transfer.  This copy is from
       ! MapOverlapGrid.
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_solve_InitInterp
 
       ! Makes array (ppiclf_int_fld_input) of all rprop data
@@ -1121,35 +1125,38 @@ c----------------------------------------------------------------------
       ! cells that map to ppiclf domain.
       CALL ppiclf_solve_InterpTupleTransfer
 
-#ifdef PERF
-      tfinal = MPI_WTIME()
-      tstart = MPI_WTIME()
-#endif
 
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
+#ifdef PERF
+      PPICLF_TInterp = PPICLF_TInterp
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
 
       ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
       PPICLF_INT_ICNT = 0
 
-#ifdef PERF
-      tfinal = MPI_WTIME()
-#endif
 
-#ifdef PERF
-        tfinal = MPI_WTIME()
-#endif
-#ifdef PERF
-#endif
       IF(PPICLF_PPInteractions) THEN
-#ifdef PERF
-      tstart = MPI_WTIME()
-#endif
         ! Ghost particles are needed 
         ! They're made here after interpolated
         ! values are updated.
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
         CALL ppiclf_comm_CreateGhostPartLB
+#ifdef PERF
+      PPICLF_TCreateGhost = PPICLF_TCreateGhost
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
         CALL ppiclf_comm_MoveGhostPartLB
+#ifdef PERF
+      PPICLF_TMoveGhost = PPICLF_TMoveGhost
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
         ! ----------------------------------------------------------
         ! Decide FINE (nndist) vs COARSE (filter) sub-bin grid for the
         ! P2P search. Made HERE -- after the ghost data transfer
@@ -1165,19 +1172,37 @@ c----------------------------------------------------------------------
      
         IF(ppiclf_useFineGrid) THEN
           ! Fine path: map BOTH reals and ghosts to the nndist grid
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
           CALL ppiclf_comm_subbinFineParticleMap
+#ifdef PERF
+      PPICLF_TsubbinFineMap = PPICLF_TsubbinFineMap
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
         ELSE
           ! Coarse (original) path: append ghosts to the filter-sized
           ! sub-bins that already hold the real particles
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
           CALL ppiclf_comm_subbinGhostParticleMap
+#ifdef PERF
+      PPICLF_TsubbinGhostMap = PPICLF_TsubbinGhostMap
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
         END IF
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
-#ifdef PERF
-      tfinal = MPI_WTIME()
-#endif
       END IF
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_user_SetYdot
+#ifdef PERF
+      PPICLF_TUserYdot = PPICLF_TUserYdot
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
 
       RETURN
       END SUBROUTINE
@@ -1355,55 +1380,89 @@ c----------------------------------------------------------------------
 ! 
       INTEGER*4 :: i, j,ierr
 #ifdef PERF
-      REAL *8 tstart,tfinal     
-      tstart = MPI_WTIME()
+      REAL*8 ppiclf_pt0
 #endif
 
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
       ! bin boundaries changed
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_comm_CreateBinPartLB
 #ifdef PERF
-      tfinal = MPI_WTIME()
-      PPICLF_TCreateBin = tfinal - tstart
-      tstart = MPI_WTIME()
+      PPICLF_TCreateBin = PPICLF_TCreateBin
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
 #endif
       CALL ppiclf_comm_FindParticlePartLB
+#ifdef PERF
+      PPICLF_TFindPart = PPICLF_TFindPart
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
       IF(ppiclf_rebalance) THEN
         CALL ppiclf_comm_PartLoadBalance
       ELSE        
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
         CALL ppiclf_comm_setEmptyIndicator
+#ifdef PERF
+      PPICLF_TEmptyInd = PPICLF_TEmptyInd
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
       END IF
       IF(ppiclf_particleMoved) THEN
         CALL ppiclf_comm_MoveParticlePartLB    
       END IF
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_comm_subbinRealParticleMap
 #ifdef PERF
-      tfinal = MPI_WTIME()
+      PPICLF_TsubbinRealMap = PPICLF_TsubbinRealMap
+     >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
 
       IF(ppiclf_binchanged .OR. ppiclf_rebalance
      >   .OR. ppiclf_emptyChanged) THEN
 #ifdef PERF
-        tstart = MPI_WTIME()
+      ppiclf_pt0 = MPI_WTIME()
 #endif
         CALL ppiclf_comm_MapOverlapGridPartLB
-        CALL ppiclf_comm_subbinCellMap
-      END IF
 #ifdef PERF
-      tstart= MPI_WTIME()
+      PPICLF_TMapOverlap = PPICLF_TMapOverlap
+     >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
+        CALL ppiclf_comm_subbinCellMap
+#ifdef PERF
+      PPICLF_TsubbinCellMap = PPICLF_TsubbinCellMap
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
+      END IF
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_solve_SBParticleToCellMap
 #ifdef PERF
-      tfinal = MPI_WTIME()
-      tstart = MPI_WTIME()
+      PPICLF_TPCNNSearch = PPICLF_TPCNNSearch
+     >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
       ! Project particle feedback to fluid solver grid
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_solve_ProjectParticleGrid
 #ifdef PERF
-      tfinal = MPI_WTIME()
+      PPICLF_TProject = PPICLF_TProject
+     >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
       RETURN
       END
@@ -1546,10 +1605,12 @@ c----------------------------------------------------------------------
      >      ,partl,nl                         ! Logical data
      >      ,ppiclf_int_fld,nrr               ! Real data
      >      ,nkey,2)                          ! Sorting order
-
 #ifdef PERF
-      tfinal = MPI_WTIME()
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_moveInt = PPICLF_TMPI_moveInt + tfinal
+      PPICLF_TInterp = PPICLF_TInterp - tfinal
 #endif
+
 
       RETURN
       END
@@ -1836,9 +1897,10 @@ c----------------------------------------------------------------------
 
       ! Internal:
       INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj,
-     >          nrr, nkey(2), iee
-      REAL*8    CellVol, GaussianConst, dist, w(27), wsum,
-     >          x_norm, y_norm, z_norm, PI, eps, avg_vol
+     >          nrr, nkey(2), iee, cell_id(27)
+      REAL*8    GaussianConst, dist, w(27), wsum, CellVol(27),
+     >          x_norm, y_norm, z_norm, PI, eps, wt, 
+     >          avg_dx, avg_dy, avg_dz, avg_scale, wsum_inv 
       LOGICAL   partl 
 
 #ifdef PERF
@@ -1857,30 +1919,35 @@ c----------------------------------------------------------------------
      >  ppiclf_rprop(PPICLF_R_JVOLP,ip) * ppiclf_rprop(PPICLF_R_JSPL,ip)
 
         nCellProj = ppiclf_nPart2Cell(ip)
-        wsum = 0.0D0
-        avg_vol = 0.0D0
+        wsum    = 0.0D0
+        avg_dx  = 0.0D0
+        avg_dy  = 0.0D0
+        avg_dz  = 0.0D0
         DO i = 1,nCellProj
-          CellID = ppiclf_Part2Cell_map(ip,i) 
-          avg_vol = avg_vol + ppiclf_picl_grid(7,CellID)
+          CellID  = ppiclf_Part2Cell_map(ip,i) 
+          cell_id(i) = CellID
+          CellVol(i) = ppiclf_picl_grid(7,CellID)
+          avg_dx     = avg_dx  + ppiclf_picl_grid(4,CellID)
+          avg_dy     = avg_dy  + ppiclf_picl_grid(5,CellID)
+          avg_dz     = avg_dz  + ppiclf_picl_grid(6,CellID)
         END DO
-        avg_vol = avg_vol/DBLE(nCellProj)
-        
+        avg_dx  = avg_dx/DBLE(nCellProj)
+        avg_dy  = avg_dy/DBLE(nCellProj)
+        avg_dz  = avg_dz/DBLE(nCellProj)
+        avg_scale = 3.0D0 / 
+     >              (avg_dx*avg_dx + avg_dy*avg_dy
+     >               + avg_dz*avg_dz) 
         ! Loop to find individual cell weightings
         DO i = 1,nCellProj
-          CellID = ppiclf_Part2Cell_map(ip,i) 
           dist = ppiclf_Part2Cell_dist(ip,i) + eps
-          CellVol = ppiclf_picl_grid(7,CellID)
-          avg_vol = CellVol !seeing if this is unit test difference
-          ! Multiply CellVol by ppiclf_feedbk(PPICLF_P_JPHIP,ip) below.  
-          ! Need to think through way to do it if VF not defined.
-          w(i) = ABS(CellVol*EXP(-GaussianConst*(dist**2)
-     >              / (avg_vol**(2.0D0/3.0D0))))
+          w(i) = ABS(CellVol(i)*
+     >               EXP(-GaussianConst*(dist**2)*(avg_scale)))
           wsum = wsum + w(i)
         END DO !i
-
         IF (wsum .GT. eps) THEN
+          wsum_inv = 1.0D0/wsum
           DO i = 1, nCellProj
-            w(i) = w(i) / wsum
+            w(i) = w(i)*wsum_inv
           END DO
         ELSE
           DO i = 1, nCellProj
@@ -1904,12 +1971,12 @@ c----------------------------------------------------------------------
         ! Loop through cells to apply feedback     
         ! DO j is outer to match column-major 
         ! ppiclf_pro_fld_picl(j, CellID)
-        DO j=1,PPICLF_LRP_PRO
-          DO i = 1,nCellProj
-            CellID = ppiclf_Part2Cell_map(ip,i)
+        DO i = 1,nCellProj
+          CellID = cell_id(i)
+          wt     = w(i)
+          DO j=1,PPICLF_LRP_PRO
             ppiclf_pro_fld_picl(j,CellID) = 
-     >         ppiclf_pro_fld_picl(j,CellID) 
-     >         + ppiclf_feedbk(j,ip)*w(i)
+     >         ppiclf_pro_fld_picl(j,CellID) + ppiclf_feedbk(j,ip)*wt
           END DO !i
         END DO !j
       END DO !ip
@@ -1938,16 +2005,19 @@ c----------------------------------------------------------------------
      >      ,partl, nl                      ! Logical communication
      >      ,ppiclf_pro_fld_picl, nrr       ! Real communication
      >      ,njj)                           ! Proc index to send to
-
       CALL pfgslib_crystal_tuple_sort(ppiclf_cr_hndl ! Setup
      >      ,ppiclf_nCells_Proj             ! Amount of columns to sort
      >      ,ppiclf_cell_map_proj,nii       ! Integer data
      >      ,partl,nl                       ! Logical data
      >      ,ppiclf_pro_fld_picl,nrr        ! Real data
      >      ,nkey,2)                        ! Sorting order
+
 #ifdef PERF
-      tfinal = MPI_WTIME()
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_movePro = PPICLF_TMPI_movePro + tfinal
+      PPICLF_TProject = PPICLF_TProject - tfinal
 #endif
+
 
       ppiclf_pro_fld = 0.0d0
       DO ie=1,ppiclf_nCells_Proj
@@ -2459,3 +2529,382 @@ c----------------------------------------------------------------------
 !      RETURN
 !      END
 !!-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
+!     Performance instrumentation: init + cross-rank logger.
+!     Bodies compile only with PERF=1; with PERF unset both routines are
+!     no-ops, so the host may call them unconditionally.
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_solve_InitPerformance
+!
+!     Zero all timers/counts and the logger bookkeeping. Call ONCE,
+!     after ppiclf is initialized and before the time-stepping loop.
+!
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+#ifdef PERF
+      PPICLF_TCreateBin      = 0.0D0
+      PPICLF_TFindPart       = 0.0D0
+      PPICLF_TLoadBalance    = 0.0D0
+      PPICLF_TEmptyInd       = 0.0D0
+      PPICLF_TInterfaceInd   = 0.0D0
+      PPICLF_TRankBounds     = 0.0D0
+      PPICLF_TMapOverlap     = 0.0D0
+      PPICLF_TCreateGhost    = 0.0D0
+      PPICLF_TMoveGhost      = 0.0D0
+      PPICLF_TsubbinRealMap  = 0.0D0
+      PPICLF_TsubbinGhostMap = 0.0D0
+      PPICLF_TsubbinFineMap  = 0.0D0
+      PPICLF_TsubbinCellMap  = 0.0D0
+      PPICLF_TPCNNSearch     = 0.0D0
+      PPICLF_TPPNNSearch     = 0.0D0
+      PPICLF_TProject        = 0.0D0
+      PPICLF_TInterp         = 0.0D0
+      PPICLF_TMPI_allreduces = 0.0D0
+      PPICLF_TMPI_moveRP     = 0.0D0
+      PPICLF_TMPI_moveGP     = 0.0D0
+      PPICLF_TMPI_moveInt    = 0.0D0
+      PPICLF_TMPI_movePro    = 0.0D0
+      PPICLF_TMPI_moveOvlp   = 0.0D0
+      PPICLF_TIntegrate          = 0.0D0
+      PPICLF_TTotal          = 0.0D0
+      PPICLF_TQuasiSteady    = 0.0D0
+      PPICLF_TAddedMass      = 0.0D0
+      PPICLF_TPresGrad       = 0.0D0
+      PPICLF_THeatTransfer   = 0.0D0
+      PPICLF_TUserYdot       = 0.0D0
+      PPICLF_T_RealPart      = 0
+      PPICLF_T_GhostPartSent = 0
+      PPICLF_T_GhostPartRec  = 0
+      PPICLF_T_FVCells       = 0
+      PPICLF_T_OverlapCells_sent  = 0
+      PPICLF_T_OverlapCells_received  = 0
+      PPICLF_T_GlbBins       = 0
+      PPICLF_T_LocalBins     = 0
+      PPICLF_PERF_HDR        = 0
+      PPICLF_PERF_UNIT       = 87
+#endif
+      RETURN
+      END
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_solve_LogPerformance
+!
+!     Cross-rank reduction (mean/max/min) of every PERF timer and count,
+!     written as one CSV row to ppiclf_perf.csv on rank 0, then resets
+!     the interval timer accumulators. Call from the host OUTSIDE the
+!     ppiclf driver, once per step (or every N steps -- the row's
+!     nstep_interval column records how many steps it covers).
+!
+!     Collective: ALL ranks must call it (it does MPI_ALLREDUCE).
+!
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+      INTEGER*4, save :: iprint = 0
+#ifdef PERF
+      INTEGER*4 NT, NC
+      PARAMETER (NT=30, NC=8)
+      REAL*8    tloc(NT), tmax(NT), tmin(NT), tsum(NT), tmean(NT)
+      INTEGER*4 cloc(NC), cmax(NC), csum(NC)
+      REAL*8    unacc, imbal, rnp, leafsum
+      INTEGER*4 i, ierr, iu
+      CHARACTER*22 tname(NT), cname(NC)
+
+      iprint = iprint + 1
+
+      ! ---- snapshot per-rank counts (current state) ----
+      PPICLF_T_RealPart      = PPICLF_NPART
+      PPICLF_T_GlbBins       = PPICLF_TOTALBINS
+      ! PPICLF_T_LocalBins left as initialized (proxy; set if desired)
+
+      ! ---- pack timers: leaves 1..23, MPI 24..29, TTotal=30 ----
+      tloc(1)  = PPICLF_TCreateBin
+      tloc(2)  = PPICLF_TFindPart
+      tloc(3)  = PPICLF_TLoadBalance
+      tloc(4)  = PPICLF_TRankBounds
+      tloc(5)  = PPICLF_TEmptyInd
+      tloc(6)  = PPICLF_TInterfaceInd
+      tloc(7)  = PPICLF_TMapOverlap
+      tloc(8)  = PPICLF_TCreateGhost
+      tloc(9)  = PPICLF_TMoveGhost
+      tloc(10) = PPICLF_TsubbinRealMap
+      tloc(11) = PPICLF_TsubbinGhostMap
+      tloc(12) = PPICLF_TsubbinFineMap
+      tloc(13) = PPICLF_TsubbinCellMap
+      tloc(14) = PPICLF_TPCNNSearch
+      tloc(15) = PPICLF_TPPNNSearch
+      tloc(16) = PPICLF_TProject
+      tloc(17) = PPICLF_TInterp
+      tloc(18) = PPICLF_TIntegrate
+      tloc(19) = PPICLF_TQuasiSteady
+      tloc(20) = PPICLF_TAddedMass
+      tloc(21) = PPICLF_TPresGrad
+      tloc(22) = PPICLF_THeatTransfer
+      tloc(23) = PPICLF_TUserYdot
+      tloc(24) = PPICLF_TMPI_allreduces
+      tloc(25) = PPICLF_TMPI_moveRP
+      tloc(26) = PPICLF_TMPI_moveGP
+      tloc(27) = PPICLF_TMPI_moveInt
+      tloc(28) = PPICLF_TMPI_movePro
+      tloc(29) = PPICLF_TMPI_moveOvlp
+      tloc(30) = PPICLF_TTotal
+
+      cloc(1) = PPICLF_T_RealPart
+      cloc(2) = PPICLF_T_GhostPartSent
+      cloc(3) = PPICLF_T_GhostPartRec
+      cloc(4) = PPICLF_T_FVCells
+      cloc(5) = PPICLF_T_OverlapCells_sent
+      cloc(6) = PPICLF_T_OverlapCells_received
+      cloc(7) = PPICLF_T_GlbBins
+      cloc(8) = PPICLF_T_LocalBins
+
+      ! ---- cross-rank reductions ----
+      CALL MPI_ALLREDUCE(tloc,tmax,NT,MPI_DOUBLE_PRECISION,MPI_MAX,
+     >                   ppiclf_comm,ierr)
+      CALL MPI_ALLREDUCE(tloc,tmin,NT,MPI_DOUBLE_PRECISION,MPI_MIN,
+     >                   ppiclf_comm,ierr)
+      CALL MPI_ALLREDUCE(tloc,tsum,NT,MPI_DOUBLE_PRECISION,MPI_SUM,
+     >                   ppiclf_comm,ierr)
+      CALL MPI_ALLREDUCE(cloc,cmax,NC,MPI_INTEGER4,MPI_MAX,
+     >                   ppiclf_comm,ierr)
+      CALL MPI_ALLREDUCE(cloc,csum,NC,MPI_INTEGER4,MPI_SUM,
+     >                   ppiclf_comm,ierr)
+
+      rnp = DBLE(ppiclf_np)
+      IF (rnp .LE. 0.0D0) rnp = 1.0D0   ! guard np=0 -> no Inf
+      DO i=1,NT
+        tmean(i) = tsum(i)/rnp
+      END DO
+
+      ! Unaccounted = mean TTotal - sum of mean leaf timers
+      leafsum = 0.0D0
+      DO i=1,22
+        leafsum = leafsum + tmean(i)
+      END DO
+      unacc = tmean(30) - leafsum
+      DO i=24,29
+        unacc = unacc - tmean(i)
+      END DO
+      IF(tmean(30) .GT. 0.0D0) THEN
+        imbal = tmax(30)/tmean(30)
+      ELSE
+        imbal = 0.0D0
+      END IF
+
+      IF(ppiclf_nid .EQ. 0) THEN
+        iu = PPICLF_PERF_UNIT
+        IF(iu .LE. 0) iu = 87
+        tname(1)  = 'TCreateBin'
+        tname(2)  = 'TFindPart'
+        tname(3)  = 'TLoadBalance'
+        tname(4)  = 'TRankBounds'
+        tname(5)  = 'TEmptyInd'
+        tname(6)  = 'TInterfaceInd'
+        tname(7)  = 'TMapOverlap'
+        tname(8)  = 'TCreateGhost'
+        tname(9)  = 'TMoveGhost'
+        tname(10) = 'TsubbinRealMap'
+        tname(11) = 'TsubbinGhostMap'
+        tname(12) = 'TsubbinFineMap'
+        tname(13) = 'TsubbinCellMap'
+        tname(14) = 'TPCNNSearch'
+        tname(15) = 'TPPNNSearch'
+        tname(16) = 'TProject'
+        tname(17) = 'TInterp'
+        tname(18) = 'TIntegrate'
+        tname(19) = 'TQuasiSteady'
+        tname(20) = 'TAddedMass'
+        tname(21) = 'TPresGrad'
+        tname(22) = 'THeatTransfer'
+        tname(23) = 'TUserYdot'
+        tname(24) = 'TMPI_allreduces'
+        tname(25) = 'TMPI_moveRP'
+        tname(26) = 'TMPI_moveGP'
+        tname(27) = 'TMPI_moveInt'
+        tname(28) = 'TMPI_movePro'
+        tname(29) = 'TMPI_moveOvlp'
+        tname(30) = 'TTotal'
+        cname(1)  = 'RealPart'
+        cname(2)  = 'GhostPartSent'
+        cname(3)  = 'GhostPartRec'
+        cname(4)  = 'FVCells'
+        cname(5)  = 'OverlapCellsSent'
+        cname(6)  = 'OverlapCellsRec'
+        cname(7)  = 'GlbBins'
+        cname(8)  = 'LocalBins'
+
+        IF(PPICLF_PERF_HDR .EQ. 0) THEN
+          OPEN(unit=iu,file='ppiclf_perf.csv',status='REPLACE',
+     >         action='WRITE')
+          WRITE(iu,'(A)',ADVANCE='NO') 'step,np'
+          DO i=1,NT
+            WRITE(iu,'(A)',ADVANCE='NO') ','//TRIM(tname(i))//'_mean'
+            WRITE(iu,'(A)',ADVANCE='NO') ','//TRIM(tname(i))//'_max'
+            WRITE(iu,'(A)',ADVANCE='NO') ','//TRIM(tname(i))//'_min'
+          END DO
+          WRITE(iu,'(A)',ADVANCE='NO') ',Unaccounted_mean'
+          WRITE(iu,'(A)',ADVANCE='NO') ',Imbalance_TTotal'
+          DO i=1,NC
+            WRITE(iu,'(A)',ADVANCE='NO') ','//TRIM(cname(i))//'_max'
+            WRITE(iu,'(A)',ADVANCE='NO') ','//TRIM(cname(i))//'_mean'
+          END DO
+          WRITE(iu,'(A)') ''
+          PPICLF_PERF_HDR = 1
+        ELSE
+          OPEN(unit=iu,file='ppiclf_perf.csv',status='OLD',
+     >         position='APPEND',action='WRITE')
+        END IF
+
+        WRITE(iu,900) iprint, ppiclf_np,
+     >    (tmean(i),tmax(i),tmin(i),i=1,NT), unacc, imbal,
+     >    (DBLE(cmax(i)), DBLE(csum(i))/rnp, i=1,NC)
+        CLOSE(iu)
+      END IF
+  900 FORMAT(I9,',',I9,300(',',1PE15.7))
+#endif
+      RETURN
+      END
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_solve_LogPerformanceLocal
+!
+!     Per-rank performance logger. Every rank writes its OWN raw timers
+!     and counts to ppiclf_perf_<nid>.csv -- no MPI reduction. On any
+!     single rank the identity
+!         sum(18 leaf timers) + TMPI + Unaccounted = TTotal
+!     then holds exactly, row by row. Purely local: no collective, safe
+!     to call on every rank. Compiles to a no-op when PERF is unset.
+!
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+#ifdef PERF
+      INTEGER*4 NT, NC
+      PARAMETER (NT=30, NC=8)
+      REAL*8    tloc(NT), leafsum, unacc
+      INTEGER*4 cloc(NC)
+      INTEGER*4 i, iu
+      CHARACTER*22 tname(NT), cname(NC)
+      CHARACTER*32 fname
+      INTEGER*4, save :: istep = 1
+      INTEGER*4, save :: ihdr  = 0
+
+      istep = istep + 1
+
+      ! ---- pack timers: same order/names as the reduced logger ----
+      tloc(1)  = PPICLF_TCreateBin
+      tloc(2)  = PPICLF_TFindPart
+      tloc(3)  = PPICLF_TLoadBalance
+      tloc(4)  = PPICLF_TRankBounds
+      tloc(5)  = PPICLF_TEmptyInd
+      tloc(6)  = PPICLF_TInterfaceInd
+      tloc(7)  = PPICLF_TMapOverlap
+      tloc(8)  = PPICLF_TCreateGhost
+      tloc(9)  = PPICLF_TMoveGhost
+      tloc(10) = PPICLF_TsubbinRealMap
+      tloc(11) = PPICLF_TsubbinGhostMap
+      tloc(12) = PPICLF_TsubbinFineMap
+      tloc(13) = PPICLF_TsubbinCellMap
+      tloc(14) = PPICLF_TPCNNSearch
+      tloc(15) = PPICLF_TPPNNSearch
+      tloc(16) = PPICLF_TProject
+      tloc(17) = PPICLF_TInterp
+      tloc(18) = PPICLF_TIntegrate
+      tloc(19) = PPICLF_TQuasiSteady
+      tloc(20) = PPICLF_TAddedMass
+      tloc(21) = PPICLF_TPresGrad
+      tloc(22) = PPICLF_THeatTransfer
+      tloc(23) = PPICLF_TUserYdot
+      tloc(24) = PPICLF_TMPI_allreduces
+      tloc(25) = PPICLF_TMPI_moveRP
+      tloc(26) = PPICLF_TMPI_moveGP
+      tloc(27) = PPICLF_TMPI_moveInt
+      tloc(28) = PPICLF_TMPI_movePro
+      tloc(29) = PPICLF_TMPI_moveOvlp
+      tloc(30) = PPICLF_TTotal
+
+      cloc(1) = PPICLF_NPART
+      cloc(2) = PPICLF_T_GhostPartSent
+      cloc(3) = PPICLF_T_GhostPartRec
+      cloc(4) = PPICLF_T_FVCells
+      cloc(5) = PPICLF_T_OverlapCells_sent
+      cloc(6) = PPICLF_T_OverlapCells_received
+      cloc(7) = PPICLF_TOTALBINS
+      cloc(8) = PPICLF_T_LocalBins
+
+      ! ---- per-rank accounting: 18 mutually exclusive leaves ----
+      leafsum = 0.0D0
+      DO i=1,18
+        leafsum = leafsum + tloc(i)
+      END DO
+      ! TMPI split across tloc(24..29); TTotal now tloc(30)
+      unacc = tloc(30) - leafsum
+      DO i=24,29
+        unacc = unacc - tloc(i)
+      END DO
+
+      iu = PPICLF_PERF_UNIT + 1
+      IF(iu .LE. 0) iu = 88
+      WRITE(fname,'(A,I6.6,A)') 'ppiclf_perf_', ppiclf_nid, '.csv'
+
+      tname(1)  = 'TCreateBin'
+      tname(2)  = 'TFindPart'
+      tname(3)  = 'TLoadBalance'
+      tname(4)  = 'TRankBounds'
+      tname(5)  = 'TEmptyInd'
+      tname(6)  = 'TInterfaceInd'
+      tname(7)  = 'TMapOverlap'
+      tname(8)  = 'TCreateGhost'
+      tname(9)  = 'TMoveGhost'
+      tname(10) = 'TsubbinRealMap'
+      tname(11) = 'TsubbinGhostMap'
+      tname(12) = 'TsubbinFineMap'
+      tname(13) = 'TsubbinCellMap'
+      tname(14) = 'TPCNNSearch'
+      tname(15) = 'TPPNNSearch'
+      tname(16) = 'TProject'
+      tname(17) = 'TInterp'
+      tname(18) = 'TIntegrate'
+      tname(19) = 'TQuasiSteady'
+      tname(20) = 'TAddedMass'
+      tname(21) = 'TPresGrad'
+      tname(22) = 'THeatTransfer'
+      tname(23) = 'TUserYdot'
+      tname(24) = 'TMPI_allreduces'
+      tname(25) = 'TMPI_moveRP'
+      tname(26) = 'TMPI_moveGP'
+      tname(27) = 'TMPI_moveInt'
+      tname(28) = 'TMPI_movePro'
+      tname(29) = 'TMPI_moveOvlp'
+      tname(30) = 'TTotal'
+      cname(1)  = 'RealPart'
+      cname(2)  = 'GhostPartSent'
+      cname(3)  = 'GhostPartRec'
+      cname(4)  = 'FVCells'
+      cname(5)  = 'OverlapCellsSent'
+      cname(6)  = 'OverlapCellsRec'
+      cname(7)  = 'GlbBins'
+      cname(8)  = 'LocalBins'
+
+      IF(ihdr .EQ. 0) THEN
+        OPEN(unit=iu,file=fname,status='REPLACE',action='WRITE')
+        WRITE(iu,'(A)',ADVANCE='NO') 'step,nid,np'
+        DO i=1,NT
+          WRITE(iu,'(A)',ADVANCE='NO') ','//TRIM(tname(i))
+        END DO
+        WRITE(iu,'(A)',ADVANCE='NO') ',LeafSum18,Unaccounted'
+        DO i=1,NC
+          WRITE(iu,'(A)',ADVANCE='NO') ','//TRIM(cname(i))
+        END DO
+        WRITE(iu,'(A)') ''
+        ihdr = 1
+      ELSE
+        OPEN(unit=iu,file=fname,status='OLD',position='APPEND',
+     >       action='WRITE')
+      END IF
+
+      WRITE(iu,900) istep, ppiclf_nid, ppiclf_np,
+     >  (tloc(i),i=1,NT), leafsum, unacc,
+     >  (cloc(i),i=1,NC)
+      CLOSE(iu)
+  900 FORMAT(I9,',',I7,',',I9,32(',',1PE15.7),8(',',I11))
+#endif
+      RETURN
+      END

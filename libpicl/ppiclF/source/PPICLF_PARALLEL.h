@@ -4,8 +4,10 @@ c Communication
       COMMON /PPICLF_PARALLEL_COMM_I/ PPICLF_COMM, PPICLF_NP, PPICLF_NID
      >                               ,PPICLF_CR_HNDL, PPICLF_FP_HNDL
      >                               ,PPICLF_COMM_NID, PPICLF_GLNPART
-      INTEGER*4 PPICLF_COMM, PPICLF_NP, PPICLF_NID, PPICLF_CR_HNDL
+     >                               ,PPICLF_ISTAGE
+       INTEGER*4 PPICLF_COMM, PPICLF_NP, PPICLF_NID, PPICLF_CR_HNDL
      >         ,PPICLF_FP_HNDL, PPICLF_COMM_NID, PPICLF_GLNPART
+     >         ,PPICLF_ISTAGE
       DATA PPICLF_NID /0/
 
 c Bins

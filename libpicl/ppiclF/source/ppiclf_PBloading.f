@@ -13,49 +13,69 @@
       INCLUDE "mpif.h"
 
       INTEGER*4 i, j, ierr, temp_dSize(3), itemp
-      REAL*8    BinMinLen(3), local_min(3), local_max(3)
-     >          ,global_min(3), global_max(3)
+      REAL*8    BinMinLen(3), local_extremes(6)
+     >          ,global_extremes(6)
      >          ,BinBuffer(3), periodicDistCheck
      >          ,idum, jdum, kdum
+#ifdef PERF
+      REAL*8    tstart, tfinal
+#endif
 
       DO i = 1,3
         BinMinLen(i) = MAX(ppiclf_filter(i), ppiclf_nndist)
         BinBuffer(i) = 2.0D0*MAX(ppiclf_filter(i), ppiclf_nndist)
       END DO
+      IF(ppiclf_istage .NE. 2 .OR. ppiclf_istage .NE. 3) THEN
+        local_extremes(1:3) =  1.0D10 ! Large "min" value
+        local_extremes(4:6) = -1.0D10 ! Small "max" value
 
-      local_max(1:3) = -1.0D10 ! Fast memset
-      local_min(1:3) =  1.0D10 ! Fast memset
-
-      DO i=1,ppiclf_npart
-        local_min(1) = MIN(local_min(1), ppiclf_y(1,i) - BinBuffer(1))
-        local_max(1) = MAX(local_max(1), ppiclf_y(1,i) + BinBuffer(1))
+        DO i=1,ppiclf_npart
+          local_extremes(1) = MIN(local_extremes(1), 
+     >                            ppiclf_y(1,i) - BinBuffer(1))
+          local_extremes(2) = MIN(local_extremes(2), 
+     >                            ppiclf_y(2,i) - BinBuffer(2))
+          local_extremes(3) = MIN(local_extremes(3), 
+     >                            ppiclf_y(3,i) - BinBuffer(3))
+          local_extremes(4) = MAX(local_extremes(4), 
+     >                            ppiclf_y(1,i) + BinBuffer(1))
+          local_extremes(5) = MAX(local_extremes(5), 
+     >                            ppiclf_y(2,i) + BinBuffer(2))
+          local_extremes(6) = MAX(local_extremes(6), 
+     >                            ppiclf_y(3,i) + BinBuffer(3))
+         END DO
         
-        local_min(2) = MIN(local_min(2), ppiclf_y(2,i) - BinBuffer(2))
-        local_max(2) = MAX(local_max(2), ppiclf_y(2,i) + BinBuffer(2))
-
-        local_min(3) = MIN(local_min(3), ppiclf_y(3,i) - BinBuffer(3))
-        local_max(3) = MAX(local_max(3), ppiclf_y(3,i) + BinBuffer(3))
-       END DO
-
-      ! Finds global bin domain boundaries across MPI ranks
-      CALL MPI_ALLREDUCE(local_min, global_min, 3
-     >                     ,MPI_DOUBLE_PRECISION, MPI_MIN
-     >                     ,ppiclf_comm, ierr)
-      CALL MPI_ALLREDUCE(local_max, global_max, 3
-     >                     ,MPI_DOUBLE_PRECISION, MPI_MAX
-     >                     ,ppiclf_comm, ierr)
+        ! flip sign on min so that I only need to call ALLREDUCE
+        ! for max values and not two expensive MPI calls.
+        DO i = 1,3
+          local_extremes(i) = - local_extremes(i)
+        END DO
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
+        ! Finds global bin domain boundaries across MPI ranks
+        CALL MPI_ALLREDUCE(local_extremes, global_extremes, 6
+     >                       ,MPI_DOUBLE_PRECISION, MPI_MAX
+     >                       ,ppiclf_comm, ierr)
+#ifdef PERF
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
+      PPICLF_TCreateBin = PPICLF_TCreateBin - tfinal
+#endif
+        ! flip sign on min values back to positive
+        DO i = 1,3
+          global_extremes(i) = - global_extremes(i)
+        END DO
+        DO i = 1,3
+          ppiclf_binb(2*i-1)  = global_extremes(i)
+          ppiclf_binb(2*i)    = global_extremes(i+3)
+          ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
+        END DO
+      END IF
 
       IF(ppiclf_glnpart .LT. 1) THEN
         PRINT*, 'ERROR: PPICLF RAN WITH ZERO PARTICLES'
         CALL ppiclf_exittr('',0.0,0)
       END IF
-
-      DO i = 1,3
-        ppiclf_binb(2*i-1)  = global_min(i)
-        ppiclf_binb(2*i)    = global_max(i)
-        ppiclf_BinDomLen(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
-      END DO
-
       ppiclf_binchanged = .FALSE.
 
       ! If all particles are within last RK Stage binboundaries,
@@ -72,10 +92,6 @@
           EXIT
         END IF
       END DO
-
-      CALL MPI_ALLREDUCE(MPI_IN_PLACE,ppiclf_binchanged,1
-     >                   ,MPI_LOGICAL, MPI_LOR
-     >                   ,ppiclf_comm, ierr)
 
 #ifdef TEST
       ppiclf_binchanged = .TRUE.
@@ -135,44 +151,40 @@
       END DO
 
       ! Perform on root processor only to ensure no rounding errors
-      IF(ppiclf_nid .EQ. 0) THEN
-        IF(ppiclf_binorderset) THEN
-          ! Not the first time sorting    
-          ! Sorting the domain lengths
-          ! Don't want to constantly flip - do has to be 1.25x bigger
-          temp_dSize(1) = ppiclf_dL
-          temp_dSize(2) = ppiclf_dM
-          temp_dSize(3) = ppiclf_dS
-          DO i = 1,2
-            DO j = i+1,3
-              IF(ppiclf_BinDomLen(temp_dSize(j)) .GT.
-     >           ppiclf_BinDomLen(temp_dSize(i))*1.25) THEN
-                itemp = temp_dSize(i)
-                temp_dSize(i) = temp_dSize(j)
-                temp_dSize(j) = itemp
-              END IF
-            END DO !j
-          END DO !i
-         ELSE
-          ! First time sorting    
-          ! Sorting the domain lengths
-          temp_dSize(1) = 1
-          temp_dSize(2) = 2
-          temp_dSize(3) = 3
-          DO i = 1,2
-            DO j = i+1,3
-              IF(ppiclf_BinDomLen(temp_dSize(j)) .GT.
-     >           ppiclf_BinDomLen(temp_dSize(i))) THEN
-                itemp = temp_dSize(i)
-                temp_dSize(i) = temp_dSize(j)
-                temp_dSize(j) = itemp
-              END IF
-            END DO !j
-          END DO !i
-        END IF !binorderset
-      END IF !root processor
-
-      CALL MPI_BCAST(temp_dSize,3,MPI_INTEGER4,0,ppiclf_comm,ierr)
+      IF(ppiclf_binorderset) THEN
+        ! Not the first time sorting    
+        ! Sorting the domain lengths
+        ! Don't want to constantly flip - do has to be 1.25x bigger
+        temp_dSize(1) = ppiclf_dL
+        temp_dSize(2) = ppiclf_dM
+        temp_dSize(3) = ppiclf_dS
+        DO i = 1,2
+          DO j = i+1,3
+            IF(ppiclf_BinDomLen(temp_dSize(j)) .GT.
+     >         ppiclf_BinDomLen(temp_dSize(i))*1.25) THEN
+              itemp = temp_dSize(i)
+              temp_dSize(i) = temp_dSize(j)
+              temp_dSize(j) = itemp
+            END IF
+          END DO !j
+        END DO !i
+       ELSE
+        ! First time sorting    
+        ! Sorting the domain lengths
+        temp_dSize(1) = 1
+        temp_dSize(2) = 2
+        temp_dSize(3) = 3
+        DO i = 1,2
+          DO j = i+1,3
+            IF(ppiclf_BinDomLen(temp_dSize(j)) .GT.
+     >         ppiclf_BinDomLen(temp_dSize(i))) THEN
+              itemp = temp_dSize(i)
+              temp_dSize(i) = temp_dSize(j)
+              temp_dSize(j) = itemp
+            END IF
+          END DO !j
+        END DO !i
+      END IF !binorderset
 
       ppiclf_dL = temp_dSize(1) 
       ppiclf_dM = temp_dSize(2) 
@@ -199,6 +211,9 @@
       INTEGER*4  stride(3), stride_L, stride_M, stride_S
       INTEGER*4  bin_L, bin_M
       REAL*8     LB_iterationCount, LB_criteria, LB_target, inv_dx(3)
+#ifdef PERF
+      REAL*8     tstart, tfinal
+#endif
      
       nb1  = ppiclf_n_bins(1)
       nb2  = ppiclf_n_bins(2)
@@ -249,9 +264,17 @@
         ppiclf_ParticleCount(bin) = ppiclf_ParticleCount(bin) + 1
       END DO
       ! Sum particles per bin across MPI Ranks
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_ParticleCount
      >                   ,ppiclf_totalBins ,MPI_INTEGER4, MPI_SUM
      >                   ,ppiclf_comm, ierr)
+#ifdef PERF
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
+      PPICLF_TFindPart = PPICLF_TFindPart - tfinal
+#endif
 
       ppiclf_glnpart = SUM(ppiclf_ParticleCount)
 
@@ -262,9 +285,17 @@
       END IF
 
       ! Logical OR comparison across MPI Ranks
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_particleMoved
      >                   ,1, MPI_LOGICAL, MPI_LOR
      >                   ,ppiclf_comm, ierr)
+#ifdef PERF
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
+      PPICLF_TFindPart = PPICLF_TFindPart - tfinal
+#endif
 
       ! Check if new BTRM required
       ! If NumPart > LB_criteria*TargetNumPart -> Reassign BTRM
@@ -312,9 +343,17 @@
       END DO outer_loop
 
       ! Logical OR comparison across MPI Ranks
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_rebalance
      >                   ,1, MPI_LOGICAL, MPI_LOR
      >                   ,ppiclf_comm, ierr)
+#ifdef PERF
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
+      PPICLF_TFindPart = PPICLF_TFindPart - tfinal
+#endif
 
       ! Ensure remap particles since BTRM will change
       IF(ppiclf_rebalance) ppiclf_particleMoved = .TRUE.
@@ -328,6 +367,9 @@
       IMPLICIT NONE
       INCLUDE "PPICLF"
       INCLUDE "mpif.h"
+#ifdef PERF
+      REAL*8 ppiclf_pt0, tstart, tfinal
+#endif
 
 
       INTEGER*4   ierr, i, bin, irank, particleSum
@@ -341,6 +383,9 @@
       ! Calculate BTRM on root processor and broadcast
       ! to all others. This ensures all processors have same
       ! key global mapping.
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       IF(ppiclf_nid. EQ. 0) THEN
         
         nb1 = ppiclf_n_bins(1)
@@ -409,8 +454,16 @@
       END IF ! root Processor
 
       ! Share BTRM to all processors 
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
       CALL MPI_BCAST(ppiclf_BinToRankMap,ppiclf_totalBins,MPI_INTEGER4,
-     >               0, ppiclf_comm, ierr) 
+     >               0, ppiclf_comm, ierr)
+#ifdef PERF
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
+      PPICLF_TLoadBalance = PPICLF_TLoadBalance - tfinal
+#endif
 
       ! Assign correct rank to each particle
       DO i = 1,ppiclf_npart
@@ -419,9 +472,34 @@
         ppiclf_iprop(4,i) = ppiclf_BinToRankMap(bin) ! Owning MPI Rank
       END DO
 
+#ifdef PERF
+      PPICLF_TLoadBalance = PPICLF_TLoadBalance
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_comm_setRankBoundaries
+#ifdef PERF
+      PPICLF_TRankBounds = PPICLF_TRankBounds
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_comm_setEmptyIndicator
+#ifdef PERF
+      PPICLF_TEmptyInd = PPICLF_TEmptyInd
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
       CALL ppiclf_comm_setInterfaceIndicator
+#ifdef PERF
+      PPICLF_TInterfaceInd = PPICLF_TInterfaceInd
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
 
       RETURN
       END SUBROUTINE
@@ -518,7 +596,7 @@
      >                  - MAX(0,ppiclf_binBIndex(2*i-1)-1) + 1
         ppiclf_total_SBin = ppiclf_total_SBin*ppiclf_nSBin(i)
       END DO
- 
+      PPICLF_T_LocalBins = ppiclf_total_SBin 
       RETURN
       END SUBROUTINE
 !----------------------------------------------------------------------
@@ -803,7 +881,8 @@
      >             ,j0)                       ! Receiver processor index
 !
 #ifdef PERF
-      tfinal = MPI_WTIME()
+      PPICLF_TMPI_moveRP = PPICLF_TMPI_moveRP
+     >     + (MPI_WTIME() - tstart)
 #endif
 
       IF(ppiclf_npart .GT. PPICLF_LPART .OR. ppiclf_npart .LT. 0) THEN
@@ -1065,14 +1144,17 @@
 
 #ifdef PERF
       tstart = MPI_WTIME()
+      PPICLF_T_FVCells       = ppiclf_nFVCells
+      PPICLF_T_OverlapCells_sent  = ppiclf_nCells_FV2PICL
 #endif
-
+ 
       CALL pfgslib_crystal_tuple_transfer(
      >        ppiclf_cr_hndl,ppiclf_nCells_FV2PICL,PPICLF_LEE !setup
      >        ,ppiclf_cell_map,nii ! Integer Comm
      >        ,partl,nl                 ! Logical Comm
      >        ,ppiclf_picl_grid,nrr      ! Real Comm
      >        ,njj)                      ! Receiver processor index
+
       CALL pfgslib_crystal_tuple_sort(
      >        ppiclf_cr_hndl,ppiclf_nCells_FV2PICL !setup
      >        ,ppiclf_cell_map,nii !Integer to sort
@@ -1081,7 +1163,10 @@
      >        ,nkey,2)                  !sorting method
 
 #ifdef PERF
-      tfinal = MPI_WTIME()
+      PPICLF_T_OverlapCells_received  = ppiclf_nCells_FV2PICL
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_moveOvlp = PPICLF_TMPI_moveOvlp + tfinal
+      PPICLF_TMapOverlap = PPICLF_TMapOverlap - tfinal
 #endif
 
       ! Find distance check for interpolation.
@@ -1104,9 +1189,17 @@
         ppiclf_filter(l) = Max_CellLen(l)*1.51D0
       END DO
       ! Find max filter across processors (all overlap cells considered)
+#ifdef PERF
+      tstart = MPI_WTIME()
+#endif
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_filter
      >                   ,3 ,MPI_DOUBLE_PRECISION
      >                   ,MPI_MAX ,ppiclf_comm, ierr)
+#ifdef PERF
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
+      PPICLF_TMapOverlap = PPICLF_TMapOverlap - tfinal
+#endif
 
       DO l = 1,3
         ! Multiply by 1.5 so particle near face will
@@ -1439,6 +1532,7 @@
                            ! that should receive ghost particle
 #ifdef PERF
       tstart = MPI_WTIME()
+      PPICLF_T_GhostPartSent = ppiclf_npart_gp
 #endif
 
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl
@@ -1449,7 +1543,10 @@
      >             ,iprop_proc_index)               ! Receiver processor index
 
 #ifdef PERF
-      tfinal = MPI_WTIME()
+      PPICLF_T_GhostPartRec  = ppiclf_npart_gp
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_moveGP = PPICLF_TMPI_moveGP + tfinal
+      PPICLF_TMoveGhost = PPICLF_TMoveGhost - tfinal
 #endif
       RETURN
       END SUBROUTINE

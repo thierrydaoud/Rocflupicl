@@ -41,6 +41,11 @@
       implicit none
 !
       include "PPICLF"
+#ifdef PERF
+      real*8 ppiclf_pt0
+      real*8 MPI_WTIME
+      external MPI_WTIME
+#endif
 !
 ! Internal:
 !
@@ -391,13 +396,23 @@
          end if
 
          ! add neighbors
+#ifdef PERF
+          ppiclf_pt0 = MPI_WTIME()
+#endif
           CALL ppiclf_solve_NearestNeighborSB(i)
+#ifdef PERF
+          PPICLF_TPPNNSearch = PPICLF_TPPNNSearch
+     >        + (MPI_WTIME() - ppiclf_pt0)
+#endif
 
          end if ! end Step 1b; nearestneighbor
 
 
 !
 ! Step 2: Force component quasi-steady
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
 !
          if (qs_flag==1) then 
            call ppiclf_user_QS_Parmar(i,beta,cd)
@@ -446,7 +461,14 @@
 
 
 !
+#ifdef PERF
+      PPICLF_TQuasiSteady = PPICLF_TQuasiSteady
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
 ! Step 4: Force component added mass
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
 !
          if (am_flag == 1) then 
             call ppiclf_user_AM_Parmar(i,iStage,
@@ -488,7 +510,14 @@
 !-----------------------------------------------------------------------
 
 !
+#ifdef PERF
+      PPICLF_TAddedMass = PPICLF_TAddedMass
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
 ! Step 5: Force component pressure gradient
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
 !
          if (pg_flag == 1) then
             fdpdx = -ppiclf_rprop(PPICLF_R_JVOLP,i)*
@@ -513,6 +542,10 @@
          endif ! end pg_flag = 1
 
 !
+#ifdef PERF
+      PPICLF_TPresGrad = PPICLF_TPresGrad
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
 ! Step 6: Force component collisional force, ie, particle-particle
 !
          if (collisional_flag >= 1) then
@@ -550,6 +583,9 @@
          endif
 !
 ! Step 8b: Heat transfer model
+#ifdef PERF
+      ppiclf_pt0 = MPI_WTIME()
+#endif
 !
          if (heattransfer_flag >= 1) then
             call ppiclf_user_HT_driver(i,qq)
@@ -557,6 +593,10 @@
 
 
 !
+#ifdef PERF
+      PPICLF_THeatTransfer = PPICLF_THeatTransfer
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
 ! Step 9a: Angular velocity model
 !
          rmass_omega = rmass*dp*dp/10.0d0
