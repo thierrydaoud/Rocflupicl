@@ -21,7 +21,7 @@
       real*4  rout_pos(3      *PPICLF_LPART) 
      >       ,rout_sln(PPICLF_LRS*PPICLF_LPART)
      >       ,rout_lrp(PPICLF_LRP*PPICLF_LPART)
-     >       ,rout_lip(3      *PPICLF_LPART)
+     >       ,rout_lip(PPICLF_LIP*PPICLF_LPART) ! capacity = LIP; 8 read
       real*8 dp_max
       character*1 dum_read
       character*132 filein2
@@ -145,7 +145,7 @@
      >                            ,pth,ierr)
       enddo
 
-      do i=1,3
+      do i=1,8   ! must match writer tag-emit count (8 of LIP=11)
          idisp_lip = ivtu_size + isize*(3*npt_total  
      >                         + PPICLF_LRS*npt_total
      >                         + PPICLF_LRP*npt_total
@@ -191,7 +191,7 @@
 !*** need to add ppiclf_rprop2 ppiclf_rprop3, rprop4, & prop5
       enddo
       ! This reads the particle tag infomation.
-      do j=1,3
+      do j=1,8   ! must match writer tag-emit count (8 of LIP=11)
       do i=1,npart
          ic_lip = ic_lip + 1
          ppiclf_iprop(j,i) = int(rout_lip(ic_lip))
@@ -870,7 +870,7 @@ c1511 continue
       real*4  rout_pos(3      *PPICLF_LPART) 
      >       ,rout_sln(PPICLF_LRS*PPICLF_LPART)
      >       ,rout_lrp(PPICLF_LRP*PPICLF_LPART)
-     >       ,rout_lip(3      *PPICLF_LPART)
+     >       ,rout_lip(PPICLF_LIP*PPICLF_LPART) ! capacity = LIP; 8 emitted
       character*3 filein
       character*12 vtufile
       character*6  prostr
@@ -955,7 +955,7 @@ c1511 continue
          rout_lrp(ic_lrp) = sngl(ppiclf_rprop(j,i))
       enddo
       enddo
-      do j=1,9
+      do j=1,8   ! emit 8 of LIP=11 iprop tags (rest intentionally not written)
       do i=1,nxx
          ! This prints out the particle tag info
          ic_lip = ic_lip + 1
@@ -1061,7 +1061,7 @@ c1511 continue
          iint = iint + 1*isize*npt_total + isize
       enddo
 
-      do ie=1,9
+      do ie=1,8   ! must match the other tag loops (8 of LIP=11)
          write(prostr,'(A3,I2.2)') "tag",ie
          call ppiclf_io_WriteDataArrayVTU(vtu,prostr,1,iint)
          iint = iint + 1*isize*npt_total + isize
@@ -1187,7 +1187,7 @@ c1511 continue
          call ppiclf_byte_close_mpi(pth,ierr)
       enddo
 
-      do i=1,9
+      do i=1,8   ! must match the other tag loops (8 of LIP=11)
          idisp_lip = ivtu_size + isize*(3*npt_total  
      >                         + PPICLF_LRS*npt_total
      >                         + PPICLF_LRP*npt_total
