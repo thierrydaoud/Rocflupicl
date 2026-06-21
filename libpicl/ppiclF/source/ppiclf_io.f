@@ -1382,6 +1382,23 @@ c1511 continue
       return
       end
 !-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_io_FindMaxPositions(xp_min,xp_max,yp_min,
+     >                                      yp_max,zp_min,zp_max)
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      REAL*8 xp_min, xp_max, yp_min, yp_max, zp_min, zp_max
+
+      xp_min = MINVAL(ppiclf_y(1,:))
+      yp_min = MINVAL(ppiclf_y(2,:))
+      zp_min = MINVAL(ppiclf_y(3,:))
+      xp_max = MAXVAL(ppiclf_y(1,:))
+      yp_max = MAXVAL(ppiclf_y(2,:))
+      zp_max = MAXVAL(ppiclf_y(3,:))
+
+      RETURN
+      END 
+
+!-----------------------------------------------------------------------
 !      SUBROUTINE ppiclf_io_WritePerformance
 !!
 !      IMPLICIT NONE
