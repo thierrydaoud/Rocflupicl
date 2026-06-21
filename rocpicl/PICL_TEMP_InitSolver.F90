@@ -433,22 +433,22 @@ IF(global%restartFromScratch) THEN
    END DO
    npart_local = i - 1
 
-   CALL MPI_ALLREDUCE(xp_min,xp_min,1,MPI_RFREAL,MPI_MIN, &
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE,xp_min,1,MPI_RFREAL,MPI_MIN, &
         global%mpiComm,global%mpierr)
 
-   CALL MPI_ALLREDUCE(xp_max,xp_max,1,MPI_RFREAL,MPI_MAX, &
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE,xp_max,1,MPI_RFREAL,MPI_MAX, &
         global%mpiComm,global%mpierr)
 
-   CALL MPI_ALLREDUCE(yp_min,yp_min,1,MPI_RFREAL,MPI_MIN, &
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE,yp_min,1,MPI_RFREAL,MPI_MIN, &
         global%mpiComm,global%mpierr)
 
-   CALL MPI_ALLREDUCE(yp_max,yp_max,1,MPI_RFREAL,MPI_MAX, &
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE,yp_max,1,MPI_RFREAL,MPI_MAX, &
         global%mpiComm,global%mpierr)
 
-   CALL MPI_ALLREDUCE(zp_min,zp_min,1,MPI_RFREAL,MPI_MIN, &
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE,zp_min,1,MPI_RFREAL,MPI_MIN, &
         global%mpiComm,global%mpierr)
 
-   CALL MPI_ALLREDUCE(zp_max,zp_max,1,MPI_RFREAL,MPI_MAX, &
+   CALL MPI_ALLREDUCE(MPI_IN_PLACE,zp_max,1,MPI_RFREAL,MPI_MAX, &
         global%mpiComm,global%mpierr)
 
    IF(global%myProcid == MASTERPROC) THEN
@@ -511,7 +511,8 @@ ELSE
    npart = -1
    dp_max = -1.0
    CALL ppiclf_io_ReadParticleVTU(trim(vtuFile), ii, npart, dp_max)
-   CALL MPI_Allreduce(dp_max,dp_max,1,MPI_RFREAL,MPI_MAX, &
+   CALL ppiclf_io_FindMaxPositions(xp_min,xp_max,yp_min,yp_max,zp_min,zp_max)
+   CALL MPI_Allreduce(MPI_IN_PLACE,dp_max,1,MPI_RFREAL,MPI_MAX, &
       global%mpiComm,global%mpierr )
    print*,global%myProcid,npart,dp_max,dp_max
    IF( global%myProcid == MASTERPROC) THEN
@@ -524,7 +525,10 @@ ELSE
 END IF ! global%restartFromScratch
 
 !CALL MPI_Barrier(global%mpiComm,errorFlag)
-
+IF(.NOT. global%restartFromScratch) THEN
+  ! This is only used in add particles, which isn't needed for restart
+  npart_local = 0
+END IF
 
 ! User sets up overlap grid:
 nCells = pRegion%grid%nCells
@@ -652,7 +656,9 @@ DO l = 1,3
   CALL MPI_Allreduce(filter_local(l),filter(l),1,MPI_RFREAL,MPI_MAX, &
       global%mpiComm,global%mpierr )
 END DO
-
+IF(global%myProcid == MASTERPROC) THEN
+  WRITE(*,*) "PICL_INIT filter lengths:", filter_local(1),filter_local(2),filter_local(3)
+END IF
 neighborWidth = 4.0_RFREAL*dp_max ! Minimum value. User can entire larger if desired
 IF((neighborWidth .GT. global%piclNeighborWidth) &
     .AND. (global%myProcid == MASTERPROC)) THEN
@@ -764,7 +770,7 @@ DO i = 1, nCells
 END DO
 
 maxVF = MAXVAL(volp)
-CALL MPI_Allreduce(maxVF,maxVF,1,MPI_RFREAL,MPI_MAX, &
+CALL MPI_Allreduce(MPI_IN_PLACE,maxVF,1,MPI_RFREAL,MPI_MAX, &
       global%mpiComm,global%mpierr )
 ! Particle Volume Fraction Sanity Check
 IF(maxVF .GT. 0.65 .AND. global%myProcid == MASTERPROC) THEN
@@ -778,21 +784,21 @@ END IF
 !    (phig*r,phig*r*u,phig*r*v,phig*r*w,phig*r*E), where phig is the gas
 !    phase volume fraction and can only be computed after the particles
 !    are read in.
-
-DO icg = 1,pGrid%nCellsTot
-    vFrac = 1.0_RFREAL - pRegion%mixt%piclVF(icg)
-    pRegion%mixt%cv(CV_MIXT_DENS,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_DENS,icg)
-    pRegion%mixt%cv(CV_MIXT_XMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_XMOM,icg)
-    pRegion%mixt%cv(CV_MIXT_YMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_YMOM,icg)
-    pRegion%mixt%cv(CV_MIXT_ZMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_ZMOM,icg)
-    pRegion%mixt%cv(CV_MIXT_ENER,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_ENER,icg)
-    IF(pRegion%mixt%cv(CV_MIXT_DENS,icg) .le. 0.0) THEN
-         WRITE(*,*) "Error: negative density: ",pRegion%mixt%cv(CV_MIXT_DENS,icg)     
-         PRINT*, 'From rocpicl/PICL_TEMP_InitSolver.F90' 
-         CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'PPICLF:init')
-    END IF    
-END DO ! icg
-
+IF(global%restartFromScratch) THEN
+  DO icg = 1,pGrid%nCellsTot
+      vFrac = 1.0_RFREAL - pRegion%mixt%piclVF(icg)
+      pRegion%mixt%cv(CV_MIXT_DENS,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_DENS,icg)
+      pRegion%mixt%cv(CV_MIXT_XMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_XMOM,icg)
+      pRegion%mixt%cv(CV_MIXT_YMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_YMOM,icg)
+      pRegion%mixt%cv(CV_MIXT_ZMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_ZMOM,icg)
+      pRegion%mixt%cv(CV_MIXT_ENER,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_ENER,icg)
+      IF(pRegion%mixt%cv(CV_MIXT_DENS,icg) .le. 0.0) THEN
+           WRITE(*,*) "Error: negative density: ",pRegion%mixt%cv(CV_MIXT_DENS,icg)     
+           PRINT*, 'From rocpicl/PICL_TEMP_InitSolver.F90' 
+           CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'PPICLF:init')
+      END IF    
+  END DO ! icg
+END IF
 DEALLOCATE(volp,STAT=errorFlag)
     global%error = errorFlag
     IF ( global%error /= ERR_NONE ) THEN
