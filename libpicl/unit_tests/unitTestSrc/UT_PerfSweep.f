@@ -11,6 +11,7 @@
 
       ! Timer variables
       REAL*8    Tstart, Tend, SBtime, Regtime
+      REAL*8    ppiclf_pt0
 
       ! Grid variables
 
@@ -128,86 +129,49 @@
 !     >               COS(2*PI*y_norm) +
 !     >               COS(2*PI*z_norm)
 !        END DO
-!        DO i = 1,2
-!          CALL ppiclf_solve_InterpFieldUser(PPICLF_R_JT,tpF)
-!          CALL ppiclf_comm_CreateBin
-!          CALL MPI_BARRIER(ppiclf_comm,ierr)
-!          CALL ppiclf_comm_FindParticle
-!          CALL ppiclf_comm_MoveParticle
-!          CALL ppiclf_comm_MapOverlapGrid
-!          CALL MPI_BARRIER(ppiclf_comm,ierr)
-!          CALL ppiclf_solve_InitInterp
-!          DO j = 1,PPICLF_INT_ICNT
-!            CALL ppiclf_solve_InterpField(j)
-!          END DO
-!          CALL ppiclf_solve_InterpTupleTransfer
-!          CALL MPI_BARRIER(ppiclf_comm,ierr)
-!          IF(nid .EQ. rootProc) CALL CPU_TIME(Tstart)
-!          IF(i .EQ. 1) THEN 
-!          ! SB
-!            CALL ppiclf_solve_SBParticleToCellMap
-!          ELSE
-!          !brute force particle to cell mapping
-!            CALL ppiclf_solve_ParticleToCellMap
-!          END IF
-!          CALL MPI_BARRIER(ppiclf_comm,ierr)
-!          IF(nid .EQ. rootProc) CALL CPU_TIME(Tend)
-!          IF(nid .EQ. rootProc) THEN
-!            IF(i .EQ. 1) THEN
-!              SBtime = Tend-Tstart
-!            ELSE
-!              Regtime = Tend-Tstart
-!              PRINT*, 'Reg time: ',Regtime, 
-!     >                'SB time: ',SBtime,
-!     >                'Reg/SB ratio: ', Regtime/SBtime
-!            END IF
-!          END IF
-!        END DO !i
-!      END DO !l
-!
-!      CALL MPI_BARRIER(ppiclf_comm,ierr)
-!
-!      DO i = 1,10000
-!        Regtime = SQRT(Regtime)
-!        Regtime = Regtime**2
-!      END DO
-!      CALL MPI_BARRIER(ppiclf_comm,ierr)
 
-      DO i = 1,10000
-        !PRINT*, 'start loop'
-        ! Manually set number of MPI ranks
-        ppiclf_np = i
-        ! ppiclf_binchanged set in CreateBin
-        ! ppiclf_binchanged .TRUE. means
-        ! bin coordinates changed
-        CALL ppiclf_comm_CreateBinPartLB
 
-        ! ppiclf_particleMoved set in FindParticle
-        ! ppiclf_particleMoved FALSE means all particles
-        ! stayed in same rank as previous RK Stage.
-        CALL ppiclf_comm_FindParticlePartLB
-        CALL MPI_BARRIER(ppiclf_comm,ierr)
+      ! ================================================================
+      ! PERFORMANCE SWEEP
+      ! Build the initial bins/ghosts/maps once via the real init
+      ! pipeline, then drive the real per-step pipeline and log one
+      ! reduced CSV row per step. Particle count for this run comes
+      ! from UT_setup(series); sweep by running across series values
+      ! (and rename ppiclf_perf.csv between runs -- see README).
+      ! NOTE: requires the ppiclF library to be built with PERF=1,
+      !       otherwise InitPerformance/LogPerformance are no-ops and
+      !       all timers stay zero.
+      ! ================================================================
+      CALL ppiclf_solve_InitSolvePartLB
+      CALL ppiclf_solve_InitPerformance
 
-        CALL ppiclf_comm_PartLoadBalance
+      loopcount = 200
+      DO i = 1,loopcount
+        ! Real per-step load-balance/map/project pipeline (safe: does
+        ! not invoke user force models, so no FPE on a synthetic case).
+        ! Populates: TCreateBin TFindPart TLoadBalance TRankBounds
+        ! TEmptyInd TInterfaceInd TMapOverlap TsubbinRealMap
+        ! TsubbinCellMap TPCNNSearch TProject TMPI TTotal-portion.
+        ppiclf_pt0 = MPI_WTIME()
+        CALL ppiclf_solve_PostTimeStepPartLB
+        ! Populate TTotal + step count for the safe path (these
+        ! are set inside the library only on the IntegrateParticle
+        ! path; do it here so the CSV TTotal/Unaccounted/Imbalance
+        ! columns are meaningful for this microbenchmark).
+        PPICLF_TTotal = PPICLF_TTotal + (MPI_WTIME() - ppiclf_pt0)
+        PPICLF_PERF_NSTEP = PPICLF_PERF_NSTEP + 1
 
-        CALL ppiclf_comm_setRankBoundaries
+        ! ---- FULL-FIDELITY ALTERNATIVE (covers ALL timers, incl.
+        ! TInterp TCreateGhost TMoveGhost Tsubbin{Fine,Ghost}Map
+        ! TPPNNSearch TSolve TTotal). Requires the synthetic case to
+        ! provide sane fluid fields each stage (call
+        ! ppiclf_solve_InterpFieldUser first), else the user drag/heat
+        ! models may divide by zero. Swap the call above for: ----
+        !   CALL ppiclf_solve_IntegrateParticle(i, loopcount+1,
+        !  >                                     1.0D-6, DBLE(i)*1.0D-6)
 
-        CALL ppiclf_comm_setEmptyIndicator
-
-        CALL ppiclf_comm_setInterfaceIndicator
-
-        ! Make-shift wait timer
-        CALL MPI_BARRIER(icomm,ierr)
-        DO j = 1,10000
-          Regtime = SQRT(Regtime)
-          Regtime = Regtime**2
-        END DO
-        CALL ppiclf_comm_LBCheck(series,iteration)
-        ! Make-shift wait timer
-        DO j = 1,10000
-          Regtime = SQRT(Regtime)
-          Regtime = Regtime**2
-        END DO
+        ! Cross-rank reduce + append one CSV row, then reset interval.
+        CALL ppiclf_solve_LogPerformance(i)
         CALL MPI_BARRIER(icomm,ierr)
       END DO
       !CALL ppiclf_io_WriteParticleVTU('1') 

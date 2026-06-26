@@ -40,6 +40,7 @@
      >          wProj(27),part_feedbk1(PPICLF_LPART),
      >          TrueFeedback1(PPICLF_LEE), TrueFeedback2(PPICLF_LEE),
      >          part_feedbk2(PPICLF_LPART), error1, error2, e1avg, e2avg
+     >          ,avg_scale
 
       CHARACTER*50 filename, testcase, procString, npstring, par
 
@@ -70,7 +71,7 @@
       CALL UT_setup
       CALL ppiclf_comm_InitMPI(icomm, nid, nproc)
 
-      DO test = 1,1
+      DO test = 1,8
        
         ! Periodicity flag Setup
         CALL test_setperiodic(x_per_flag,y_per_flag,z_per_flag,
@@ -534,8 +535,14 @@
                     dist = SQRT(dist)
                     CellVol = grid(7,icellNumber)
                     GaussianConst = 2.305D0
+                    ! Match library ProjectParticleGrid: isotropic
+                    ! length scale from cell edges, NOT vol**(2/3)
+                    ! (these differ for non-cubic cells).
+                    avg_scale = 3.0D0/(grid(4,icellNumber)**2
+     >                               + grid(5,icellNumber)**2
+     >                               + grid(6,icellNumber)**2)
                     wProj(icount) = ABS(CellVol*EXP(-GaussianConst*
-     >                         (dist**2) / (CellVol**(2.0D0/3.0D0))))
+     >                         (dist**2) * avg_scale))
                     wProjTot = wProjTot + wProj(icount)          
 
                   ELSE IF(loopcount .EQ. 2) THEN

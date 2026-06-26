@@ -241,7 +241,6 @@
       ppiclf_interp_dchk(1) = 0.0D0
       ppiclf_interp_dchk(2) = 0.0D0
       ppiclf_interp_dchk(3) = 0.0D0
-      ppiclf_maxPartPerFineBin = 1
  
       ppiclf_n_bins(1) = 1
       ppiclf_n_bins(2) = 1
@@ -345,12 +344,13 @@
 !
       IMPLICIT NONE
 !
+      INCLUDE "mpif.h"
       INCLUDE "PPICLF"
 !
 ! Input: 
 !
-      INTEGER*4  npart
-      REAL*8     y(*)
+      INTEGER*4  npart, ierr
+      REAL*8     y(*), tempMax(2)
       REAL*8     rprop(*)
 !
 ! Internal:
@@ -360,6 +360,9 @@
 !
 
       CALL ppiclf_prints('   *Begin AddParticles$')
+
+      IF(ppiclf_npart .EQ. 0) ppiclf_MaxDP = 0.0D0
+      IF(ppiclf_npart .EQ. 0) ppiclf_MinDP = 100000000000.0D0
 
       IF(ppiclf_npart+npart .gt. PPICLF_LPART .or. npart .lt. 0)
      >   CALL ppiclf_exittr('Invalid number of particles$',
@@ -382,6 +385,24 @@
             CALL ppiclf_solve_SetParticleTag(npart)
          CALL ppiclf_prints('       End ParticleTag$')
       END IF
+
+      DO i = 1,ppiclf_npart
+        ppiclf_MaxDP = MAX(ppiclf_MaxDP,ppiclf_rprop(PPICLF_R_JDP,i))
+        ppiclf_MinDP = MIN(ppiclf_MinDP,ppiclf_rprop(PPICLF_R_JDP,i))
+      END DO
+
+      tempMax(1) =  ppiclf_MaxDP
+      tempMax(2) = -ppiclf_MinDP
+
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, tempMax
+     >                   ,2 ,MPI_DOUBLE_PRECISION
+     >                   ,MPI_MAX ,ppiclf_comm, ierr)
+
+      ppiclf_MaxDP =  tempMax(1)
+      ppiclf_MinDP = -tempMax(2)
+      CALL ppiclf_prints('    Max Diameter:$', ppiclf_MaxDP)
+      CALL ppiclf_prints('    Min Diameter:$', ppiclf_MinDP)
+
 
       CALL ppiclf_prints('    End AddParticles$')
 
@@ -437,16 +458,13 @@
      >          cross_x, cross_y, cross_z, unx, uny, unz
       INTEGER*4 i,k, kmax, kp, kkp, kk, j, jp, l, iSB, jSB, kSB,
      >          loopSB, tempSB, iSBin(3), istride, ip, ii, jj
-      INTEGER*4 n_SBin1x2, i_SBin(3), nS1, nS2, nS3, cnt
+      INTEGER*4 n_SBin1x2, i_SBin(3), nS1, nS2, nS3, cnt, istart
 #ifdef TEST
       LOGICAL   FineGridInput
 
       ppiclf_useFineGrid = FineGridInput
-!      IF(ip .EQ. 1 .AND. ppiclf_nid .EQ. 0) PRINT*, 
-!     >     'ppiclf_useFineGrid:',ppiclf_useFineGrid
 #endif
 
-!
 !
       distSQ = ppiclf_nndist**2
 
@@ -501,13 +519,15 @@
             loopSB = ii + jj*nS1 + kk*n_SBin1x2 
             ! Read candidates from the active grid (fine or coarse)
             IF(ppiclf_useFineGrid) THEN
-              cnt = ppiclf_finePartCount(loopSB)
+              istart = ppiclf_fineOffset(loopSB)
+              cnt    = ppiclf_fineOffset(loopSB+1) - istart
             ELSE
-              cnt = ppiclf_binPartCount(loopSB)
+              istart = 1
+              cnt    = ppiclf_binPartCount(loopSB)
             END IF
             DO k = 1,cnt
               IF(ppiclf_useFineGrid) THEN
-                j = ppiclf_finePartList(loopSB,k)
+                j = ppiclf_fineFlat(istart + k - 1)
               ELSE
                 j = ppiclf_binPartList(loopSB,k)
               END IF
@@ -1157,18 +1177,10 @@ c----------------------------------------------------------------------
       PPICLF_TMoveGhost = PPICLF_TMoveGhost
      >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
-        ! ----------------------------------------------------------
-        ! Decide FINE (nndist) vs COARSE (filter) sub-bin grid for the
-        ! P2P search. Made HERE -- after the ghost data transfer
-        ! (MoveGhostPartLB) and before the ghost sub-bin mapping. The
-        ! fine grid pays off only when the coarse bins are notably
-        ! larger than the search cutoff; threshold ~2x (tunable).
-        ! bins_dx and nndist are global, so this is identical on every
-        ! rank.
-        ! ----------------------------------------------------------
+        ! If the NN search distance is <1/2 filter distance:
         ppiclf_useFineGrid = (ppiclf_nndist .GT. 0.0D0) .AND.
-     >    (MAX(ppiclf_bins_dx(1),MAX(ppiclf_bins_dx(2),
-     >         ppiclf_bins_dx(3))) .GE. 2.0D0*ppiclf_nndist)
+     >    (MAX(ppiclf_filter(1),MAX(ppiclf_filter(2),
+     >         ppiclf_filter(3))) .GE. 2.0D0*ppiclf_nndist)
      
         IF(ppiclf_useFineGrid) THEN
           ! Fine path: map BOTH reals and ghosts to the nndist grid
@@ -1630,6 +1642,8 @@ c----------------------------------------------------------------------
       INTEGER*4  n_SBin1x2
       INTEGER*4  i_SBin(3), i_count, ii, jj, kk, loopSB
       INTEGER*4  CellID_nearest(27), idx_worst
+      INTEGER*4  d, nSb1, nSb2, nSb3, totSB, istart, ncell
+      REAL*8     subOrigin(3), invSubLen(3)
       REAL*8     dSQl, dSQi, dSQ(27), xp(3), binblength(3), dSQchk(3)
       REAL*8     dSQ_worst
       LOGICAL, ALLOCATABLE, SAVE :: cell_is_in_list(:)
@@ -1642,8 +1656,6 @@ c----------------------------------------------------------------------
       
       IF(ppiclf_npart < 1) RETURN
 
-      ! --- Initialization ---
-      ! Allocate the hash table only if needed
       IF (.NOT. ALLOCATED(cell_is_in_list)) THEN
           ALLOCATE(cell_is_in_list(1:PPICLF_LEE))
       END IF
@@ -1653,7 +1665,25 @@ c----------------------------------------------------------------------
         dSQchk(i) = ppiclf_interp_dchk(i)**2
       END DO
 
-      n_SBin1x2 = ppiclf_nSBin(1)*ppiclf_nSBin(2)
+      ! Select the active sub-bin grid: fine (position-based, CSR) when
+      ! the fluid map was refined, else the coarse (iprop-based) bins.
+      IF(ppiclf_useFineFluid) THEN
+        nSb1  = ppiclf_nSBin(1)*ppiclf_nSubFluid(1)
+        nSb2  = ppiclf_nSBin(2)*ppiclf_nSubFluid(2)
+        nSb3  = ppiclf_nSBin(3)*ppiclf_nSubFluid(3)
+        totSB = ppiclf_total_fluidSBin
+        DO d = 1,3
+          subOrigin(d) = ppiclf_binb(2*d-1)
+     >                 + ppiclf_binOffset(d)*ppiclf_bins_dx(d)
+          invSubLen(d) = DBLE(ppiclf_nSubFluid(d))/ppiclf_bins_dx(d)
+        END DO
+      ELSE
+        nSb1  = ppiclf_nSBin(1)
+        nSb2  = ppiclf_nSBin(2)
+        nSb3  = ppiclf_nSBin(3)
+        totSB = ppiclf_total_SBin
+      END IF
+      n_SBin1x2 = nSb1*nSb2
 
       wrap_x = ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)
       wrap_y = ppiclf_linperiodic(2) .AND. ppiclf_EqualDomain(2)
@@ -1672,26 +1702,44 @@ c----------------------------------------------------------------------
         xp(2) = ppiclf_y(PPICLF_JY, ip)
         xp(3) = ppiclf_y(PPICLF_JZ, ip)
 
-        i_SBin(1) = ppiclf_iprop(5,ip) - ppiclf_binOffset(1)
-        i_SBin(2) = ppiclf_iprop(6,ip) - ppiclf_binOffset(2)
-        i_SBin(3) = ppiclf_iprop(7,ip) - ppiclf_binOffset(3)
+        IF(ppiclf_useFineFluid) THEN
+          i_SBin(1) = FLOOR((xp(1)-subOrigin(1))*invSubLen(1))
+          i_SBin(2) = FLOOR((xp(2)-subOrigin(2))*invSubLen(2))
+          i_SBin(3) = FLOOR((xp(3)-subOrigin(3))*invSubLen(3))
+        ELSE
+          i_SBin(1) = ppiclf_iprop(5,ip) - ppiclf_binOffset(1)
+          i_SBin(2) = ppiclf_iprop(6,ip) - ppiclf_binOffset(2)
+          i_SBin(3) = ppiclf_iprop(7,ip) - ppiclf_binOffset(3)
+        END IF
 
         ! --- Neighbor Sub-Bin Search Loop ---
         DO k = -1, 1
           kk = i_SBin(3) + k
-          IF(kk < 0 .OR. kk >= ppiclf_nSBin(3)) CYCLE
+          IF(kk < 0 .OR. kk >= nSb3) CYCLE
           DO j = -1, 1
             jj = i_SBin(2) + j
-            IF(jj < 0 .OR. jj >= ppiclf_nSBin(2)) CYCLE
+            IF(jj < 0 .OR. jj >= nSb2) CYCLE
             DO i = -1, 1
               ii = i_SBin(1) + i
-              IF(ii < 0 .OR. ii >= ppiclf_nSBin(1)) CYCLE
+              IF(ii < 0 .OR. ii >= nSb1) CYCLE
               
-              loopSB = ii + jj*ppiclf_nSBin(1) + kk*n_SBin1x2
-              IF(loopSB < 0 .OR. loopSB >= ppiclf_total_SBin) CYCLE
+              loopSB = ii + jj*nSb1 + kk*n_SBin1x2
+              IF(loopSB < 0 .OR. loopSB >= totSB) CYCLE
 
-              DO i_count = 1, ppiclf_binCellCount(loopSB)
-                ie = ppiclf_binCellList(loopSB, i_count)
+              IF(ppiclf_useFineFluid) THEN
+                istart = ppiclf_fluidCellOffset(loopSB)
+                ncell  = ppiclf_fluidCellOffset(loopSB+1) - istart
+              ELSE
+                istart = 1
+                ncell  = ppiclf_binCellCount(loopSB)
+              END IF
+
+              DO i_count = 1, ncell
+                IF(ppiclf_useFineFluid) THEN
+                  ie = ppiclf_fluidCellFlat(istart + i_count - 1)
+                ELSE
+                  ie = ppiclf_binCellList(loopSB, i_count)
+                END IF
                 
                 IF (cell_is_in_list(ie)) CYCLE
 
@@ -1712,7 +1760,6 @@ c----------------------------------------------------------------------
                 
                 IF (farAway) CYCLE
 
-                ! --- "Replace-the-worst" Neighbor Finding ---
                 IF (nnearest < 27) THEN
                   nnearest = nnearest + 1
                   dSQ(nnearest) = dSQi
@@ -1767,7 +1814,6 @@ c----------------------------------------------------------------------
         END IF
       END DO ! ip
 
-      ! --- Cleanup removed particles ---
       IF(ppiclf_remove_particle) THEN
         CALL ppiclf_solve_RemoveParticle
         ppiclf_remove_particle = .FALSE.

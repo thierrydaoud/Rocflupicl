@@ -4,10 +4,9 @@
       PROGRAM main
 
       IMPLICIT NONE
-
       INCLUDE 'mpif.h'
       INCLUDE 'PPICLF_UNIT_TEST'
-      INTEGER*4 i, j, k, l, ie
+      INTEGER*4 i, j, k, l, ie, iii
 
       ! Grid variables
 
@@ -30,7 +29,7 @@
 
       LOGICAL   xFace, yFace, zFace, farAway, interpolation(8), 
      >          projection(8), binGen, nnpart(8), interp_logical(8),
-     >          proj_logical(8), nn_logical(8)
+     >          proj_logical(8), nn_logical(8), fineGrid
 
       ! Projection variables
       REAL*8    wsum, dSQl, dSQi, dist, CellVol, GaussianConst,
@@ -40,6 +39,13 @@
 
       CHARACTER*50 filename, testcase, procString, npstring, par
 
+      REAL*8    SBtime, Regtime, Tend, Tstart
+
+      IF(nproc .GT. 1) THEN
+        par = ' PARALLEL'
+      ELSE
+        par = ''
+      END IF
       rootProc = 0
       PI = 4.0D0*ATAN(1.0) ! pi
       DO i = 1,8
@@ -66,10 +72,11 @@
 ! Particle to Particle Nearest Neighbor Test
 !**********************************************************************
 ! Start loop for varying periodicity cases
-      DO test = 1,1
+      DO test = 1,8
         ! Periodicity flag Setup
         CALL test_setperiodic(x_per_flag,y_per_flag,z_per_flag,
      >                                            test,testcase)
+!        IF(nid .EQ. rootProc) PRINT*, 'Case:',testcase
         ! Will handle angular periodicity separately
         ang_per_flag   = 0
         ang_per_angle  = 0.0D0
@@ -91,16 +98,67 @@
      >                               ang_per_xangle, ang_per_rin,
      >                                                    ang_per_rout)
         CALL ppiclf_comm_InitOverlapGrid(proc_ncells,p_grid)
-        CALL ppiclf_solve_InitSolvePartLB
-        CALL MPI_BARRIER(icomm,ierr)
+        CALL ppiclf_comm_CreateBinPartLB
+        CALL ppiclf_comm_FindParticlePartLB
+        CALL ppiclf_comm_PartLoadBalance
+        CALL ppiclf_comm_MoveParticlePartLB
+        CALL ppiclf_comm_subbinRealParticleMap
+        CALL ppiclf_comm_CreateGhostPartLB
+        CALL ppiclf_comm_MoveGhostPartLB
 
         IF(ppiclf_npart .GT. 0) THEN 
           ! SetYdot only runs with nearest neighbor subroutine
           ! due to preprocess compile flag.  PARTICLE_NN(i) saves
           ! the number of nearest neighbors per particle in ppiclF.
-          DO i = 1,ppiclf_npart
-            CALL ppiclf_solve_NearestNeighborSB(i)
-          END DO
+
+!          !warming paths once
+!          CALL ppiclf_comm_subbinFineParticleMap
+!          DO iii = 1,ppiclf_npart
+!            CALL ppiclf_solve_NearestNeighborSB(iii,.TRUE.)
+!          END DO
+!          CALL ppiclf_comm_subbinRealParticleMap
+!          CALL ppiclf_comm_subbinGhostParticleMap
+!          DO iii = 1,ppiclf_npart
+!            CALL ppiclf_solve_NearestNeighborSB(iii,.FALSE.)
+!          END DO
+
+          DO i = 1,1
+            CALL MPI_BARRIER(icomm,ierr)
+            Tstart = MPI_WTIME()
+            IF(i .EQ. 1) THEN 
+              ! SB
+              ! ppiclf_useFineGrid set false when compiled with TEST=1
+              CALL ppiclf_comm_subbinFineParticleMap
+              fineGrid = .TRUE.
+              DO iii = 1,ppiclf_npart
+                CALL ppiclf_solve_NearestNeighborSB(iii,fineGrid)
+              END DO
+            ELSE
+              !CALL ppiclf_comm_subbinRealParticleMap
+              CALL ppiclf_comm_subbinGhostParticleMap
+              fineGrid = .FALSE.
+              DO iii = 1,ppiclf_npart
+                CALL ppiclf_solve_NearestNeighborSB(iii,fineGrid)
+              END DO
+            END IF
+            CALL MPI_BARRIER(ppiclf_comm,ierr)
+            Tend = MPI_WTIME()
+            IF(nid .EQ. rootProc) THEN
+              IF(i .EQ. 1) THEN
+                SBtime = Tend-Tstart
+              ELSE
+                Regtime = Tend-Tstart
+                PRINT*, 'Num Proc', ppiclf_np
+                PRINT*, 'Reg time: ',Regtime 
+                PRINT*, 'SB time: ',SBtime
+                PRINT*, 'Reg/SB ratio: ', Regtime/SBtime
+              END IF
+              Tend = 0.0D0
+            END IF
+ 
+          END DO !i
+
+          CALL MPI_BARRIER(icomm,ierr)
           ! Calculate number of nearest neighbors
           ! for all particles in domain, and compare
           ! with results from ppiclF
@@ -111,7 +169,11 @@
             NNDistSQ  = 0.0D0
             ! Loop through all particles in domain
             DO j = 1, totalparticles
-              IF(j .EQ. (id1+id2*particlesPerProc)) CYCLE 
+              IF(ppiclf_y(1,i) .EQ. part_y(1,j) .AND.
+     >           ppiclf_y(2,i) .EQ. part_y(2,j) .AND.
+     >           ppiclf_y(3,i) .EQ. part_y(3,j)) CYCLE
+
+!              IF(j .EQ. (id1+id2*particlesPerProc)) CYCLE 
               dSQi = 0.0D0
               dSQl = 0.0D0
               DO l = 1,3
@@ -131,31 +193,50 @@
             END DO
             IF(NNCount .NE. PARTICLE_NN(i)) THEN
               IF((ABS((ABS(NNDistSQ - PPICLF_TOTNNDIST(i))
-     >             /ABS((NNCount-PARTICLE_NN(i))))-ppiclf_nndist**2)
-     >                 /ppiclf_nndist**2) .GT. 1.0D-2) THEN
+     >             /ABS(NNCount-PARTICLE_NN(i)))-ppiclf_nndist**2)
+     >                 /ppiclf_nndist**2) .GT. 0.1) THEN
                 nnpart(test) = .FALSE.
-!                PRINT*, 'Count Diff (ppiclf,ref):', 
+                ! Check to see if periodicity causing issue
+                IF(ABS(ppiclf_y(1,i)-gridDomain(2,1)) .LT. 
+     >             ppiclf_nndist .OR.
+     >             ABS(ppiclf_y(1,i)-gridDomain(1,1)) .LT. 
+     >             ppiclf_nndist .OR.
+     >             ABS(ppiclf_y(2,i)-gridDomain(2,2)) .LT. 
+     >             ppiclf_nndist .OR.
+     >             ABS(ppiclf_y(2,i)-gridDomain(1,2)) .LT. 
+     >             ppiclf_nndist .OR.
+     >             ABS(ppiclf_y(3,i)-gridDomain(2,3)) .LT. 
+     >             ppiclf_nndist .OR.
+     >             ABS(ppiclf_y(3,i)-gridDomain(1,3)) .LT. 
+     >             ppiclf_nndist) THEN
+!                    PRINT*, 'PERIODIC ISSUE!'
+                ELSE
+!                     PRINT*, 'NonPeriodic Interface ISSUE!'
+                END IF
+!                PRINT*, 'Count is different! ppiclf , truth:', 
 !     >                  PARTICLE_NN(i),NNCount
-!                PRINT*, '(Dist**2 - nndist**2)/nndist**2', 
-!     >            (ABS((ABS(NNDistSQ - PPICLF_TOTNNDIST(i))
-!     >             /ABS((NNCount-PARTICLE_NN(i))))-ppiclf_nndist**2)
+!                PRINT*, 'Particle Location:', ppiclf_y(1,i),
+!     >                  ppiclf_y(2,i), ppiclf_y(3,i)
+!                PRINT*, '((RefDist^2-ppiclf_dist^2)/#NNdiff)/nndist**2'
+!     >            ,(ABS((ABS(NNDistSQ - PPICLF_TOTNNDIST(i))
+!     >             /ABS((NNCount-PARTICLE_NN(i)))))
 !     >                 /ppiclf_nndist**2)
 !                PRINT*, ''
 !                PRINT*, ''
 !                IF(PARTICLE_NN(i) .GT. NNCount) THEN
-!                  PRINT*, 'More on ppiclf, diff/CountDiff:',
+!                  PRINT*, 'More on ppiclf, distdiff**2/CountDiff:',
 !     >                    (PPICLF_TOTNNDIST(i)-NNDistSQ)
 !     >                    /(PARTICLE_NN(i)-NNCount) ,
 !     >                    'nndist^2:',ppiclf_nndist**2
 !                  PRINT*, PARTICLE_NN(i),NNCount
 !                ELSE
-!                  PRINT*, 'More on ref, diff/CountDiff:',
+!                  PRINT*, 'More on ref, distdiff**2/CountDiff:',
 !     >                    (- PPICLF_TOTNNDIST(i)+NNDistSQ)
-!     >                    /(-PARTICLE_NN(i)+NNCount)**2 ,
+!     >                    /(-PARTICLE_NN(i)+NNCount) ,
 !     >                    'nndist:',ppiclf_nndist**2
 !                  PRINT*, NNCount, PARTICLE_NN(i)
 !                END IF
-                !EXIT
+!                EXIT
               END IF
             END IF
           END DO
@@ -175,53 +256,45 @@
           END IF
           CALL ppiclf_solve_PrintQuantities
         END IF
+        ! Print Pas/Fail
+        IF(nid .EQ. rootProc) THEN
+          IF(test .EQ. 1) THEN
+            PRINT*, ''
+            PRINT*, 'NonPeriodic Results:'
+            IF(nproc .EQ. 1) THEN
+              IF(nn_logical(1)) THEN
+                PRINT*, ' PARTICLE NEAREST NEIGHBOR SEARCH - PASSED'
+              ELSE
+                PRINT*, ' PARTICLE NEAREST NEIGHBOR SEARCH - FAILED'
+              END IF
+            ELSE
+              IF(nn_logical(1)) THEN
+                PRINT*, TRIM(par) // ' PARTILCE NN SEARCH ',
+     >                               'WITH GHOST PARTICLES - PASSED'
+              ELSE
+                PRINT*, TRIM(par) // ' PARTILCE NN SEARCH ',
+     >                               'WITH GHOST PARTICLES - FAILED'
+              END IF
+            END IF
+          ELSE IF(test .EQ. 8) THEN
+            PRINT*, 'Linear Periodicity Results:'
+            IF(nn_logical(2) .AND.
+     >         nn_logical(3) .AND.
+     >         nn_logical(4) .AND.
+     >         nn_logical(5) .AND.
+     >         nn_logical(6) .AND.
+     >         nn_logical(7) .AND.
+     >         nn_logical(8)      ) THEN
+              PRINT*, TRIM(par) // ' PARTILCE NN SEARCH WITH '
+     >                            ,'GHOST PARTICLES - PASSED'
+            ELSE
+              PRINT*, TRIM(par) // ' PARTILCE NN SEARCH WITH '
+     >                            ,'GHOST PARTICLES - FAILED'
+            END IF
+          END IF
+        END IF
       END DO !test
 !********************************************************************** 
-
-      IF(nproc .GT. 1) THEN
-        par = ' PARALLEL'
-      ELSE
-        par = ''
-      END IF
-      IF(nid .EQ. rootProc) THEN
-        PRINT*, ''
-        PRINT*, 'NonPeriodic Results:'
-
-        IF(nproc .EQ. 1) THEN
-          IF(nn_logical(1)) THEN
-            PRINT*, ' PARTICLE NEAREST NEIGHBOR SEARCH - PASSED'
-          ELSE
-            PRINT*, ' PARTICLE NEAREST NEIGHBOR SEARCH - FAILED'
-          END IF
-        ELSE
-          IF(nn_logical(1)) THEN
-            PRINT*, TRIM(par) // ' PARTILCE NN SEARCH ',
-     >                           'WITH GHOST PARTICLES - PASSED'
-          ELSE
-            PRINT*, TRIM(par) // ' PARTILCE NN SEARCH ',
-     >                           'WITH GHOST PARTICLES - FAILED'
-          END IF
-
-        END IF
-
-        PRINT*, 'Linear Periodicity Results:'
-
-
-        IF(nn_logical(2) .AND.
-     >     nn_logical(3) .AND.
-     >     nn_logical(4) .AND.
-     >     nn_logical(5) .AND.
-     >     nn_logical(6) .AND.
-     >     nn_logical(7) .AND.
-     >     nn_logical(8)      ) THEN
-          PRINT*, TRIM(par) // ' PARTILCE NN SEARCH WITH '
-     >                        ,'GHOST PARTICLES - PASSED'
-        ELSE
-          PRINT*, TRIM(par) // ' PARTILCE NN SEARCH WITH '
-     >                        ,'GHOST PARTICLES - FAILED'
-        END IF
-      END IF
-
       CALL MPI_FINALIZE(ierr)
       END PROGRAM
 

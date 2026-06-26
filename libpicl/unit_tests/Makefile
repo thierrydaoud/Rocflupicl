@@ -16,26 +16,27 @@ PRE = unitTestSrc/UNIT_TEST_COMMON.h             \
       $(SOURCE_ROOT_PPICLF)/PPICLF_OPT.h         \
       $(SOURCE_ROOT_PPICLF)/PPICLF_PARALLEL.h    \
       $(SOURCE_ROOT_PPICLF)/PPICLF_USER_COMMON.h \
-      $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h
+      $(SOURCE_ROOT_PPICLF)/PPICLF_GEOM.h        \
+      $(SOURCE_ROOT_PPICLF)/PPICLF_PERFORMANCE.h
 POS = unitTestSrc/PPICLF_UNIT_TEST
       
 
 SRC1 = unitTestSrc/UT_setup.f 
-SRC2 = unitTestSrc/UT_CreateBin.f
-SRC3 = unitTestSrc/UT_InterpProj.f
-SRC4 = unitTestSrc/UT_P2PNN.f
-SRC5 = unitTestSrc/UT_CodePerformance.f
+SRC2 = unitTestSrc/UT_InterpProj.f
+SRC3 = unitTestSrc/UT_P2PNN.f
+SRC4 = unitTestSrc/UT_CodePerformance.f
+SRC5 = unitTestSrc/UT_PerfSweep.f
 
 OBJ1 = unitTestSrc/UT_setup.o 
-OBJ2 = unitTestSrc/UT_CreateBin.o
-OBJ3 = unitTestSrc/UT_InterpProj.o
-OBJ4 = unitTestSrc/UT_P2PNN.o
-OBJ5 = unitTestSrc/UT_CodePerformance.o
+OBJ2 = unitTestSrc/UT_InterpProj.o
+OBJ3 = unitTestSrc/UT_P2PNN.o
+OBJ4 = unitTestSrc/UT_CodePerformance.o
+OBJ5 = unitTestSrc/UT_PerfSweep.o
 
-ENAME1 = CreateBin_UnitTest
-ENAME2 = InterpProj_UnitTest
-ENAME3 = Particle2Particle_UnitTest
-ENAME4 = CodePerformance_UnitTest
+ENAME1 = InterpProj_UnitTest
+ENAME2 = Particle2Particle_UnitTest
+ENAME3 = CodePerformance_UnitTest
+ENAME4 = PerfSweep_UnitTest
 
 # Make commands
 default: preProcess getObjs linkObjs
@@ -51,11 +52,11 @@ linkObjs:  $(OBJ1)
 	@echo "*************************"
 	@echo "                         "
 
-getObjs: $(SRC1) $(SRC2) $(SRC3) $(SRC4) $(SRC5)
+getObjs: $(SRC1) $(SRC2) $(SRC3) $(SRC4) $(SRC5) 
 	$(FC) $(FFLAGS) -c $(SRC1) 
 	$(FC) $(FFLAGS) -c $(SRC2) 
 	$(FC) $(FFLAGS) -c $(SRC3) 
-	$(FC) $(FFLAGS) -c $(SRC4) 
+	$(FC) $(FFLAGS) -c $(SRC4)
 	$(FC) $(FFLAGS) -c $(SRC5)
 	@echo "                           "
 	@echo "***************************"
@@ -63,6 +64,8 @@ getObjs: $(SRC1) $(SRC2) $(SRC3) $(SRC4) $(SRC5)
 	@echo "***************************"
 	@echo "                           "
 	@mv *.o unitTestSrc/
+
+#$(FC) $(FFLAGS) -c $(SRC2) 
 
 preProcess: $(PRE)
 	$(CC) $(CPFLAGS) $(PRE) > $(POS)_tmp

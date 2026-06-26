@@ -648,7 +648,6 @@
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
 #endif
 
       IF(ppiclf_npart .GT. PPICLF_LPART .OR. ppiclf_npart .LT. 0) THEN
@@ -929,7 +928,6 @@
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
 #endif
 
 
@@ -1213,7 +1211,6 @@
 
 #ifdef PERF
       tfinal = MPI_WTIME()
-      PPICLF_TDataTransfers = PPICLF_TDataTransfers + (tfinal - tstart)
 #endif
 
       RETURN

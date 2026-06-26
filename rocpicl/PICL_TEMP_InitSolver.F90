@@ -659,7 +659,7 @@ END DO
 IF(global%myProcid == MASTERPROC) THEN
   WRITE(*,*) "PICL_INIT filter lengths:", filter_local(1),filter_local(2),filter_local(3)
 END IF
-neighborWidth = 4.0_RFREAL*dp_max ! Minimum value. User can entire larger if desired
+neighborWidth = 1.25_RFREAL*dp_max ! Minimum value. User can entire larger if desired
 IF((neighborWidth .GT. global%piclNeighborWidth) &
     .AND. (global%myProcid == MASTERPROC)) THEN
     WRITE(STDOUT, '(A)') &

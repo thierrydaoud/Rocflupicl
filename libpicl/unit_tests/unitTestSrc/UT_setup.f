@@ -22,9 +22,9 @@
 !**********************************************************************
       ! DEFAULT VALUES
       ! Rectangular Grid Input
-      NumXCells = 35
-      NumYCells = 40
-      NumZCells = 25
+      NumXCells = 15  
+      NumYCells = 45 
+      NumZCells = 15 
 
       xmin = -1.0D0
       ymin = -1.0D0
@@ -35,9 +35,9 @@
       zmax =  1.0D0
 
       ! Particle Input
-      totalParticles = 4000
+      totalParticles = 25000
       ! Particles to calculate periodicity error
-      faceParticles = 1200
+      faceParticles = 4200
       
       ! Ensuring PPICLF array limits aren't violated
       IF(NumXCells*NumYCells*NumZCells .GT. PPICLF_LEE) THEN
@@ -54,7 +54,7 @@
         CALL MPI_FINALIZE(ierr)
         STOP
       END IF
-
+      ppiclf_glnpart = totalParticles
 ! Grid Setup
 !**********************************************************************
       ! Create rectangular grid
@@ -119,7 +119,7 @@
       ! Find cell filter search distance
       filter       = 1.0D-9 !dummy
       dx_min       = 1.0D9  !dummy
-      nFilterCells = 2.0
+      nFilterCells = 1.5D0
       DO j = 1,proc_ncells
         DO i = 4,6
           ! Find largest & smallest grid dx, dy, dz
@@ -154,41 +154,46 @@
 ! Particle Setup   
 !********************************************************************** 
       ! A good rule of thumb is particle diameter <= dx/5
-      pdia = MIN(dx_min(1)/5.0D0, dx_min(2)/5.0D0, dx_min(3)/5.0D0)
+      pdia = MIN(dx_min(1)/10.0D0, dx_min(2)/10.0D0, dx_min(3)/10.0D0)
 
       ! Build full random particle dispersion on root processor
       IF(nid .EQ. rootProc) THEN 
         DO i = 1,totalParticles
           DO j = 1,3 ! loop through x, y, & z coordinates
             CALL RANDOM_NUMBER(randNum)
-            part_y(j,i) = (gridDomain(2,j) - gridDomain(1,j))/4.0D0
-     >               +(gridDomain(2,j) - gridDomain(1,j))/2.0D0*randNum
-
+            part_y(j,i) = (gridDomain(2,j)-gridDomain(1,j))
+     >                    * randNum
+     >                    + gridDomain(1,j)
+            IF(part_y(j,i) .GT. gridDomain(2,j) .OR. 
+     >         part_y(j,i) .LT. gridDomain(1,j)     ) THEN
+              PRINT*, 'Particle printed outside domain:',j, part_y(j,i),
+     >                'Max:', gridDomain(2,j), 'Min:', gridDomain(1,j)
+            END IF
             ! IF's below put first faceParticles within 1/3 a particle
             ! diameter from a face for linear periodicity testing.
-!            IF(i .LE. faceParticles) THEN
-!              ! Choose face (k)
-!              k = 3 !zface
-!              IF(i .LT. INT(REAL(faceParticles*2.0/3.0)+0.49D0) + 1) 
-!     >          k = 2 ! yface
-!              IF(i .LT. INT(REAL(faceParticles*1.0/3.0)+0.49D0) + 1) 
-!     >          k = 1 ! xface
-!              ! only modify one coordinate to put on face 
-!              IF(j .EQ. k) THEN
-!                IF(i - (k-1)*INT(REAL(faceParticles/3.0)+0.49D0) .LT.
-!     >                       INT(REAL(faceParticles/6.0)+1.49D0)) THEN
-!                  ! 1/6 faceParticles on min face
-!                  part_y(j,i) = gridDomain(1,j) + (pdia/2.0)*randNum
-!                ELSE
-!                  ! 1/6 faceParticles on max face
-!                  part_y(j,i) = gridDomain(2,j) - (pdia/2.0)*randNum
-!                END IF
-!              END IF ! j == k
-!            END IF ! i < faceParticles
-!            ! Make sure that there are some corner particles!
-!            IF(i .GT. faceParticles .AND.
-!     >         i .LE. INT(REAL(faceParticles)*(1.0D0+1.0D0/6.0D0))) 
-!     >        part_y(j,i) = gridDomain(2,j) - pdia/2.0D0*randNum
+            IF(i .LE. faceParticles) THEN
+              ! Choose face (k)
+              k = 3 !zface
+              IF(i .LT. INT(REAL(faceParticles*2.0/3.0)+0.49D0) + 1) 
+     >          k = 2 ! yface
+              IF(i .LT. INT(REAL(faceParticles*1.0/3.0)+0.49D0) + 1) 
+     >          k = 1 ! xface
+              ! only modify one coordinate to put on face 
+              IF(j .EQ. k) THEN
+                IF(i - (k-1)*INT(REAL(faceParticles/3.0)+0.49D0) .LT.
+     >                       INT(REAL(faceParticles/6.0)+1.49D0)) THEN
+                  ! 1/6 faceParticles on min face
+                  part_y(j,i) = gridDomain(1,j) + (pdia/2.0)*randNum
+                ELSE
+                  ! 1/6 faceParticles on max face
+                  part_y(j,i) = gridDomain(2,j) - (pdia/2.0)*randNum
+                END IF
+              END IF ! j == k
+            END IF ! i < faceParticles
+            ! Make sure that there are some corner particles!
+            IF(i .GT. faceParticles .AND.
+     >         i .LE. INT(REAL(faceParticles)*(1.0D0+1.0D0/6.0D0))) 
+     >        part_y(j,i) = gridDomain(2,j) - pdia/2.0D0*randNum
           END DO ! j
         END DO ! i 
       END IF 
@@ -233,7 +238,7 @@
         p_part_r(PPICLF_R_JSPL,i) = 1.0D0 ! Super Particle Loading 
       END DO
 
-      nndistTemp  = 4.0D0*pdia
+      nndistTemp  = 2.0D0*pdia
       CALL MPI_Allreduce(nndistTemp,nndist,1,MPI_DOUBLE,
      >                                      MPI_MAX,iComm,ierr)
 

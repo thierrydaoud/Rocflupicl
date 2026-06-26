@@ -25,7 +25,7 @@
         BinMinLen(i) = MAX(ppiclf_filter(i), ppiclf_nndist)
         BinBuffer(i) = 2.0D0*MAX(ppiclf_filter(i), ppiclf_nndist)
       END DO
-      IF(ppiclf_istage .NE. 2 .OR. ppiclf_istage .NE. 3) THEN
+      IF(ppiclf_istage .NE. 2 .AND. ppiclf_istage .NE. 3) THEN
         local_extremes(1:3) =  1.0D10 ! Large "min" value
         local_extremes(4:6) = -1.0D10 ! Small "max" value
 
@@ -44,8 +44,7 @@
      >                            ppiclf_y(3,i) + BinBuffer(3))
          END DO
         
-        ! flip sign on min so that I only need to call ALLREDUCE
-        ! for max values and not two expensive MPI calls.
+        ! Flip sign on min so that MPI_ALLREDUCE called once
         DO i = 1,3
           local_extremes(i) = - local_extremes(i)
         END DO
@@ -61,7 +60,7 @@
       PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
       PPICLF_TCreateBin = PPICLF_TCreateBin - tfinal
 #endif
-        ! flip sign on min values back to positive
+        ! Flip sign on min values back to positive
         DO i = 1,3
           global_extremes(i) = - global_extremes(i)
         END DO
@@ -378,7 +377,6 @@
      >           ,iloop, jloop, kloop, remainingParticles
       INTEGER*4   stride(3), stride_L, stride_M, stride_S
       INTEGER*4   bin_L, bin_M
-      REAL*8      max_dp
 
       ! Calculate BTRM on root processor and broadcast
       ! to all others. This ensures all processors have same
@@ -682,12 +680,6 @@
         END DO
       END DO
 
-      ! --- Flag whether bin occupancy changed since the prev stage ---
-      ! ppiclf_LMapFluid is globally identical on every rank (built from
-      ! the already-allreduced ppiclf_ParticleCount), so this is a purely
-      ! local comparison -- no extra collective. The flag lets
-      ! ppiclf_solve_PostTimeStepPartLB skip the overlap-grid / cell
-      ! remaps on stages where no bin flips occupied<->empty.
       IF(.NOT. ALLOCATED(LMapFluid_prev)) THEN
         ppiclf_emptyChanged = .TRUE.
       ELSE IF(SIZE(LMapFluid_prev) .NE. SIZE(ppiclf_LMapFluid)) THEN
@@ -951,14 +943,12 @@
      >          iyHigh, izLow, izHigh, ibin, jbin, kbin, nbin, bin,
      >          nRankMaps, RankMaps(27,5)
       REAL*8    rxval, ryval, rzval, MinPoint(3),
-     >          centeri(3), Max_CellLen(3), inv_dx(3)
+     >          centeri(3), inv_dx(3)
       LOGICAL   partl, ErrorFound, MapCell 
       LOGICAL, ALLOCATABLE :: rank_is_mapped(:)
 #ifdef PERF
       REAL*8    tstart, tfinal
 #endif
-!
-! Code Start:
 !
       ALLOCATE(rank_is_mapped(0:ppiclf_np-1))
       rank_is_mapped = .FALSE.
@@ -1171,22 +1161,24 @@
 
       ! Find distance check for interpolation.
       ! This is 1.5*MaxCellLength to ensure that at least
-      ! 27 neighboring cells are mapped.
-      Max_CellLen(1) = 0.0D0
-      Max_CellLen(2) = 0.0D0
-      Max_CellLen(3) = 0.0D0
+      ! 27 neighboring cells are mapped. ppiclf_MaxCellLen is the
+      ! per-rank (local) max cell length, kept in common so the
+      ! sub-bin refinement decision can read it.
+      ppiclf_MaxCellLen(1) = 0.0D0
+      ppiclf_MaxCellLen(2) = 0.0D0
+      ppiclf_MaxCellLen(3) = 0.0D0
       ! Loop through overlapcells mapped to bin
       DO ie = 1,ppiclf_nCells_FV2PICL 
         DO l = 1,3
           ! Find max cell lengths in all dimensions
-          IF(ppiclf_picl_grid(3+l,ie) .GT. Max_CellLen(l))
-     >      Max_CellLen(l) = ppiclf_picl_grid(3+l,ie)
+          IF(ppiclf_picl_grid(3+l,ie) .GT. ppiclf_MaxCellLen(l))
+     >      ppiclf_MaxCellLen(l) = ppiclf_picl_grid(3+l,ie)
         END DO !l
       END DO !ie
       ! Update ppiclf filter, which is important as bin 
       ! boundaries grow and captures larger cells
       DO l = 1,3
-        ppiclf_filter(l) = Max_CellLen(l)*1.51D0
+        ppiclf_filter(l) = ppiclf_MaxCellLen(l)*1.51D0
       END DO
       ! Find max filter across processors (all overlap cells considered)
 #ifdef PERF
@@ -1205,7 +1197,7 @@
         ! Multiply by 1.5 so particle near face will
         ! find center one cell over in farthest direction
         ! Only need cells on this processor - not all overlap cells
-        ppiclf_interp_dchk(l) = Max_CellLen(l)*1.5D0
+        ppiclf_interp_dchk(l) = ppiclf_MaxCellLen(l)*1.5D0
       END DO
 
       RETURN
@@ -1273,9 +1265,7 @@
       IF(ppiclf_npart .LT. 1) RETURN
       ! sent_stamp columns mark the SIGNED periodic shift applied to the
       ! ghost: shiftKey = (sx+1) + 3*(sy+1) + 9*(sz+1), sx/sy/sz in
-      ! {-1,0,+1}. 13 == no wrap. Two ghosts to one rank are identical
-      ! only if they share this shift vector, so this is the correct
-      ! dedup key.
+      ! {-1,0,+1}. 13 == no wrap.
       IF(.NOT. ALLOCATED(sent_stamp)) THEN
         ALLOCATE(sent_stamp(0:ppiclf_np-1,0:26))
         sent_stamp = 0
@@ -1612,22 +1602,15 @@
 !
 !     Build a FINE sub-bin grid sized by the particle-particle search
 !     cutoff (ppiclf_nndist) and map BOTH real and ghost particles into
-!     it by POSITION. This is a separate, finer grid than the coarse
-!     iprop sub-bins (sized by ppiclf_filter) used for communication and
-!     ghost creation. Using it for the nearest-neighbor search shrinks
-!     the 27-cell candidate set by roughly (ppiclf_filter/nndist)**3.
-!
+!     it by POSITION, using a compressed (CSR) layout: a flat candidate
+!     list ppiclf_fineFlat indexed by 1-based row pointers
+!     ppiclf_fineOffset. Fine bin b owns
+!       ppiclf_fineFlat( fineOffset(b) : fineOffset(b+1)-1 ).
+!     This is a separate, finer grid than the coarse iprop sub-bins
+!     (sized by ppiclf_filter) used for comm and ghost creation.
 !     Storage convention (matches ppiclf_solve_NearestNeighborSB):
 !       real  particle i -> stored as +i (position ppiclf_y(1:3,i))
-!       ghost particle i -> stored as -i (position ppiclf_rprop_gp(1:3,i))
-!
-!     The fine/coarse DECISION (ppiclf_useFineGrid) is made by the
-!     CALLER (the driver, e.g. ppiclf_solve_SetYdot) BEFORE this routine
-!     is called; this routine only BUILDS the grid. The search then
-!     locates a particle's own fine cell FROM ITS POSITION using
-!       ppiclf_fineLo / ppiclf_fineInvLen / ppiclf_nFine
-!     and sweeps the 27 neighbor cells of
-!       ppiclf_finePartCount / ppiclf_finePartList.
+!       ghost particle i -> stored as -i (ppiclf_rprop_gp(1:3,i))
 !
       USE ppiclf_DynamicAllocation
       IMPLICIT NONE
@@ -1636,19 +1619,20 @@
 !
 ! Internal:
 !
-      INTEGER*4  i, d, fi(3), tempBin, ng, icount, newMax
-      REAL*8     xlo(3), xhi(3), boxLen(3), fineCut, fineLen(3), pad
+      INTEGER*4  i, d, tempBin, ng, ntot, pos, nretry
+      REAL*8     xlo(3), xhi(3), boxLen(3), fineCut, fineLen(3), pad,
+     >           xlo0(3), xhi0(3)
+      INTEGER*8  nfb8, nbytes8
+      ! 250 MBytes
+      INTEGER*8, PARAMETER :: FINEBIN_BYTE_BUDGET = 250000000_8
 
       IF(ppiclf_npart .LT. 1) RETURN
-
       ng = ppiclf_npart_gp
       IF(ng .LT. 0) ng = 0
-
-      ! Search cutoff = radius used in ppiclf_solve_NearestNeighborSB
-      ! (driver guarantees ppiclf_nndist > 0 before calling).
       fineCut = ppiclf_nndist
 
-      ! Built from actual positions (not the coarse halo) so every
+      ! Bounding box over real + ghost positions. The pad below keeps
+      ! boxLen >= fineCut even for a single coincident point, so every
       ! particle is guaranteed inside and no clamp can ever drop one.
       xlo(1) = ppiclf_y(1,1)
       xlo(2) = ppiclf_y(2,1)
@@ -1669,84 +1653,226 @@
         END DO
       END DO
 
-      ! Build the fine grid. Cell length must be >= cutoff so the
-      ! 27-cell stencil is complete (standard cell-list invariant).
-      ! FLOOR(boxLen/cut) maximizes cells while keeping len >= cut.
-      pad = 0.5D0*fineCut
-      ppiclf_total_fineBin = 1
+      ! Size the grid; coarsen (double fineCut) if the bin count would
+      ! overflow INTEGER*4 or the CSR footprint exceeds the budget. The
+      ! cost is now ~(total_fineBin+1 + npart+ng) INTEGER*4 words -- the
+      ! old maxPartPerFineBin multiplier is gone. fineLen only grows
+      ! under coarsening, so fineLen >= nndist still holds and the
+      ! consumer's +/-1 stencil stays complete.
       DO d = 1,3
-        xlo(d) = xlo(d) - pad
-        xhi(d) = xhi(d) + pad
-        boxLen(d) = xhi(d) - xlo(d)
-        ppiclf_nFine(d) = MAX(1, FLOOR(boxLen(d)/fineCut))
-        fineLen(d) = boxLen(d)/DBLE(ppiclf_nFine(d))
-        ppiclf_fineLo(d) = xlo(d)
-        ppiclf_fineInvLen(d) = 1.0D0/fineLen(d)
-        ppiclf_total_fineBin = ppiclf_total_fineBin*ppiclf_nFine(d)
+        xlo0(d) = xlo(d)
+        xhi0(d) = xhi(d)
       END DO
+      nretry = 0
+      DO
+        IF(nretry .EQ. 1) PRINT*,
+     >    'fine subbin coarsened: nid',ppiclf_nid,
+     >    ' nndist',ppiclf_nndist
+        pad  = 0.5D0*fineCut
+        nfb8 = 1_8
+        DO d = 1,3
+          xlo(d)               = xlo0(d) - pad
+          xhi(d)               = xhi0(d) + pad
+          boxLen(d)            = xhi(d) - xlo(d)
+          ppiclf_nFine(d)      = MAX(1, FLOOR(boxLen(d)/fineCut))
+          fineLen(d)           = boxLen(d)/DBLE(ppiclf_nFine(d))
+          ppiclf_fineLo(d)     = xlo(d)
+          ppiclf_fineInvLen(d) = 1.0D0/fineLen(d)
+          nfb8 = nfb8 * INT(ppiclf_nFine(d),8)
+        END DO
+        nbytes8 = (nfb8 + 1_8 + INT(ppiclf_npart+ng,8))*4_8
+        IF(nfb8    .LE. INT(HUGE(ppiclf_total_fineBin),8) .AND.
+     >     nbytes8 .LE. FINEBIN_BYTE_BUDGET) EXIT
+        nretry  = nretry + 1
+        fineCut = fineCut*2.0D0
+        IF(nretry .GT. 64) CALL ppiclf_exittr(
+     >    'Fine grid keeps exceeding INT*4/budget$',
+     >     fineCut/2.0D0, ppiclf_nid)
+      END DO
+      ppiclf_total_fineBin = INT(nfb8,4)
 
-      ! Per-fine-bin capacity. Keep the cheap data-driven estimate but
-      ! never shrink it across calls; grow-on-demand below covers any
-      ! residual overflow, so correctness no longer depends on it.
-      ppiclf_maxPartPerFineBin =
-     >     MAX(ppiclf_maxPartPerFineBin, 5*MAXVAL(ppiclf_ParticleCount))
-      IF(ppiclf_maxPartPerFineBin .LT. 1) ppiclf_maxPartPerFineBin = 20
-      CALL ppiclf_allocate_FineBTP(ppiclf_total_fineBin,
-     >                            ppiclf_maxPartPerFineBin)
-      ppiclf_finePartCount = 0
+      ntot = ppiclf_npart + ng
+      CALL ppiclf_allocate_FineCSR(ppiclf_total_fineBin, ntot)
 
+      ! ---- Pass 1: count items per fine bin --------------------
+      DO i = 0,ppiclf_total_fineBin-1
+        ppiclf_finePartCount(i) = 0
+      END DO
       DO i = 1,ppiclf_npart
-        fi(1)=FLOOR((ppiclf_y(1,i)-ppiclf_fineLo(1))
-     >              *ppiclf_fineInvLen(1))
-        fi(2)=FLOOR((ppiclf_y(2,i)-ppiclf_fineLo(2))
-     >              *ppiclf_fineInvLen(2))
-        fi(3)=FLOOR((ppiclf_y(3,i)-ppiclf_fineLo(3))
-     >              *ppiclf_fineInvLen(3))
-        fi(1)=MAX(0,MIN(fi(1),ppiclf_nFine(1)-1))
-        fi(2)=MAX(0,MIN(fi(2),ppiclf_nFine(2)-1))
-        fi(3)=MAX(0,MIN(fi(3),ppiclf_nFine(3)-1))
-        tempBin = fi(1) + ppiclf_nFine(1)*fi(2)
-     >          + ppiclf_nFine(1)*ppiclf_nFine(2)*fi(3)
-        icount = ppiclf_finePartCount(tempBin) + 1
-        ppiclf_finePartCount(tempBin) = icount
-        ! Grow on demand. icount rises by 1 per hit, so one doubling
-        ! always restores capacity (newMax >= icount).
-        IF(icount .GT. ppiclf_maxPartPerFineBin) THEN
-          newMax = 2*ppiclf_maxPartPerFineBin + 1
-          CALL ppiclf_reallocate_FineBTP(ppiclf_total_fineBin,
-     >                                   ppiclf_maxPartPerFineBin,
-     >                                   newMax)
-          ppiclf_maxPartPerFineBin = newMax
-        END IF
-        ppiclf_finePartList(tempBin,icount) = i
-      END DO
+        tempBin = 
+     >   MAX(0,MIN(FLOOR((ppiclf_y(1,i)-ppiclf_fineLo(1))
+     >   *ppiclf_fineInvLen(1)), ppiclf_nFine(1)-1))+ ppiclf_nFine(1)
+     >   *MAX(0,MIN(FLOOR((ppiclf_y(2,i)-ppiclf_fineLo(2))
+     >   *ppiclf_fineInvLen(2)), ppiclf_nFine(2)-1))
+     >   + ppiclf_nFine(1)*ppiclf_nFine(2)
+     >   *MAX(0,MIN(FLOOR((ppiclf_y(3,i)-ppiclf_fineLo(3))
+     >   *ppiclf_fineInvLen(3)), ppiclf_nFine(3)-1))
 
-      ! Ghost particles -> -i (shifted position ppiclf_rprop_gp)
+        ppiclf_finePartCount(tempBin) = ppiclf_finePartCount(tempBin)+1
+      END DO
       DO i = 1,ng
-        fi(1)=FLOOR((ppiclf_rprop_gp(1,i)-ppiclf_fineLo(1))
-     >              *ppiclf_fineInvLen(1))
-        fi(2)=FLOOR((ppiclf_rprop_gp(2,i)-ppiclf_fineLo(2))
-     >              *ppiclf_fineInvLen(2))
-        fi(3)=FLOOR((ppiclf_rprop_gp(3,i)-ppiclf_fineLo(3))
-     >              *ppiclf_fineInvLen(3))
-        fi(1)=MAX(0,MIN(fi(1),ppiclf_nFine(1)-1))
-        fi(2)=MAX(0,MIN(fi(2),ppiclf_nFine(2)-1))
-        fi(3)=MAX(0,MIN(fi(3),ppiclf_nFine(3)-1))
-        tempBin = fi(1) + ppiclf_nFine(1)*fi(2)
-     >          + ppiclf_nFine(1)*ppiclf_nFine(2)*fi(3)
-        icount = ppiclf_finePartCount(tempBin) + 1
-        ppiclf_finePartCount(tempBin) = icount
-        ! Grow on demand -- no ghost is ever dropped.
-        IF(icount .GT. ppiclf_maxPartPerFineBin) THEN
-          newMax = 2*ppiclf_maxPartPerFineBin + 1
-          CALL ppiclf_reallocate_FineBTP(ppiclf_total_fineBin,
-     >                                   ppiclf_maxPartPerFineBin,
-     >                                   newMax)
-          ppiclf_maxPartPerFineBin = newMax
-        END IF
-        ppiclf_finePartList(tempBin,icount) = -i
+        tempBin = 
+     >   MAX(0,MIN(FLOOR((ppiclf_rprop_gp(1,i)-ppiclf_fineLo(1))
+     >   *ppiclf_fineInvLen(1)), ppiclf_nFine(1)-1)) + ppiclf_nFine(1)
+     >   *MAX(0,MIN(FLOOR((ppiclf_rprop_gp(2,i)-ppiclf_fineLo(2))
+     >   *ppiclf_fineInvLen(2)), ppiclf_nFine(2)-1))
+     >   + ppiclf_nFine(1)*ppiclf_nFine(2)
+     >   *MAX(0,MIN(FLOOR((ppiclf_rprop_gp(3,i)-ppiclf_fineLo(3))
+     >   *ppiclf_fineInvLen(3)), ppiclf_nFine(3)-1))
+
+        ppiclf_finePartCount(tempBin) = ppiclf_finePartCount(tempBin)+1
       END DO
 
+      ! ---- Prefix sum -> row pointers, then seed cursors -------
+      ppiclf_fineOffset(0) = 1
+      DO i = 0,ppiclf_total_fineBin-1
+        ppiclf_fineOffset(i+1) = ppiclf_fineOffset(i)
+     >                         + ppiclf_finePartCount(i)
+      END DO
+      DO i = 0,ppiclf_total_fineBin-1
+        ppiclf_finePartCount(i) = ppiclf_fineOffset(i)  ! cursor
+      END DO
+
+      ! ---- Pass 2: scatter (+i reals, -i ghosts) ---------------
+      DO i = 1,ppiclf_npart
+        tempBin =  
+     >    MAX(0,MIN(FLOOR((ppiclf_y(1,i)-ppiclf_fineLo(1))
+     >   *ppiclf_fineInvLen(1)), ppiclf_nFine(1)-1))+ ppiclf_nFine(1)
+     >   *MAX(0,MIN(FLOOR((ppiclf_y(2,i)-ppiclf_fineLo(2))
+     >   *ppiclf_fineInvLen(2)), ppiclf_nFine(2)-1))
+     >   + ppiclf_nFine(1)*ppiclf_nFine(2)
+     >   *MAX(0,MIN(FLOOR((ppiclf_y(3,i)-ppiclf_fineLo(3))
+     >   *ppiclf_fineInvLen(3)), ppiclf_nFine(3)-1))
+
+        pos     = ppiclf_finePartCount(tempBin)
+        ppiclf_fineFlat(pos)          = i
+        ppiclf_finePartCount(tempBin) = pos + 1
+      END DO
+      DO i = 1,ng
+        tempBin =  
+     >   MAX(0,MIN(FLOOR((ppiclf_rprop_gp(1,i)-ppiclf_fineLo(1))
+     >   *ppiclf_fineInvLen(1)), ppiclf_nFine(1)-1)) + ppiclf_nFine(1)
+     >   *MAX(0,MIN(FLOOR((ppiclf_rprop_gp(2,i)-ppiclf_fineLo(2))
+     >   *ppiclf_fineInvLen(2)), ppiclf_nFine(2)-1))
+     >   + ppiclf_nFine(1)*ppiclf_nFine(2)
+     >   *MAX(0,MIN(FLOOR((ppiclf_rprop_gp(3,i)-ppiclf_fineLo(3))
+     >   *ppiclf_fineInvLen(3)), ppiclf_nFine(3)-1))
+
+        pos     = ppiclf_finePartCount(tempBin)
+        ppiclf_fineFlat(pos)          = -i
+        ppiclf_finePartCount(tempBin) = pos + 1
+      END DO
+
+      RETURN
+      END SUBROUTINE
+!-----------------------------------------------------------------------
+!
+      SUBROUTINE ppiclf_comm_fluidCellImages(ie, place, nplace)
+!
+!     Return the fine fluid sub-bin index/indices for overlap cell ie,
+!     including single-rank periodic images (up to 8). Mirrors the coarse
+!     periodic-image logic of subbinCellMap, adding the within-bin fine
+!     offset. Used by the CSR fine fluid cell map build.
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INTEGER*4, INTENT(IN)  :: ie
+      INTEGER*4, INTENT(OUT) :: place(8), nplace
+      INTEGER*4 i, j, k, d, i_SBin(3), iTemp_SBin(3), fw(3), fS(3)
+     >         ,nSBinF(3), tempBin, foff(3)
+      REAL*8    binLow, subLen
+
+      DO d = 1,3
+        i_SBin(d) = ppiclf_cell_map(4+d,ie) - ppiclf_binOffset(d)
+        nSBinF(d) = ppiclf_nSBin(d)*ppiclf_nSubFluid(d)
+        subLen    = ppiclf_bins_dx(d)/DBLE(ppiclf_nSubFluid(d))
+        binLow    = ppiclf_binb(2*d-1)
+     >            + ppiclf_cell_map(4+d,ie)*ppiclf_bins_dx(d)
+        fw(d) = FLOOR((ppiclf_picl_grid(d,ie)-binLow)/subLen)
+        fw(d) = MAX(0, MIN(fw(d), ppiclf_nSubFluid(d)-1))
+      END DO
+
+      nplace = 0
+      DO i = 0,1
+        IF(i .EQ. 0) THEN
+          iTemp_SBin(1) = i_SBin(1)
+          foff(1) = fw(1)
+          IF(iTemp_SBin(1).LT.0 .OR. iTemp_SBin(1).GT.ppiclf_nSBin(1)-1)
+     >       CYCLE
+        ELSE
+          IF(ppiclf_linperiodic(1).AND.ppiclf_EqualDomain(1)) THEN
+            IF(i_SBin(1).LE.0) THEN
+              iTemp_SBin(1)=ppiclf_nSBin(1)-1
+              foff(1)=ppiclf_nSubFluid(1)-1
+              IF(iTemp_SBin(1).EQ.i_SBin(1)) CYCLE
+            ELSE IF(i_SBin(1).GE.ppiclf_nSBin(1)-1) THEN
+              iTemp_SBin(1)=0
+              foff(1)=0
+              IF(iTemp_SBin(1).EQ.i_SBin(1)) CYCLE
+            ELSE
+              CYCLE
+            END IF
+          ELSE
+            CYCLE
+          END IF
+        END IF
+        DO j = 0,1
+          IF(j .EQ. 0) THEN
+            iTemp_SBin(2) = i_SBin(2)
+            foff(2) = fw(2)
+            IF(iTemp_SBin(2).LT.0 .OR.
+     >         iTemp_SBin(2).GT.ppiclf_nSBin(2)-1) CYCLE
+          ELSE
+            IF(ppiclf_linperiodic(2).AND.ppiclf_EqualDomain(2)) THEN
+              IF(i_SBin(2).LE.0) THEN
+                iTemp_SBin(2)=ppiclf_nSBin(2)-1
+                foff(2)=ppiclf_nSubFluid(2)-1
+                IF(iTemp_SBin(2).EQ.i_SBin(2)) CYCLE
+              ELSE IF(i_SBin(2).GE.ppiclf_nSBin(2)-1) THEN
+                iTemp_SBin(2)=0
+                foff(2)=0
+                IF(iTemp_SBin(2).EQ.i_SBin(2)) CYCLE
+              ELSE
+                CYCLE
+              END IF
+            ELSE
+              CYCLE
+            END IF
+          END IF
+          DO k = 0,1
+            IF(k .EQ. 0) THEN
+              iTemp_SBin(3) = i_SBin(3)
+              foff(3) = fw(3)
+              IF(iTemp_SBin(3).LT.0 .OR.
+     >           iTemp_SBin(3).GT.ppiclf_nSBin(3)-1) CYCLE
+            ELSE
+              IF(ppiclf_linperiodic(3).AND.ppiclf_EqualDomain(3)) THEN
+                IF(i_SBin(3).LE.0) THEN
+                  iTemp_SBin(3)=ppiclf_nSBin(3)-1
+                  foff(3)=ppiclf_nSubFluid(3)-1
+                  IF(iTemp_SBin(3).EQ.i_SBin(3)) CYCLE
+                ELSE IF(i_SBin(3).GE.ppiclf_nSBin(3)-1) THEN
+                  iTemp_SBin(3)=0
+                  foff(3)=0
+                  IF(iTemp_SBin(3).EQ.i_SBin(3)) CYCLE
+                ELSE
+                  CYCLE
+                END IF
+              ELSE
+                CYCLE
+              END IF
+            END IF
+            fS(1)=iTemp_SBin(1)*ppiclf_nSubFluid(1)+foff(1)
+            fS(2)=iTemp_SBin(2)*ppiclf_nSubFluid(2)+foff(2)
+            fS(3)=iTemp_SBin(3)*ppiclf_nSubFluid(3)+foff(3)
+            tempBin = fS(1) + nSBinF(1)*fS(2)
+     >              + nSBinF(1)*nSBinF(2)*fS(3)
+            nplace = nplace + 1
+            place(nplace) = tempBin
+          END DO
+        END DO
+      END DO
       RETURN
       END SUBROUTINE
 !-----------------------------------------------------------------------
@@ -1762,9 +1888,13 @@
 !
 ! Input:
 !
-      INTEGER*4  ie, i, j, k, iTemp_SBin(3)
+      INTEGER*4  ie, i, j, k, d, iTemp_SBin(3)
      >          ,tempSBin, i_SBin(3), icount, newMax
-      
+     >          ,nplace, place(8), pos, nSBinF(3)
+      INTEGER*8  nfb8, nbytes8
+      ! 250 MBytes
+      INTEGER*8, PARAMETER :: FLUIDBIN_BYTE_BUDGET = 250000000_8
+
       IF(ppiclf_npart .LT. 1) RETURN
 
       IF(ppiclf_nCells_FV2PICL .LE. 0 .AND. ppiclf_npart .GT. 0) THEN
@@ -1775,57 +1905,82 @@
      >                      0.D0,0)
       END IF
 
-      ! 92 was chosen with the assumption that min_cell = 3*max_cell
-      ! in all 3 dimension (3*3*3*1.5*1.5*1.5=91)
-      IF(ppiclf_maxCellsPerBin .LT. 1) ppiclf_maxCellsPerBin = 92
-      CALL ppiclf_allocate_BTC(ppiclf_total_SBin, ppiclf_maxCellsPerBin)
-      ppiclf_binCellCount = 0
+      ! ---- Decide whether to refine the fluid cell map ----------------
+      ! Subdivide each coarse sub-bin so the fine edge stays >= the
+      ! interpolation reach (1.5*MaxCellLen). Enable if that edge is
+      ! < 0.5*filter in any dimension. Memory-guarded (CSR) like the P2P
+      ! fine grid: shrink the subdivision until the grid fits, falling
+      ! back to the coarse map if it cannot.
+      DO d = 1,3
+        IF(ppiclf_MaxCellLen(d) .GT. 0.0D0) THEN
+          ppiclf_nSubFluid(d) =
+     >      MAX(1,FLOOR(ppiclf_bins_dx(d)/(1.5D0*ppiclf_MaxCellLen(d))))
+        ELSE
+          ppiclf_nSubFluid(d) = 1
+        END IF
+      END DO
+      ppiclf_useFineFluid = .FALSE.
+      DO d = 1,3
+        IF(ppiclf_bins_dx(d)/DBLE(ppiclf_nSubFluid(d))
+     >     .LT. 0.5D0*ppiclf_filter(d)) ppiclf_useFineFluid = .TRUE.
+      END DO
 
-      ! NOTE: Overlap cells have not been shifted for periodicity
-      !       Both the cell centroid and cell bin indices are of the
-      !       original fluid cell.
-      ! Creates a list of overlap cells for a given bin on this rank.
-      ! In the i,j,k loops below, 0 takes care of non-periodic mapping
-      ! and 1 takes care of periodic mapping.  If a cell is in corner,
-      ! it can be mapped to a maximum of 2*2*2=8 bins.
-      DO ie = 1,ppiclf_nCells_FV2PICL
-        i_SBin(1) = ppiclf_cell_map(5,ie) - ppiclf_binOffset(1)
-        i_SBin(2) = ppiclf_cell_map(6,ie) - ppiclf_binOffset(2)
-        i_SBin(3) = ppiclf_cell_map(7,ie) - ppiclf_binOffset(3)
-        DO i = 0,1
-          IF(i .EQ. 0) THEN
-            iTemp_SBin(1) = i_SBin(1)
-            IF(iTemp_SBin(1) .LT. 0 .OR. 
-     >         iTemp_SBin(1) .GT. ppiclf_nSBin(1) - 1) CYCLE 
-          ELSE ! i .EQ. 1
-            IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)) THEN
-              IF(i_SBin(1) .LE. 0) THEN
-                iTemp_SBin(1) = ppiclf_nSBin(1) - 1
-                IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE 
-              ELSE IF(i_SBin(1) .GE. ppiclf_nSBin(1) - 1) THEN
-                iTemp_SBin(1) = 0
-                IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE
-              ELSE
-                CYCLE
-              END IF
-            ELSE 
-              CYCLE
-            END IF
+      IF(ppiclf_useFineFluid) THEN
+        PRINT*, '**********FineFluid used'
+        DO
+          nfb8 = 1_8
+          DO d = 1,3
+            nfb8 = nfb8*INT(ppiclf_nSBin(d)*ppiclf_nSubFluid(d),8)
+          END DO
+          ! offset(0:nbins) + count(0:nbins-1) + flat(<=8*nCells)
+          nbytes8 = (2_8*nfb8 + 1_8
+     >             + 8_8*INT(ppiclf_nCells_FV2PICL,8))*4_8
+          IF(nfb8    .LE. INT(HUGE(ppiclf_total_fluidSBin),8) .AND.
+     >       nbytes8 .LE. FLUIDBIN_BYTE_BUDGET) EXIT
+          ! Too large: halve the largest subdivision factor.
+          d = 1
+          IF(ppiclf_nSubFluid(2).GT.ppiclf_nSubFluid(d)) d = 2
+          IF(ppiclf_nSubFluid(3).GT.ppiclf_nSubFluid(d)) d = 3
+          ppiclf_nSubFluid(d) = MAX(1, ppiclf_nSubFluid(d)/2)
+          IF(ppiclf_nSubFluid(1).EQ.1 .AND. ppiclf_nSubFluid(2).EQ.1
+     >       .AND. ppiclf_nSubFluid(3).EQ.1) THEN
+            ppiclf_useFineFluid = .FALSE.
+            EXIT
           END IF
-          DO j = 0,1
-            IF(j .EQ. 0) THEN
-              iTemp_SBin(2) = i_SBin(2)
-              IF(iTemp_SBin(2) .LT. 0 .OR.  
-     >           iTemp_SBin(2) .GT. ppiclf_nSBin(2) - 1) CYCLE
-            ELSE ! j .EQ. 1
-              ! This takes care of periodicity for single processor
-              IF(ppiclf_linperiodic(2).AND.ppiclf_EqualDomain(2)) THEN
-                IF(i_SBin(2) .LE. 0) THEN
-                  iTemp_SBin(2) = ppiclf_nSBin(2) - 1
-                  IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
-                ELSE IF(i_SBin(2) .GE. ppiclf_nSBin(2) - 1) THEN
-                  iTemp_SBin(2) = 0
-                  IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
+        END DO
+      END IF
+
+      ! ================= COARSE (filter-sized) cell map ================
+      IF(.NOT. ppiclf_useFineFluid) THEN
+        IF(ppiclf_maxCellsPerBin .LT. 1) ppiclf_maxCellsPerBin = 92
+        CALL ppiclf_allocate_BTC(ppiclf_total_SBin,
+     >                           ppiclf_maxCellsPerBin)
+        ppiclf_binCellCount = 0
+
+        ! NOTE: Overlap cells have not been shifted for periodicity
+        !       Both the cell centroid and cell bin indices are of the
+        !       original fluid cell.
+        ! Creates a list of overlap cells for a given bin on this rank.
+        ! In the i,j,k loops below, 0 takes care of non-periodic mapping
+        ! and 1 takes care of periodic mapping.  If a cell is in corner,
+        ! it can be mapped to a maximum of 2*2*2=8 bins.
+        DO ie = 1,ppiclf_nCells_FV2PICL
+          i_SBin(1) = ppiclf_cell_map(5,ie) - ppiclf_binOffset(1)
+          i_SBin(2) = ppiclf_cell_map(6,ie) - ppiclf_binOffset(2)
+          i_SBin(3) = ppiclf_cell_map(7,ie) - ppiclf_binOffset(3)
+          DO i = 0,1
+            IF(i .EQ. 0) THEN
+              iTemp_SBin(1) = i_SBin(1)
+              IF(iTemp_SBin(1) .LT. 0 .OR. 
+     >           iTemp_SBin(1) .GT. ppiclf_nSBin(1) - 1) CYCLE 
+            ELSE ! i .EQ. 1
+              IF(ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)) THEN
+                IF(i_SBin(1) .LE. 0) THEN
+                  iTemp_SBin(1) = ppiclf_nSBin(1) - 1
+                  IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE 
+                ELSE IF(i_SBin(1) .GE. ppiclf_nSBin(1) - 1) THEN
+                  iTemp_SBin(1) = 0
+                  IF(iTemp_SBin(1) .EQ. i_SBin(1)) CYCLE
                 ELSE
                   CYCLE
                 END IF
@@ -1833,21 +1988,20 @@
                 CYCLE
               END IF
             END IF
-            DO k = 0,1
-              IF(k .EQ. 0) THEN
-                iTemp_SBin(3) = i_SBin(3)
-                IF(iTemp_SBin(3) .LT. 0 .OR. 
-     >             iTemp_SBin(3) .GT. ppiclf_nSBin(3) - 1) CYCLE
-              ELSE ! k .EQ. 1
+            DO j = 0,1
+              IF(j .EQ. 0) THEN
+                iTemp_SBin(2) = i_SBin(2)
+                IF(iTemp_SBin(2) .LT. 0 .OR.  
+     >             iTemp_SBin(2) .GT. ppiclf_nSBin(2) - 1) CYCLE
+              ELSE ! j .EQ. 1
                 ! This takes care of periodicity for single processor
-                IF(ppiclf_linperiodic(3) .AND. 
-     >                                    ppiclf_EqualDomain(3)) THEN 
-                  IF(i_SBin(3) .LE. 0) THEN
-                    iTemp_SBin(3) = ppiclf_nSBin(3) - 1
-                    IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
-                  ELSE IF(i_SBin(3) .GE. ppiclf_nSBin(3) - 1) THEN
-                    iTemp_SBin(3) = 0
-                    IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
+                IF(ppiclf_linperiodic(2).AND.ppiclf_EqualDomain(2)) THEN
+                  IF(i_SBin(2) .LE. 0) THEN
+                    iTemp_SBin(2) = ppiclf_nSBin(2) - 1
+                    IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
+                  ELSE IF(i_SBin(2) .GE. ppiclf_nSBin(2) - 1) THEN
+                    iTemp_SBin(2) = 0
+                    IF(iTemp_SBin(2) .EQ. i_SBin(2)) CYCLE
                   ELSE
                     CYCLE
                   END IF
@@ -1855,34 +2009,95 @@
                   CYCLE
                 END IF
               END IF
-              ! Finally, add the cell to a subbin 
-              tempSBin = iTemp_SBin(1) + ppiclf_nSBin(1)*iTemp_SBin(2)
-     >                 + ppiclf_nSBin(1)*ppiclf_nSBin(2)*iTemp_SBin(3)
-              IF(tempSBin .LT. 0 .OR. 
-     >           tempSBin .GT. ppiclf_total_SBin-1) THEN
-               PRINT*, 'ERROR:Bad Subbin Index in Overlap Cell Mapping'
-     >                 , tempSBin
-                CALL ppiclf_exittr('',0.0D0,0)
-              END IF
+              DO k = 0,1
+                IF(k .EQ. 0) THEN
+                  iTemp_SBin(3) = i_SBin(3)
+                  IF(iTemp_SBin(3) .LT. 0 .OR. 
+     >               iTemp_SBin(3) .GT. ppiclf_nSBin(3) - 1) CYCLE
+                ELSE ! k .EQ. 1
+                  ! This takes care of periodicity for single processor
+                  IF(ppiclf_linperiodic(3) .AND. 
+     >                                      ppiclf_EqualDomain(3)) THEN 
+                    IF(i_SBin(3) .LE. 0) THEN
+                      iTemp_SBin(3) = ppiclf_nSBin(3) - 1
+                      IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
+                    ELSE IF(i_SBin(3) .GE. ppiclf_nSBin(3) - 1) THEN
+                      iTemp_SBin(3) = 0
+                      IF(iTemp_SBin(3) .EQ. i_SBin(3)) CYCLE
+                    ELSE
+                      CYCLE
+                    END IF
+                  ELSE 
+                    CYCLE
+                  END IF
+                END IF
+                ! Finally, add the cell to a subbin 
+                tempSBin = iTemp_SBin(1) + ppiclf_nSBin(1)*iTemp_SBin(2)
+     >                   + ppiclf_nSBin(1)*ppiclf_nSBin(2)*iTemp_SBin(3)
+                IF(tempSBin .LT. 0 .OR. 
+     >             tempSBin .GT. ppiclf_total_SBin-1) THEN
+                 PRINT*,'ERROR:Bad Subbin Index in Overlap Cell Mapping'
+     >                   , tempSBin
+                  CALL ppiclf_exittr('',0.0D0,0)
+                END IF
 
-              icount = ppiclf_binCellCount(tempSBin) + 1
-              ppiclf_binCellCount(tempSBin) = icount
+                icount = ppiclf_binCellCount(tempSBin) + 1
+                ppiclf_binCellCount(tempSBin) = icount
 
-              ! Grow on demand. icount rises by 1 per hit, so a single
-              ! doubling always restores capacity (newMax >= icount).
-              IF(icount .GT. ppiclf_maxCellsPerBin) THEN
-                newMax = 2*ppiclf_maxCellsPerBin + 1
-                CALL ppiclf_reallocate_BTC(ppiclf_total_SBin,
-     >                                     ppiclf_maxCellsPerBin,
-     >                                     newMax)
-                ppiclf_maxCellsPerBin = newMax
-              END IF
+                ! Grow on demand. icount rises by 1 per hit, so a single
+                ! doubling always restores capacity (newMax >= icount).
+                IF(icount .GT. ppiclf_maxCellsPerBin) THEN
+                  newMax = 2*ppiclf_maxCellsPerBin + 1
+                  CALL ppiclf_reallocate_BTC(ppiclf_total_SBin,
+     >                                       ppiclf_maxCellsPerBin,
+     >                                       newMax)
+                  ppiclf_maxCellsPerBin = newMax
+                END IF
+                ppiclf_binCellList(tempSBin, icount) = ie
+              END DO !k
+            END DO !j 
+          END DO !i
+        END DO !ie
 
-              ppiclf_binCellList(tempSBin, icount) = ie
-            END DO !k
-          END DO !j 
-        END DO !i
-      END DO !ie
+        RETURN
+      END IF
+
+      ! ================= FINE (CSR) fluid cell map =====================
+      ppiclf_total_fluidSBin = INT(nfb8,4)
+      CALL ppiclf_allocate_FluidCSR(ppiclf_total_fluidSBin,
+     >                              8*ppiclf_nCells_FV2PICL)
+
+      ! Pass 1: count placements per fine sub-bin (incl. periodic images)
+      DO i = 0,ppiclf_total_fluidSBin-1
+        ppiclf_fluidCellCount(i) = 0
+      END DO
+      DO ie = 1,ppiclf_nCells_FV2PICL
+        CALL ppiclf_comm_fluidCellImages(ie, place, nplace)
+        DO i = 1,nplace
+          ppiclf_fluidCellCount(place(i)) =
+     >                  ppiclf_fluidCellCount(place(i)) + 1
+        END DO
+      END DO
+
+      ! Prefix sum -> row pointers, then seed cursors
+      ppiclf_fluidCellOffset(0) = 1
+      DO i = 0,ppiclf_total_fluidSBin-1
+        ppiclf_fluidCellOffset(i+1) = ppiclf_fluidCellOffset(i)
+     >                              + ppiclf_fluidCellCount(i)
+      END DO
+      DO i = 0,ppiclf_total_fluidSBin-1
+        ppiclf_fluidCellCount(i) = ppiclf_fluidCellOffset(i)  ! cursor
+      END DO
+
+      ! Pass 2: scatter cell IDs into the flat list
+      DO ie = 1,ppiclf_nCells_FV2PICL
+        CALL ppiclf_comm_fluidCellImages(ie, place, nplace)
+        DO i = 1,nplace
+          pos = ppiclf_fluidCellCount(place(i))
+          ppiclf_fluidCellFlat(pos)       = ie
+          ppiclf_fluidCellCount(place(i)) = pos + 1
+        END DO
+      END DO
 
       RETURN
       END SUBROUTINE
