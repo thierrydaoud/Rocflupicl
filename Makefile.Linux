@@ -126,7 +126,7 @@ ifeq ($(findstring ufhpc,$(MACHINE)),ufhpc)
 
     #CXXLINKFLAGS+= ${PICLFSRC}/libppiclF.a -I${PICLFSRC}
     CMFLAGS+=-z muldefs #--allow-multiple-definition
-    LDFLAGS+=-z muldefs #--allow-multiple-definition
+    LDFLAGS+=-z muldefs -mcmodel=medium #--allow-multiple-definition
   endif
 
 #   CXXLINKFLAGS += -L/apps/mpi/intel/2016.0.109/openmpi/1.10.2/lib64/ -lmpi_usempif08
@@ -176,7 +176,7 @@ ifeq ($(findstring ufhpc,$(MACHINE)),ufhpc)
     CXXLINKFLAGS+=  -Wl,-rpath -Wl,/opt/intel/mkl/10.0.2.018/lib/em64t
   endif
 
-  FPPFLAGS+= 
+  FPPFLAGS+=-mcmodel=medium 
 
   CMFLAGS+= -fallow-argument-mismatch
 

@@ -1,7 +1,6 @@
 FC               = mpif90 # Valid MPI Fortran compiler
 CC               = mpicc  # Valid MPI C compiler
-FFLAGS          += -w -cpp -O3 -std=legacy -g -fno-math-errno -funroll-loops
-
+FFLAGS          += -w -cpp -O3 -std=legacy -g -fcheck=bounds -fbacktrace -fno-math-errno -funroll-loops -mcmodel=medium
 # Add for Turin
 # FFLAGS += -march=znver5
 # Add for Milan 
