@@ -702,6 +702,7 @@
 !
 ! This subroutine is called from ppiclf_solve_InitSolve
 !
+      USE ppiclf_DynamicAllocation ! for ppiclf_bumpMapEpoch
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
@@ -886,6 +887,9 @@
         END DO
       END DO
 
+      ! New overlap-cell enumeration is live (init path): bump the
+      ! epoch so stale CSR maps are detected by the state check.
+      CALL ppiclf_bumpMapEpoch
       ! Copy mapping since it is need to send fluid properties in interp
       ppiclf_nCells_FV2PICL_Orig = ppiclf_nCells_FV2PICL
       DO ie=1,ppiclf_nCells_FV2PICL_Orig

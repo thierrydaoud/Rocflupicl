@@ -38,9 +38,21 @@
 !             NBX rewrite must beat. The local tuple_sort that follows a
 !             transfer stays in its leaf (it is compute, not comm).
 !
-!       -> Unaccounted = TTotal - sum(leaves) - TMPI  (RK glue, periodic
-!          shift, user SetYdot non-NN work, the non-transfer compute in
-!          MoveParticle/InterpTupleTransfer, etc.)
+!   ADDITIONAL leaf timers (appended as CSV columns 32-35 so existing
+!   column positions are unchanged):
+!     TPeriodicShift - ppiclf_solve_PeriodicParticleShift body
+!     TRemovePart    - ppiclf_solve_RemoveParticle body (carved out of
+!                      TPCNNSearch, which brackets both P2C map calls)
+!     TLBCalib       - online LB coefficient calibration
+!                      (LBCalibAccum + LBCalibrate at end of stage)
+!     TEntrySync     - column 35: OUTSIDE TTotal. Wait in the optional
+!                      entry barrier (ppiclf_perf_sync=.TRUE.) = host
+!                      fluid-solve imbalance absorbed before ppiclF
+!                      timing starts. Not part of the Unaccounted sum.
+!
+!       -> Unaccounted = TTotal - sum(leaves incl. 32-34) - TMPI
+!          (RK glue, user SetYdot non-NN work, the non-transfer compute
+!          in MoveParticle/InterpTupleTransfer, etc.)
 !          Full accounting: sum(leaves) + TMPI + Unaccounted = TTotal.
 !
 !   TTotal - wall time of the full per-step picl advance
@@ -57,6 +69,18 @@
 !     T_LocalBins     = (proxy) 0             ! TODO set local bin cnt
 !=====================================================================
 
+!---------------------------------------------------------------------
+! CALIBRATION CHANNEL TIMERS: the five timing channels that feed the
+! online load-balance coefficient calibration (interp + integrate +
+! user ydot + real-particle map; P2P search; P2C map; projection;
+! overlap-cell map/comm) are UNCONDITIONAL source code - no build flag
+! required - so the coefficients adapt at run time in every build.
+! PERF gates only the full instrumentation and the CSV logging.
+! Overhead of the always-on channels: a few dozen MPI_WTIME pairs per
+! stage plus one pair per particle in the P2P search, well under 0.5%
+! of a stage. Set ppiclf_LB_docal = .FALSE. to freeze the
+! coefficients at run time.
+!---------------------------------------------------------------------
 ! Time per operation per stage
       REAL*8  PPICLF_TCreateBin
      >       ,PPICLF_TFindPart
@@ -88,6 +112,11 @@
      >       ,PPICLF_TPresGrad
      >       ,PPICLF_THeatTransfer
      >       ,PPICLF_TUserYdot
+     >       ,PPICLF_TIO
+     >       ,PPICLF_TPeriodicShift
+     >       ,PPICLF_TRemovePart
+     >       ,PPICLF_TLBCalib
+     >       ,PPICLF_TEntrySync
 
       COMMON /PPICLF_RUNTIMES/ PPICLF_TCreateBin
      >       ,PPICLF_TFindPart
@@ -119,6 +148,11 @@
      >       ,PPICLF_TPresGrad
      >       ,PPICLF_THeatTransfer
      >       ,PPICLF_TUserYdot
+     >       ,PPICLF_TIO
+     >       ,PPICLF_TPeriodicShift
+     >       ,PPICLF_TRemovePart
+     >       ,PPICLF_TLBCalib
+     >       ,PPICLF_TEntrySync
 
       INTEGER*4  PPICLF_T_RealPart
      >          ,PPICLF_T_GhostPartSent

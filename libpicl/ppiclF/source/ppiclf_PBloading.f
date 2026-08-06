@@ -17,9 +17,7 @@
      >          ,global_extremes(6)
      >          ,BinBuffer(3), periodicDistCheck
      >          ,idum, jdum, kdum
-#ifdef PERF
       REAL*8    tstart, tfinal
-#endif
 
       DO i = 1,3
         BinMinLen(i) = MAX(ppiclf_filter(i), ppiclf_nndist)
@@ -48,9 +46,7 @@
         DO i = 1,3
           local_extremes(i) = - local_extremes(i)
         END DO
-#ifdef PERF
       tstart = MPI_WTIME()
-#endif
         ! Finds global bin domain boundaries across MPI ranks
         CALL MPI_ALLREDUCE(local_extremes, global_extremes, 6
      >                       ,MPI_DOUBLE_PRECISION, MPI_MAX
@@ -189,6 +185,10 @@
       ppiclf_dM = temp_dSize(2) 
       ppiclf_dS = temp_dSize(3)
       ppiclf_binorderset = .TRUE.
+      ! Bin geometry changed: per-bin overlap cell counts used by the
+      ! weighted load balance must be rebuilt (see FindCellPartLB).
+      ppiclf_CellCountValid = .FALSE.
+
       ! Allocate all arrays dependant on number of bins or processors
       CALL ppiclf_dyn_alloc(ppiclf_totalBins, ppiclf_np)
 
@@ -210,16 +210,37 @@
       INTEGER*4  stride(3), stride_L, stride_M, stride_S
       INTEGER*4  bin_L, bin_M
       REAL*8     LB_iterationCount, LB_criteria, LB_target, inv_dx(3)
-#ifdef PERF
+     >           ,aPP, bMAP, bPROJ, cCell, LB_curMax
+      REAL*8     ppiclf_comm_BinWeight
+      EXTERNAL   ppiclf_comm_BinWeight
+      INTEGER*4  LB_pcount, capPart
+      LOGICAL    docheck
       REAL*8     tstart, tfinal
-#endif
      
       nb1  = ppiclf_n_bins(1)
       nb2  = ppiclf_n_bins(2)
       nb3  = ppiclf_n_bins(3)
       nb1xnb2 = nb1 * nb2
 
-      ppiclf_ParticleCount = 0
+      ! ---- global-count / rebalance-criterion cadence gate ----
+      ! The O(N_b) count zeroing, the N_b-word allreduce, and the
+      ! O(N_b) weighted scan below are P-independent fixed per-stage
+      ! costs. Run them every ppiclf_LB_checkfreq stages (default 3 =
+      ! once per RK3 step); per-particle bin assignment and migration
+      ! detection stay per-stage. docheck is identical on all ranks
+      ! (module counter + globally consistent binchanged), so the
+      ! gated collective remains collectively consistent. Staleness of
+      ! the global counts on off-stages is benign: CreateGhostPartLB
+      ! tests LOCAL per-bin counts (fresh every stage) and the EIB
+      ! one-bin dilation covers any bin a particle can enter within a
+      ! step. checkfreq = 1 restores the legacy behavior exactly.
+      ppiclf_LB_stagectr = ppiclf_LB_stagectr + 1
+      ppiclf_LB_countsfresh = .FALSE.
+      docheck = ppiclf_binchanged .OR.
+     >          ppiclf_LB_stagectr .LE. 1 .OR.
+     >          MOD(ppiclf_LB_stagectr, ppiclf_LB_checkfreq) .EQ. 0
+
+      IF(docheck) ppiclf_ParticleCount = 0
       IF(.NOT. ppiclf_binchanged) THEN
         ppiclf_particleMoved = .FALSE.
       END IF
@@ -260,12 +281,12 @@
             ppiclf_iprop(4,i) = nRank
           END IF
         END IF
-        ppiclf_ParticleCount(bin) = ppiclf_ParticleCount(bin) + 1
+        IF(docheck)
+     >    ppiclf_ParticleCount(bin) = ppiclf_ParticleCount(bin) + 1
       END DO
-      ! Sum particles per bin across MPI Ranks
-#ifdef PERF
+      ! Sum particles per bin across MPI Ranks (check stages only)
+      IF(docheck) THEN
       tstart = MPI_WTIME()
-#endif
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_ParticleCount
      >                   ,ppiclf_totalBins ,MPI_INTEGER4, MPI_SUM
      >                   ,ppiclf_comm, ierr)
@@ -276,6 +297,8 @@
 #endif
 
       ppiclf_glnpart = SUM(ppiclf_ParticleCount)
+      ppiclf_LB_countsfresh = .TRUE.
+      END IF
 
       IF(ppiclf_binchanged) THEN
         ppiclf_rebalance     = .TRUE.
@@ -284,9 +307,7 @@
       END IF
 
       ! Logical OR comparison across MPI Ranks
-#ifdef PERF
       tstart = MPI_WTIME()
-#endif
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_particleMoved
      >                   ,1, MPI_LOGICAL, MPI_LOR
      >                   ,ppiclf_comm, ierr)
@@ -296,10 +317,29 @@
       PPICLF_TFindPart = PPICLF_TFindPart - tfinal
 #endif
 
-      ! Check if new BTRM required
-      ! If NumPart > LB_criteria*TargetNumPart -> Reassign BTRM
+      ! Off-stage: no fresh global counts, so skip the weighted scan
+      ! and criterion; migration (above) has already been handled.
+      IF(.NOT. docheck) THEN
+        ppiclf_rebalance = .FALSE.
+        RETURN
+      END IF
+
+      ! Check if new BTRM required using the same weighted cost model
+      ! as the partitioner (see LBWeightCoef/BinWeight):
+      !   W(bin) = Np + aPP*Np^2 + (bMAP*sMAP + bPROJ)*Np*Nc + cCell*Nc
+      ! If RankWeight > LB_criteria*TargetWeight -> Reassign BTRM
+      ! ppiclf_CellCount (centroid-in-bin overlap cell counts) is
+      ! still valid here: the binchanged path returned above and the
+      ! fluid grid partition is static, so cell->bin is unchanged.
+      ! Analytic cost model coefficients (see LBWeightCoef)
+      CALL ppiclf_comm_LBWeightCoef(aPP, bMAP, bPROJ, cCell)
+      LB_target = 0.0D0
+      DO i = 0,ppiclf_totalBins-1
+        LB_target = LB_target
+     >      + ppiclf_comm_BinWeight(i, aPP, bMAP, bPROJ, cCell)
+      END DO
       LB_criteria = 1.2D0
-      LB_target   = CEILING(DBLE(ppiclf_glnpart)/DBLE(ppiclf_np))
+      LB_target   = LB_target/DBLE(ppiclf_np)
       LB_criteria = LB_criteria*LB_target
       ppiclf_rebalance = .FALSE.
 
@@ -312,7 +352,15 @@
       stride_S = stride(ppiclf_dS)
 
       LB_iterationCount = 0.0D0 
+      LB_curMax = 0.0D0
       bin = 0 
+      ! Weight balance no longer bounds particle counts implicitly,
+      ! so drift between rebalances could exceed the transfer/common
+      ! buffer capacity without tripping the weight criterion.
+      ! Trigger a rebalance when any rank's count reaches 95% of
+      ! PPICLF_LPART (the partitioner cuts at 90%, leaving headroom).
+      LB_pcount = 0
+      capPart   = PPICLF_LPART - PPICLF_LPART/20
 
       outer_loop: DO iloop = 0,(ppiclf_n_bins(ppiclf_dL) - 1)
         bin_L = iloop * stride_L
@@ -327,12 +375,16 @@
             IF(ppiclf_BinToRankMap(prevBin) .NE.
      >         ppiclf_BinToRankMap(bin)       ) THEN
               LB_iterationCount = 0.0D0 ! new Rank
+              LB_pcount         = 0
             END IF
+            LB_pcount = LB_pcount + ppiclf_ParticleCount(bin)
 
-            LB_iterationCount = LB_iterationCount 
-     >                          + DBLE(ppiclf_ParticleCount(bin))
+            LB_iterationCount = LB_iterationCount
+     >          + ppiclf_comm_BinWeight(bin, aPP, bMAP, bPROJ, cCell)
+            LB_curMax = MAX(LB_curMax, LB_iterationCount)
 
-            IF(LB_iterationCount .GT. LB_criteria) THEN
+            ! Count capacity is a hard safety limit: absolute trigger.
+            IF(LB_pcount .GT. capPart) THEN
               ppiclf_rebalance = .TRUE.
               EXIT outer_loop
             END IF
@@ -341,10 +393,28 @@
         END DO
       END DO outer_loop
 
+      IF(.NOT. ppiclf_rebalance) THEN
+        IF(ppiclf_lbJustBal) THEN
+          ! First check after a rebalance: record the achieved max
+          ! segment weight as the futility baseline instead of
+          ! re-triggering. If the partition is granularity limited,
+          ! this is the best the partitioner can do and the criterion
+          ! must adapt to it rather than fire every step.
+          ppiclf_lbBaseMax = LB_curMax
+          ppiclf_lbJustBal = .FALSE.
+        ELSE IF(LB_curMax .GT. LB_criteria) THEN
+          ! Weight criterion exceeded: rebalance only if this is a
+          ! genuine degradation beyond what the last rebalance
+          ! achieved (5% margin), or no baseline exists yet.
+          IF(ppiclf_lbBaseMax .LT. 0.0D0 .OR.
+     >       LB_curMax .GT. 1.05D0*ppiclf_lbBaseMax) THEN
+            ppiclf_rebalance = .TRUE.
+          END IF
+        END IF
+      END IF
+
       ! Logical OR comparison across MPI Ranks
-#ifdef PERF
       tstart = MPI_WTIME()
-#endif
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_rebalance
      >                   ,1, MPI_LOGICAL, MPI_LOR
      >                   ,ppiclf_comm, ierr)
@@ -360,30 +430,605 @@
       RETURN
       END SUBROUTINE
 !----------------------------------------------------------------------
+      SUBROUTINE ppiclf_comm_FindCellPartLB
+!
+! Tallies overlap fluid cells per bin for the weighted load balance,
+! using the centroid-in-bin approximation: each local fluid cell whose
+! center lies inside the bin domain is counted once, in the bin that
+! contains its center. The MPI-boundary-face duplication performed
+! later in MapOverlapGridPartLB is intentionally NOT included here,
+! because it depends on the bin-to-rank map that this count is used
+! to build (circular dependency).
+!
+! The count depends only on bin geometry (binb, n_bins, bins_dx) and
+! the static fluid grid partition, so it is recomputed only when
+! ppiclf_CellCountValid is .FALSE. (set by CreateBinPartLB whenever
+! the bins change). MUST be called by all ranks (collective).
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+
+      INTEGER*4  ie, ii, jj, kk, bin, ierr
+      INTEGER*4  nb1, nb2, nb3, nb1xnb2
+      INTEGER*4  l
+      REAL*8     xc, yc, zc, inv_dx(3)
+      REAL*8     ppiclf_comm_BinMapStencil
+      EXTERNAL   ppiclf_comm_BinMapStencil
+      REAL*8     tstart, tfinal
+
+      ! Cells contribute work only when ppiclF maps an overlap fluid
+      ! grid. Without overlap, no cell is ever mapped to a bin, so all
+      ! cells are outside the ppiclf domain of operations and must
+      ! carry zero weight.
+      IF(.NOT. ppiclf_overlap) THEN
+        ppiclf_CellCount = 0
+        ppiclf_CellCountValid = .FALSE.
+        RETURN
+      END IF
+
+      ! Consistent across ranks: binchanged and dyn_alloc decisions
+      ! are made from globally reduced data.
+      IF(ppiclf_CellCountValid) RETURN
+
+      nb1 = ppiclf_n_bins(1)
+      nb2 = ppiclf_n_bins(2)
+      nb3 = ppiclf_n_bins(3)
+      nb1xnb2 = nb1*nb2
+
+      inv_dx(1) = 1.0D0 / ppiclf_bins_dx(1)
+      inv_dx(2) = 1.0D0 / ppiclf_bins_dx(2)
+      inv_dx(3) = 1.0D0 / ppiclf_bins_dx(3)
+
+      ppiclf_CellCount  = 0
+      ppiclf_CellMaxLen = 0.0D0
+
+      DO ie = 1,ppiclf_nFVCells
+        xc = ppiclf_fluid_grid(1,ie)
+        yc = ppiclf_fluid_grid(2,ie)
+        zc = ppiclf_fluid_grid(3,ie)
+        ! Skip cells whose center is outside the bin domain
+        ! (same criterion as MapOverlapGridPartLB)
+        IF (xc .GT. ppiclf_binb(2)) CYCLE
+        IF (yc .GT. ppiclf_binb(4)) CYCLE
+        IF (zc .GT. ppiclf_binb(6)) CYCLE
+        IF (xc .LT. ppiclf_binb(1)) CYCLE
+        IF (yc .LT. ppiclf_binb(3)) CYCLE
+        IF (zc .LT. ppiclf_binb(5)) CYCLE
+
+        ii = FLOOR((xc - ppiclf_binb(1))*inv_dx(1))
+        jj = FLOOR((yc - ppiclf_binb(3))*inv_dx(2))
+        kk = FLOOR((zc - ppiclf_binb(5))*inv_dx(3))
+        ! Round-off protection
+        ii = MAX(0, MIN(ii, nb1-1))
+        jj = MAX(0, MIN(jj, nb2-1))
+        kk = MAX(0, MIN(kk, nb3-1))
+
+        bin = ii + nb1*jj + nb1xnb2*kk
+        ppiclf_CellCount(bin) = ppiclf_CellCount(bin) + 1
+        ! Track the largest cell edge lengths seen in this bin
+        ! (fluid_grid components 4:6 are the cell dimensions)
+        DO ii = 1,3
+          IF(ppiclf_fluid_grid(3+ii,ie) .GT.
+     >       ppiclf_CellMaxLen(ii,bin))
+     >       ppiclf_CellMaxLen(ii,bin) = ppiclf_fluid_grid(3+ii,ie)
+        END DO
+      END DO
+
+      ! Sum cell counts per bin across MPI Ranks
+      tstart = MPI_WTIME()
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_CellCount
+     >                   ,ppiclf_totalBins ,MPI_INTEGER4, MPI_SUM
+     >                   ,ppiclf_comm, ierr)
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_CellMaxLen
+     >                   ,3*ppiclf_totalBins ,MPI_DOUBLE_PRECISION
+     >                   ,MPI_MAX ,ppiclf_comm, ierr)
+
+#ifdef PERF
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
+      PPICLF_TLoadBalance = PPICLF_TLoadBalance - tfinal
+#endif
+
+      ! Do not latch an empty count as valid: at initialization the
+      ! load balance can run before the fluid grid is registered, and
+      ! a later call must then rebuild the counts.
+      IF(SUM(INT(ppiclf_CellCount,8)) .GT. 0_8) THEN
+        ppiclf_CellCountValid = .TRUE.
+      END IF
+
+      ! Cache the per-bin P2C stencil ratio sMAP: its inputs
+      ! (CellMaxLen, bins_dx, filter) change only when this routine
+      ! reruns, so the per-stage consumers (weighted scan in
+      ! FindParticlePartLB, calibration basis in LBCalibAccum) can use
+      ! a table lookup instead of re-deriving it for every bin.
+      DO ie = 0,ppiclf_totalBins-1
+        ppiclf_binSmap(ie) =
+     >    ppiclf_comm_BinMapStencil(ie, DBLE(ppiclf_CellCount(ie)))
+      END DO
+
+      RETURN
+      END SUBROUTINE
+
+
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_comm_LBWeightCoef(aPP, bMAP, bPROJ, cCell)
+!
+! Analytic per-bin cost model for the load balance, from operation
+! counts of the per-step kernels. With uniform intra-bin density the
+! time attributable to a bin is
+!
+!   T(bin) ~ C_L*Np + C_PP*Np*(rho_p*Vpp) + C_MAP*Np*(sig_c*Vmap)
+!          + C_PROJ*Np*(sig_c*Vsup) + C_CELL*Nc
+!
+! rho_p = Np/Vbin, sig_c = Nc/Vbin, and the volumes follow from the
+! search structures:
+!   Vpp  : 3x3x3 fine-cell P2P stencil, fine cell ~ nndist
+!   Vmap : 3x3x3 fluid sub-cell P2C stencil; the sub-cell size a
+!          bin's owner builds is ~1.5x the largest cell edge in its
+!          region, estimated here PER BIN from ppiclf_CellMaxLen
+!          (mesh grading makes this ratio vary strongly across bins)
+!   Vsup : Gaussian projection support, KAPPA*filter per dimension
+! Normalizing by Vbin and C_L:
+!
+!   W(bin) = Np + aPP*Np^2
+!          + (bMAP*sMAP(bin) + bPROJ)*Np*Nc + cCell*Nc
+!   sMAP(bin) = PROD_d 3/nsf_d(bin),
+!   nsf_d(bin) = MAX(1, FLOOR(bins_dx_d/(1.5*CellMaxLen_d(bin))))
+!
+! computed by ppiclf_comm_BinWeight. Only coefficient RATIOS affect
+! the partition; C_L is the normalizer. Flop-count estimates (tune
+! if kernels change):
+!   C_L    per particle-step: 27-cell interpolation of ~30 fields
+!          + SetYdot force models O(1e3) + RK update
+!   C_PP   per P2P candidate: dist^2 + compare
+!   C_MAP  per P2C candidate: dist^2 + 27-nearest partial insertion
+!   C_PROJ per projected pair: Gaussian eval + 2*LRP_PRO accumulates
+!   C_CELL per overlap cell-step: map build/zero/reduce bookkeeping
+! Flop counts ignore memory effects; those shift coefficients O(1),
+! not the model form.
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      REAL*8, INTENT(OUT) :: aPP, bMAP, bPROJ, cCell
+      INTEGER*4 d, nf
+      REAL*8    sPP, sPROJ
+      ! C_PROJ and C_CELL are EFFECTIVE costs, not flop counts:
+      ! projection is a strided 22-field scatter-accumulate (memory
+      ! bound, ~5-10x its flop count) and C_CELL carries the per-cell
+      ! per-step communication (grid refresh in + projection fields
+      ! out, ~30 doubles through the crystal router), which gates the
+      ! step exactly like compute.
+      ! The coefficients now live in ppiclf_LB_C(1:5) of the
+      ! DynamicAllocation module, initialized to the analytic
+      ! flop-count priors. In PERF builds they are periodically
+      ! recalibrated online against the measured per-rank kernel
+      ! timers (ppiclf_comm_LBCalibrate; the channel timers are
+      ! unconditional source code, so this is active in every build);
+      ! the offline script
+      ! calibrate_lb_coefficients.py performs the same fit from the
+      ! per-rank ppiclf_perf_<nid>.csv files for diagnostics.
+      REAL*8    C_L, C_PP, C_MAP, C_PROJ, C_CELL, KAPPA
+      PARAMETER(KAPPA  = 1.0D0)
+      C_L    = ppiclf_LB_C(1)
+      C_PP   = ppiclf_LB_C(2)
+      C_MAP  = ppiclf_LB_C(3)
+      C_PROJ = ppiclf_LB_C(4)
+      C_CELL = ppiclf_LB_C(5)
+
+      CALL ppiclf_comm_LBStencilRatios(sPP, sPROJ)
+
+      aPP   = (C_PP/C_L)*sPP
+      bMAP  = C_MAP/C_L
+      bPROJ = (C_PROJ/C_L)*sPROJ
+      cCell = C_CELL/C_L
+
+      RETURN
+      END SUBROUTINE
+
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_comm_LBStencilRatios(sPP, sPROJ)
+!
+! Dimensionless stencil-to-bin volume ratios of the P2P search and
+! the projection support, shared by the weight model (LBWeightCoef)
+! and the online calibration accumulator (LBCalibAccum).
+!
+! P2P path check, mirroring ppiclf_solve (fine grid is built and
+! used iff nndist>0 and MAX(filter) >= 2*nndist):
+!   fine   -> 3x3x3 nndist-cell stencil, sPP = PROD min(1,3/nf)
+!   coarse -> 3x3x3 BIN stencil over binPartList, sPP = 27
+!   none   -> no NN search, sPP = 0
+!
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      REAL*8, INTENT(OUT) :: sPP, sPROJ
+      INTEGER*4 d, nf
+      REAL*8    KAPPA
+      PARAMETER(KAPPA = 1.0D0)
+
+      sPP = 0.0D0
+      IF(ppiclf_nndist .GT. 0.0D0) THEN
+        IF(MAX(ppiclf_filter(1),ppiclf_filter(2),ppiclf_filter(3))
+     >     .GE. 2.0D0*ppiclf_nndist) THEN
+          sPP = 1.0D0
+          DO d = 1,3
+            nf  = MAX(1, FLOOR(ppiclf_bins_dx(d)/ppiclf_nndist))
+            sPP = sPP * MIN(1.0D0, 3.0D0/DBLE(nf))
+          END DO
+        ELSE
+          sPP = 2.7D1
+        END IF
+      END IF
+
+      sPROJ = 1.0D0
+      DO d = 1,3
+        sPROJ = sPROJ * (KAPPA*ppiclf_filter(d)/ppiclf_bins_dx(d))
+      END DO
+
+      RETURN
+      END SUBROUTINE
+
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_comm_LBCalibAccum
+!
+! Online cost-model calibration, part 1 of 2 (sampling). Called once
+! per FindParticlePartLB pass (after the ParticleCount allreduce, so
+! the global per-bin counts are valid). Purely local - no collectives.
+!
+! Accumulates, for THIS rank over the current calibration window:
+!   Y(k) - measured seconds in timer channel k
+!   X(k) - the workload-model basis term k summed over the bins this
+!          rank owns under the current bin-to-rank map
+! matched channel by channel to the terms of the per-bin model
+!   W(bin) = C_L*Np + C_PP*sPP*Np^2 + C_MAP*sMAP*Np*Nc
+!          + C_PROJ*sPROJ*Np*Nc + C_CELL*Nc  (unnormalized form).
+!
+! The host may zero the PERF accumulators at its own logging cadence
+! (ppiclf_solve_LogPerformance); a negative timer delta means such a
+! reset occurred, in which case the current value IS the accumulation
+! since the reset (the sliver between the previous sample and the
+! reset is lost to the fit, which is harmless).
+!
+! Active in every build: the channel timers it reads are
+! unconditional source code.
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+      INTEGER*4 b, k
+      REAL*8    sPP, sPROJ, sMAP, rn, rc, tch(5)
+      REAL*8    tcal0, tcal1
+
+      IF(.NOT. ppiclf_LB_docal) RETURN
+      tcal0 = MPI_WTIME()
+
+      ! ---- timer channels matched to the model terms ----
+      ! ch1: linear-in-Np work: interpolation, RK update, real-
+      !      particle sub-bin map, and the user SetYdot bracket
+      !      (which CONTAINS the force/heat models) MINUS the P2P
+      !      search time nested inside it. Listing the force leaves
+      !      separately here would double-count them, and leaving the
+      !      P2P time in would contaminate the linear channel with
+      !      quadratic work.
+      ! ch2: P2P nearest-neighbor search
+      ! ch3: P2C map build + search
+      ! ch4: projection (compute)
+      ! ch5: per-overlap-cell map + per-step cell communication
+      tch(1) = PPICLF_TInterp + PPICLF_TIntegrate
+     >       + PPICLF_TsubbinRealMap
+     >       + PPICLF_TUserYdot - PPICLF_TPPNNSearch
+      tch(2) = PPICLF_TPPNNSearch
+      ! Model revision (see BinWeight): the fine-grid sub-bin map is
+      ! a per-CELL build cost, so it belongs with the cell channel;
+      ! projection is capped-stencil and therefore linear in Np.
+      tch(3) = PPICLF_TPCNNSearch + PPICLF_TsubbinCellMap
+      tch(4) = PPICLF_TProject
+      tch(5) = PPICLF_TMapOverlap + PPICLF_TMPI_moveOvlp
+     >       + PPICLF_TMPI_movePro + PPICLF_TsubbinFineMap
+
+      ! The PERF accumulators are zeroed at every IntegrateParticle
+      ! entry, so at this end-of-stage sample point tch(k) IS the
+      ! full-stage channel time; accumulate it directly. (The older
+      ! snapshot-delta scheme sampled mid-stage, before the P2C map,
+      ! projection, and cell communication had run, and systematically
+      ! undercounted channels 3-5.)
+      DO k = 1,5
+        ppiclf_LB_Y(k) = ppiclf_LB_Y(k) + tch(k)
+      END DO
+
+      ! ---- basis sums over the bins THIS rank owns ----
+      ! Accumulated only on stages where FindParticlePartLB just
+      ! refreshed the global counts (ppiclf_LB_countsfresh), which
+      ! keeps this O(N_b) loop on the same ppiclf_LB_checkfreq
+      ! cadence as the weighted scan. The Y channels above still
+      ! accumulate every stage; both sides scale by the same uniform
+      ! factor (checkfreq) across ranks and channels, so the fitted
+      ! coefficient RATIOS - the only thing the partition uses - are
+      ! unaffected. sMAP comes from the per-bin cache.
+      IF(ppiclf_LB_countsfresh) THEN
+        IF (.NOT. ppiclf_LB_started) THEN
+          ! First-ever sample: discard it (startup transients would
+          ! contaminate the basis), open the short warmup window, and
+          ! stamp the window start so the walltime adaptation is live
+          ! at the FIRST refit.
+          ppiclf_LB_started = .TRUE.
+          ppiclf_LB_X = 0.0D0
+          ppiclf_LB_Y = 0.0D0
+          ppiclf_LB_calsteps = 0
+          IF (ppiclf_LB_caltime .GT. 0.0D0) THEN
+            ppiclf_LB_calfreq =
+     >        MIN(ppiclf_LB_calfreq, ppiclf_LB_calfirst)
+            IF (ppiclf_nid .EQ. 0) ppiclf_LB_lastfit = MPI_WTIME()
+          END IF
+          tcal1 = MPI_WTIME() - tcal0
+          PPICLF_TLBCalib = PPICLF_TLBCalib + tcal1
+          RETURN
+        END IF
+        CALL ppiclf_comm_LBStencilRatios(sPP, sPROJ)
+        DO b = 0,ppiclf_totalBins-1
+          IF(ppiclf_BinToRankMap(b) .EQ. ppiclf_nid) THEN
+            rn = DBLE(ppiclf_ParticleCount(b))
+            rc = DBLE(ppiclf_CellCount(b))
+            sMAP = ppiclf_binSmap(b)
+            ppiclf_LB_X(1) = ppiclf_LB_X(1) + rn
+            ppiclf_LB_X(2) = ppiclf_LB_X(2) + sPP*rn*rn
+            ppiclf_LB_X(3) = ppiclf_LB_X(3) + sMAP*rn*rc
+            ! Projection basis is Np (capped stencil), not sPROJ*n*c.
+            ppiclf_LB_X(4) = ppiclf_LB_X(4) + rn
+            ppiclf_LB_X(5) = ppiclf_LB_X(5) + rc
+          END IF
+        END DO
+        ppiclf_LB_calsteps = ppiclf_LB_calsteps + 1
+      END IF
+      tcal1 = MPI_WTIME() - tcal0
+      PPICLF_TLBCalib = PPICLF_TLBCalib + tcal1
+      RETURN
+      END SUBROUTINE
+
+!-----------------------------------------------------------------------
+      SUBROUTINE ppiclf_comm_LBCalibrate
+!
+! Online cost-model calibration, part 2 of 2 (refit). COLLECTIVE -
+! must be called by all ranks at a globally consistent point (it is
+! invoked from FindParticlePartLB, whose control flow is identical on
+! all ranks). No-op until ppiclf_LB_calfreq samples have accumulated.
+!
+! Each rank contributes one observation per channel: (X_r, Y_r) with
+! Y_r ~ c_k * X_r. The through-origin least-squares fit across ranks,
+!   c_k = SUM_r(Y_r X_r) / SUM_r(X_r^2),
+! is computed from two 5-vector allreduce sums. Because only the
+! RATIOS of the coefficients influence the partition, the raw fits
+! (seconds per basis unit) are rescaled so channel 1 retains the
+! magnitude of its analytic prior, then shrunk 25% toward the priors
+! (ridge regularization against noisy windows) and blended 50/50 with
+! the previous values (EWMA, prevents thrash). Channels with no
+! activity in the window (X = 0, e.g. P2P search disabled) keep
+! their current value. The futility baseline of the rebalance
+! criterion is invalidated since the weight scale changed.
+!
+! Active in every build: the channel timers it reads are
+! unconditional source code.
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
+      INTEGER*4 k, ierr, newfreq
+      REAL*8    sloc(10), sglb(10), raw(5), scale, cmix
+      REAL*8    tcal0, tcal1, tnow, elapsed
+      REAL*8    WPRIOR
+      PARAMETER(WPRIOR = 0.25D0)
+
+      IF(.NOT. ppiclf_LB_docal) RETURN
+      IF(ppiclf_LB_calsteps .LT. ppiclf_LB_calfreq) RETURN
+      tcal0 = MPI_WTIME()
+
+      DO k = 1,5
+        sloc(k)   = ppiclf_LB_Y(k)*ppiclf_LB_X(k)
+        sloc(5+k) = ppiclf_LB_X(k)*ppiclf_LB_X(k)
+      END DO
+      CALL MPI_ALLREDUCE(sloc, sglb, 10, MPI_DOUBLE_PRECISION,
+     >                   MPI_SUM, ppiclf_comm, ierr)
+
+      ! Raw through-origin fits (seconds per basis unit)
+      DO k = 1,5
+        IF(sglb(5+k) .GT. 1.0D-300) THEN
+          raw(k) = MAX(0.0D0, sglb(k)/sglb(5+k))
+        ELSE
+          raw(k) = -1.0D0     ! channel inactive this window
+        END IF
+      END DO
+
+      ! The linear channel anchors the normalization; without a
+      ! usable fit for it, skip this window entirely.
+      IF(raw(1) .GT. 0.0D0) THEN
+        scale = ppiclf_LB_prior(1)/raw(1)
+        DO k = 1,5
+          IF(raw(k) .GE. 0.0D0) THEN
+            cmix = (1.0D0 - WPRIOR)*raw(k)*scale
+     >           + WPRIOR*ppiclf_LB_prior(k)
+            IF (ppiclf_LB_nrefits .EQ. 0) THEN
+              ! First refit: replace the prior-initialized values
+              ! outright instead of EWMA-blending with them, so the
+              ! first measured coefficients take effect immediately.
+              ppiclf_LB_C(k) = cmix
+            ELSE
+              ppiclf_LB_C(k) = 0.5D0*ppiclf_LB_C(k) + 0.5D0*cmix
+            END IF
+          END IF
+        END DO
+        ppiclf_LB_nrefits = ppiclf_LB_nrefits + 1
+        ! Weight scale changed: re-baseline the futility criterion.
+        ppiclf_lbBaseMax = -1.0D0
+        IF(ppiclf_nid .EQ. 0) THEN
+          PRINT*, 'PPICLF: LB coefficients recalibrated (C_L, C_PP,',
+     >            ' C_MAP, C_PROJ, C_CELL):'
+          PRINT*, '        ', ppiclf_LB_C(1), ppiclf_LB_C(2),
+     >            ppiclf_LB_C(3), ppiclf_LB_C(4), ppiclf_LB_C(5)
+        END IF
+      END IF
+
+      ppiclf_LB_X = 0.0D0
+      ppiclf_LB_Y = 0.0D0
+      ppiclf_LB_calsteps = 0
+
+      ! ---- walltime-adaptive refit window ----
+      ! Rescale the sample count so the NEXT window spans about
+      ! ppiclf_LB_caltime seconds of walltime: freshness on expensive
+      ! problems, sample depth on cheap ones. Rank 0 measures the
+      ! elapsed window on its own clock (MPI clocks need not be
+      ! synchronized across ranks) and broadcasts the new window
+      ! length, so every rank gates the next refit identically.
+      IF (ppiclf_LB_caltime .GT. 0.0D0) THEN
+        newfreq = ppiclf_LB_calfreq
+        IF (ppiclf_nid .EQ. 0) THEN
+          tnow = MPI_WTIME()
+          IF (ppiclf_LB_lastfit .GT. 0.0D0) THEN
+            elapsed = tnow - ppiclf_LB_lastfit
+            IF (elapsed .GT. 1.0D-3) THEN
+              newfreq = NINT(DBLE(ppiclf_LB_calfreq)
+     >                       *ppiclf_LB_caltime/elapsed)
+            ELSE
+              newfreq = ppiclf_LB_calmax
+            END IF
+            newfreq = MAX(ppiclf_LB_calmin,
+     >                    MIN(ppiclf_LB_calmax, newfreq))
+            IF (newfreq .NE. ppiclf_LB_calfreq) THEN
+              WRITE(6,'(A,I6,A,F8.2,A)')
+     >          ' ppiclF LB calibration window -> ', newfreq,
+     >          ' samples (last window ', elapsed, ' s)'
+            END IF
+          END IF
+          ppiclf_LB_lastfit = tnow
+        END IF
+        CALL MPI_BCAST(newfreq, 1, MPI_INTEGER4, 0,
+     >                 ppiclf_comm, ierr)
+        ppiclf_LB_calfreq = newfreq
+      END IF
+
+      tcal1 = MPI_WTIME() - tcal0
+      PPICLF_TLBCalib = PPICLF_TLBCalib + tcal1
+      RETURN
+      END SUBROUTINE
+
+!-----------------------------------------------------------------------
+      DOUBLE PRECISION FUNCTION ppiclf_comm_BinWeight(bin, aPP, bMAP,
+     >                                                bPROJ, cCell)
+!
+! W(bin) = (1 + bPROJ)*Np + aPP*Np^2 + bMAP*sMAP*Np*Nc + cCell*Nc
+! with the per-bin P2C stencil ratio sMAP from the bin's largest
+! cell edges (see LBWeightCoef). Bins without cells: Nc terms vanish.
+! NOTE (model revision, validated on the 80-rank blast dataset): the
+! projection stencil is CAPPED at nnearest <= 27 cells per particle,
+! so projection work is linear in Np, not proportional to Np*Nc
+! (measured through-origin R^2: 0.996 for ~Np vs 0.467 for ~Np*Nc,
+! with only a 1.2x per-particle rate spread across ranks). bPROJ is
+! therefore the per-particle projection cost relative to C_L.
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INTEGER*4, INTENT(IN) :: bin
+      REAL*8, INTENT(IN)    :: aPP, bMAP, bPROJ, cCell
+      REAL*8    rNp, rNc, sMAP
+
+      rNp = DBLE(ppiclf_ParticleCount(bin))
+      rNc = DBLE(ppiclf_CellCount(bin))
+
+      ! Table lookup: sMAP is cached per bin by FindCellPartLB
+      ! whenever its inputs change (see ppiclf_binSmap).
+      sMAP = ppiclf_binSmap(bin)
+
+      ppiclf_comm_BinWeight = (1.0D0 + bPROJ)*rNp + aPP*rNp*rNp
+     >                      + bMAP*sMAP*rNp*rNc
+     >                      + cCell*rNc
+
+      RETURN
+      END FUNCTION
+
+!-----------------------------------------------------------------------
+      DOUBLE PRECISION FUNCTION ppiclf_comm_BinMapStencil(bin, rNc)
+!
+! Per-bin P2C stencil ratio sMAP, mirroring the fine fluid map build.
+! With the per-bin fluid sub-grid, each bin's search resolution is set
+! by its OWN coarsest cell, so the bin-local estimate below is the
+! exact quantity (no owner dependence, no dilation needed for the
+! WEIGHT; the neighborhood-max dilation in binReachDilate applies to
+! the search REACH used by the kernels, not to this cost estimate).
+! The CSR fine map is built and used only when the sub-cell it would
+! produce is meaningfully finer than the filter,
+!   bins_dx(d)/nsf_d < 0.5*filter(d) for at least one d;
+! otherwise SBParticleToCellMap scans the 3x3x3 BIN stencil
+! (sMAP = 27). The per-rank memory-budget fallback that halves
+! nSubFluid cannot be known at LB time and is neglected (it only
+! coarsens sMAP toward 27).
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INTEGER*4, INTENT(IN) :: bin
+      REAL*8, INTENT(IN)    :: rNc
+      INTEGER*4 d, nsf
+      REAL*8    sMAP
+      LOGICAL   fineOK
+
+      sMAP = 1.0D0
+      IF(rNc .GT. 0.0D0) THEN
+        fineOK = .FALSE.
+        DO d = 1,3
+          IF(ppiclf_CellMaxLen(d,bin) .GT. 0.0D0) THEN
+            nsf = MAX(1, FLOOR(ppiclf_bins_dx(d)
+     >                    /(1.5D0*ppiclf_CellMaxLen(d,bin))))
+          ELSE
+            nsf = 1
+          END IF
+          IF(ppiclf_bins_dx(d)/DBLE(nsf) .LT.
+     >       0.5D0*ppiclf_filter(d)) fineOK = .TRUE.
+          sMAP = sMAP * (3.0D0/DBLE(nsf))
+        END DO
+        IF(.NOT. fineOK) sMAP = 2.7D1
+      END IF
+
+      ppiclf_comm_BinMapStencil = sMAP
+
+      RETURN
+      END FUNCTION
+!-----------------------------------------------------------------------
       SUBROUTINE ppiclf_comm_PartLoadBalance
 
       USE ppiclf_DynamicAllocation
       IMPLICIT NONE
       INCLUDE "PPICLF"
       INCLUDE "mpif.h"
-#ifdef PERF
       REAL*8 ppiclf_pt0, tstart, tfinal
-#endif
 
 
-      INTEGER*4   ierr, i, bin, irank, particleSum
-     >           ,targetParticleCnt, prevParticleSum
+      INTEGER*4   ierr, i, bin, irank
      >           ,nb1, nb2, nb1xnb2, j, k
-     >           ,iloop, jloop, kloop, remainingParticles
+     >           ,iloop, jloop, kloop
+     >           ,partSum, prevPartSum, capPart, maxCnt
+      INTEGER*4, ALLOCATABLE :: rankCnt(:)
+      LOGICAL     forceCut
+      REAL*8      binWeight, weightSum, prevWeightSum
+     >           ,targetWeight, remainingWeight
+     >           ,aPP, bMAP, bPROJ, cCell
+      REAL*8      ppiclf_comm_BinWeight
+      EXTERNAL    ppiclf_comm_BinWeight
       INTEGER*4   stride(3), stride_L, stride_M, stride_S
       INTEGER*4   bin_L, bin_M
 
       ! Calculate BTRM on root processor and broadcast
       ! to all others. This ensures all processors have same
       ! key global mapping.
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
+      ! Refresh per-bin overlap cell counts if bin geometry changed.
+      ! Collective call - must execute on ALL ranks.
+      CALL ppiclf_comm_FindCellPartLB
+
       IF(ppiclf_nid. EQ. 0) THEN
         
         nb1 = ppiclf_n_bins(1)
@@ -399,10 +1044,31 @@
         stride_M = stride(ppiclf_dM)
         stride_S = stride(ppiclf_dS)
 
-        targetParticleCnt =CEILING(DBLE(ppiclf_glnpart)/DBLE(ppiclf_np))
-        remainingParticles = ppiclf_glnpart 
-        particleSum = 0
+        ! Per-bin work estimate (derivation in LBWeightCoef):
+        !   W(bin) = Np + aPP*Np^2 + bPC*Np*Nc + cCell*Nc
+        ! normalized by the linear per-particle cost; Nc counted
+        ! centroid-in-bin by ppiclf_comm_FindCellPartLB.
+        ! Analytic cost model coefficients (see LBWeightCoef)
+        CALL ppiclf_comm_LBWeightCoef(aPP, bMAP, bPROJ, cCell)
+        remainingWeight = 0.0D0
+        DO i = 0,ppiclf_totalBins-1
+          remainingWeight = remainingWeight
+     >        + ppiclf_comm_BinWeight(i, aPP, bMAP, bPROJ, cCell)
+        END DO
+        targetWeight = remainingWeight/DBLE(ppiclf_np)
+        weightSum = 0.0D0
         irank = 0
+        ! HARD CAPACITY CONSTRAINT: buffers in MoveParticlePartLB and
+        ! the iprop/y common blocks hold at most PPICLF_LPART
+        ! particles per rank. Weight balance is allowed to skew
+        ! particle COUNTS, so counts must be capped explicitly: force
+        ! a cut before any bin that would push the running rank past
+        ! 90% of PPICLF_LPART (margin covers drift until the next
+        ! rebalance). A single bin above the cap cannot be split; it
+        ! is isolated on its own rank and the validation below aborts
+        ! cleanly if it exceeds PPICLF_LPART itself.
+        capPart = PPICLF_LPART - PPICLF_LPART/10
+        partSum = 0
         !Iterate through all bins using the fast, branchless stride logic
         DO iloop = 0,(ppiclf_n_bins(ppiclf_dL) - 1)
           bin_L = iloop * stride_L
@@ -410,33 +1076,43 @@
             bin_M = bin_L + jloop * stride_M
             DO kloop = 0,(ppiclf_n_bins(ppiclf_dS) - 1)
               bin = bin_M + kloop * stride_S
-              prevParticleSum = particleSum
-              particleSum = particleSum + ppiclf_ParticleCount(bin)
-              IF(particleSum .GE. targetParticleCnt) THEN
+              binWeight =
+     >          ppiclf_comm_BinWeight(bin, aPP, bMAP, bPROJ, cCell)
+              prevWeightSum = weightSum
+              weightSum = weightSum + binWeight
+              prevPartSum = partSum
+              partSum = partSum + ppiclf_ParticleCount(bin)
+              forceCut = (partSum .GT. capPart) .AND.
+     >                   (prevPartSum .GT. 0)
+              IF(weightSum .GE. targetWeight .OR. forceCut) THEN
                 IF(irank .LT. ppiclf_np - 1) THEN
                   ! Check if the previous state (undershoot) was better
-                  ! than the current state (overshoot)
-                  IF((targetParticleCnt - prevParticleSum) .LE.
-     >               (particleSum - targetParticleCnt)         ) THEN
+                  ! than the current state (overshoot). A capacity
+                  ! forceCut always cuts BEFORE the current bin.
+                  IF(forceCut .OR.
+     >               (targetWeight - prevWeightSum) .LE.
+     >               (weightSum - targetWeight)         ) THEN
 
-                    remainingParticles = remainingParticles 
-     >                                   - prevParticleSum
+                    remainingWeight = remainingWeight
+     >                                - prevWeightSum
                     ! Assign the current bin to the NEXT rank.
                     irank = irank + 1
                     ppiclf_BinToRankMap(bin) = irank
-                    ! Start the new rank's count with the current bin
-                    particleSum = ppiclf_ParticleCount(bin) 
+                    ! Start the new rank's tally with the current bin
+                    weightSum = binWeight
+                    partSum = ppiclf_ParticleCount(bin)
                   ELSE
                     ! Keep this bin on the current rank.
-                    remainingParticles = remainingParticles
-     >                                   - particleSum
+                    remainingWeight = remainingWeight
+     >                                - weightSum
                     ppiclf_BinToRankMap(bin) = irank
                     irank = irank + 1
-                    ! Reset particle counter for the next rank
-                    particleSum = 0 
+                    ! Reset weight tally for the next rank
+                    weightSum = 0.0D0
+                    partSum = 0
                   END IF
-                  targetParticleCnt = CEILING(DBLE(remainingParticles) /
-     >                                        DBLE(ppiclf_np - irank))
+                  targetWeight = remainingWeight
+     >                             / DBLE(ppiclf_np - irank)
                 ELSE
                   ! This is the last rank, so can't increase ranks
                   ppiclf_BinToRankMap(bin) = irank
@@ -449,12 +1125,39 @@
           END DO !jloop
         END DO !iloop
 
+        ! --- Capacity validation -----------------------------------
+        ! A rank assigned more than PPICLF_LPART particles overruns
+        ! the crystal-router receive buffers in MoveParticlePartLB
+        ! (segfault inside gslib memcpy) BEFORE the post-transfer
+        ! LPART check can fire. Fail here, at the source, with an
+        ! actionable message instead.
+        ALLOCATE(rankCnt(0:ppiclf_np-1))
+        rankCnt = 0
+        DO i = 0,ppiclf_totalBins-1
+          j = ppiclf_BinToRankMap(i)
+          rankCnt(j) = rankCnt(j) + ppiclf_ParticleCount(i)
+        END DO
+        maxCnt = 0
+        DO i = 0,ppiclf_np-1
+          maxCnt = MAX(maxCnt, rankCnt(i))
+        END DO
+        DEALLOCATE(rankCnt)
+        IF(maxCnt .GT. PPICLF_LPART) THEN
+          PRINT*, '***ERROR*** Load balance assigns', maxCnt,
+     >            ' particles to one rank; PPICLF_LPART =',
+     >            PPICLF_LPART
+          PRINT*, '***ERROR*** Increase PPICLF_LPART, add ranks,',
+     >            ' or reduce weight concentration.'
+          CALL ppiclf_exittr('LB exceeds PPICLF_LPART$',0.0D0,maxCnt)
+        END IF
+
+        ! Inform the futility guard in FindParticlePartLB that the
+        ! next check should re-baseline against the achieved balance.
       END IF ! root Processor
+      ppiclf_lbJustBal = .TRUE.
 
       ! Share BTRM to all processors 
-#ifdef PERF
       tstart = MPI_WTIME()
-#endif
       CALL MPI_BCAST(ppiclf_BinToRankMap,ppiclf_totalBins,MPI_INTEGER4,
      >               0, ppiclf_comm, ierr)
 #ifdef PERF
@@ -474,25 +1177,19 @@
       PPICLF_TLoadBalance = PPICLF_TLoadBalance
      >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_comm_setRankBoundaries
 #ifdef PERF
       PPICLF_TRankBounds = PPICLF_TRankBounds
      >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_comm_setEmptyIndicator
 #ifdef PERF
       PPICLF_TEmptyInd = PPICLF_TEmptyInd
      >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_comm_setInterfaceIndicator
 #ifdef PERF
       PPICLF_TInterfaceInd = PPICLF_TInterfaceInd
@@ -813,12 +1510,17 @@
       INTEGER*4 rtempLim
       PARAMETER(rtempLim = PPICLF_LRS*4 + PPICLF_LRP + PPICLF_LRP2
      >       + PPICLF_LRP3 + PPICLF_LRP4 + PPICLF_LRP5 + PPICLF_LRP_PRO)
-      REAL*8    rtemp(rtempLim,PPICLF_LPART)
+      ! Heap, not automatic: at production LPART this buffer is
+      ! O(100 MB). As an automatic array the columns beyond the local
+      ! npart are first TOUCHED by gslib's receive memcpy, so a rank
+      ! that receives many more particles than it sent walks into
+      ! unmapped stack pages and segfaults inside the crystal router.
+      REAL*8, ALLOCATABLE :: rtemp(:,:)
       INTEGER*4 i, icount, j0, ierr
-#ifdef PERF
       REAL*8    tstart, tfinal
-#endif
 !
+      ALLOCATE(rtemp(rtempLim,PPICLF_LPART))
+
       ! copy particle y, rprop, rprop2, rprop3 arrays into rtemp
       ! array for communication
       DO i=1,ppiclf_npart
@@ -861,9 +1563,7 @@
       
       j0 = 4 ! index of ppiclf_iprop that contains rank to send to
 
-#ifdef PERF
       tstart = MPI_WTIME()
-#endif
 !
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl
      >             ,ppiclf_npart,PPICLF_LPART ! Setup
@@ -922,6 +1622,7 @@
      >           PPICLF_LRP_PRO)
       END DO
         
+      DEALLOCATE(rtemp)
       RETURN
       END SUBROUTINE
 !-----------------------------------------------------------------------
@@ -946,9 +1647,7 @@
      >          centeri(3), inv_dx(3)
       LOGICAL   partl, ErrorFound, MapCell 
       LOGICAL, ALLOCATABLE :: rank_is_mapped(:)
-#ifdef PERF
       REAL*8    tstart, tfinal
-#endif
 !
       ALLOCATE(rank_is_mapped(0:ppiclf_np-1))
       rank_is_mapped = .FALSE.
@@ -1152,12 +1851,10 @@
      >        ,ppiclf_picl_grid,nrr      !Real to sort
      >        ,nkey,2)                  !sorting method
 
-#ifdef PERF
       PPICLF_T_OverlapCells_received  = ppiclf_nCells_FV2PICL
       tfinal = MPI_WTIME() - tstart
       PPICLF_TMPI_moveOvlp = PPICLF_TMPI_moveOvlp + tfinal
       PPICLF_TMapOverlap = PPICLF_TMapOverlap - tfinal
-#endif
 
       ! Find distance check for interpolation.
       ! This is 1.5*MaxCellLength to ensure that at least
@@ -1181,17 +1878,13 @@
         ppiclf_filter(l) = ppiclf_MaxCellLen(l)*1.51D0
       END DO
       ! Find max filter across processors (all overlap cells considered)
-#ifdef PERF
       tstart = MPI_WTIME()
-#endif
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, ppiclf_filter
      >                   ,3 ,MPI_DOUBLE_PRECISION
      >                   ,MPI_MAX ,ppiclf_comm, ierr)
-#ifdef PERF
       tfinal = MPI_WTIME() - tstart
       PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces + tfinal
       PPICLF_TMapOverlap = PPICLF_TMapOverlap - tfinal
-#endif
 
       DO l = 1,3
         ! Multiply by 1.5 so particle near face will
@@ -1200,6 +1893,9 @@
         ppiclf_interp_dchk(l) = ppiclf_MaxCellLen(l)*1.5D0
       END DO
 
+      ! New overlap-cell enumeration is live: bump the epoch so any
+      ! CSR built against the previous enumeration reads as stale.
+      CALL ppiclf_bumpMapEpoch
       RETURN
       END SUBROUTINE 
 !-----------------------------------------------------------------------
@@ -1213,18 +1909,27 @@
 
       INTEGER*4  i, tempSBin, i_SBin(3) 
      
-      ! Quadruple it for ghost particles in the future 
+      ! Quadruple it for ghost particles in the future. The global
+      ! counts may be up to (checkfreq-1) stages stale; the 4x
+      ! headroom plus the monotone MAX make that irrelevant here.
       ppiclf_maxParticlePerBin = MAX(ppiclf_maxParticlePerBin,
      >                               4*MAXVAL(ppiclf_ParticleCount))
 
       CALL ppiclf_allocate_BTP(ppiclf_total_SBin,
      >                         ppiclf_maxParticlePerBin)
-       
+
+      ! ROOT-CAUSE FIX: always invalidate the per-subbin particle
+      ! lists, even when this rank currently has no particles.
+      ! The old early return skipped the reset, leaving last
+      ! stage's list (INCLUDING appended negative ghost entries)
+      ! visible to consumers such as CreateGhostPartLB once
+      ! particles return to this rank -> ppiclf_y(:,negative).
+      ppiclf_binPartCount = 0
+
       IF(ppiclf_npart .LT. 1) RETURN
 
       ! This creates a list of local particles contained within
       ! each bin that resides on this rank.
-      ppiclf_binPartCount = 0
       DO i = 1,ppiclf_npart
         i_SBin(1) = ppiclf_iprop(5,i) - ppiclf_binOffset(1)
         i_SBin(2) = ppiclf_iprop(6,i) - ppiclf_binOffset(2)
@@ -1304,8 +2009,13 @@
             IF(jjp .LT. 0 .OR. jjp .GE. nb2) CYCLE
             IF(kkp .LT. 0 .OR. kkp .GE. nb3) CYCLE
 
-            ! Instant bailout for empty bins
-            IF(ppiclf_ParticleCount(iBin) .EQ. 0) CYCLE
+            ! Instant bailout for empty bins. Test the LOCAL per-bin
+            ! count (rebuilt by subbinRealParticleMap every stage):
+            ! it is fresh even when the GLOBAL counts are on the
+            ! ppiclf_LB_checkfreq cadence, and it also skips bins
+            ! whose particles are all remote (they generate no ghosts
+            ! from this rank anyway).
+            IF(ppiclf_binPartCount(tempSBin) .EQ. 0) CYCLE
  
             bnd_x_neg = ppiclf_LRankBoundary(iBin, 1)
      >                  .OR. (wrap_x .AND. iip .EQ. 0)
@@ -1337,6 +2047,10 @@
             ! subbin on MPI or periodic boundary.
             DO pIdx = 1, ppiclf_binPartCount(tempSBin)
               ip = ppiclf_binPartList(tempSBin, pIdx)
+              ! Negative entries are ghost particles (see
+              ! subbinGhostParticleMap). Ghosts never seed ghosts
+              ! and their coordinates are not in ppiclf_y.
+              IF (ip .LE. 0) CYCLE
               gpStamp = gpStamp + 1
               ghost_x_neg = bnd_x_neg .AND.
      >                      (ppiclf_y(1,ip) - xlo(1) .LT. distchk)
@@ -1514,9 +2228,7 @@
 !
       INTEGER*4 iprop_proc_index, ierr
       LOGICAL   partl  ! Dummy variable       
-#ifdef PERF
       REAL*8    tstart, tfinal
-#endif
 !
       iprop_proc_index = 4 ! since ppiclf_iprop(4,np) contains processor
                            ! that should receive ghost particle
@@ -1626,7 +2338,13 @@
       ! 250 MBytes
       INTEGER*8, PARAMETER :: FINEBIN_BYTE_BUDGET = 250000000_8
 
-      IF(ppiclf_npart .LT. 1) RETURN
+      IF(ppiclf_npart .LT. 1) THEN
+        ! Nothing to build: veto the fine path so the NN search
+        ! falls back to the (freshly reset) coarse sub-bin list
+        ! instead of walking stale fine-grid arrays.
+        ppiclf_useFineGrid = .FALSE.
+        RETURN
+      END IF
       ng = ppiclf_npart_gp
       IF(ng .LT. 0) ng = 0
       fineCut = ppiclf_nndist
@@ -1767,49 +2485,45 @@
       END SUBROUTINE
 !-----------------------------------------------------------------------
 !
-      SUBROUTINE ppiclf_comm_fluidCellImages(ie, place, nplace)
+      SUBROUTINE ppiclf_comm_cellBinImages(ie, wbin, iside, nplace)
 !
-!     Return the fine fluid sub-bin index/indices for overlap cell ie,
-!     including single-rank periodic images (up to 8). Mirrors the coarse
-!     periodic-image logic of subbinCellMap, adding the within-bin fine
-!     offset. Used by the CSR fine fluid cell map build.
+!     Enumerate the WINDOW-BIN placements of overlap cell ie: its
+!     direct bin plus single-rank periodic images (up to 8 total).
+!     iside(d,m) records, per dimension, how placement m arrived:
+!       0 = direct (use the cell's true position for sub-indexing)
+!       1 = periodic image: cell near domain LO, placed in the TOP
+!           bin -> top boundary sub-cell layer
+!       2 = periodic image: cell near domain HI, placed in bin 0
+!           -> bottom boundary sub-cell layer (index 0)
+!     Mirrors the coarse map's periodic-image logic.
 !
       USE ppiclf_DynamicAllocation
       IMPLICIT NONE
       INCLUDE "PPICLF"
       INTEGER*4, INTENT(IN)  :: ie
-      INTEGER*4, INTENT(OUT) :: place(8), nplace
-      INTEGER*4 i, j, k, d, i_SBin(3), iTemp_SBin(3), fw(3), fS(3)
-     >         ,nSBinF(3), tempBin, foff(3)
-      REAL*8    binLow, subLen
+      INTEGER*4, INTENT(OUT) :: wbin(8), iside(3,8), nplace
+      INTEGER*4 i, j, k, i_SBin(3), iT(3), isd(3)
 
-      DO d = 1,3
-        i_SBin(d) = ppiclf_cell_map(4+d,ie) - ppiclf_binOffset(d)
-        nSBinF(d) = ppiclf_nSBin(d)*ppiclf_nSubFluid(d)
-        subLen    = ppiclf_bins_dx(d)/DBLE(ppiclf_nSubFluid(d))
-        binLow    = ppiclf_binb(2*d-1)
-     >            + ppiclf_cell_map(4+d,ie)*ppiclf_bins_dx(d)
-        fw(d) = FLOOR((ppiclf_picl_grid(d,ie)-binLow)/subLen)
-        fw(d) = MAX(0, MIN(fw(d), ppiclf_nSubFluid(d)-1))
+      DO i = 1,3
+        i_SBin(i) = ppiclf_cell_map(4+i,ie) - ppiclf_binOffset(i)
       END DO
 
       nplace = 0
       DO i = 0,1
         IF(i .EQ. 0) THEN
-          iTemp_SBin(1) = i_SBin(1)
-          foff(1) = fw(1)
-          IF(iTemp_SBin(1).LT.0 .OR. iTemp_SBin(1).GT.ppiclf_nSBin(1)-1)
-     >       CYCLE
+          iT(1) = i_SBin(1)
+          isd(1) = 0
+          IF(iT(1).LT.0 .OR. iT(1).GT.ppiclf_nSBin(1)-1) CYCLE
         ELSE
           IF(ppiclf_linperiodic(1).AND.ppiclf_EqualDomain(1)) THEN
             IF(i_SBin(1).LE.0) THEN
-              iTemp_SBin(1)=ppiclf_nSBin(1)-1
-              foff(1)=ppiclf_nSubFluid(1)-1
-              IF(iTemp_SBin(1).EQ.i_SBin(1)) CYCLE
+              iT(1) = ppiclf_nSBin(1)-1
+              isd(1) = 1
+              IF(iT(1).EQ.i_SBin(1)) CYCLE
             ELSE IF(i_SBin(1).GE.ppiclf_nSBin(1)-1) THEN
-              iTemp_SBin(1)=0
-              foff(1)=0
-              IF(iTemp_SBin(1).EQ.i_SBin(1)) CYCLE
+              iT(1) = 0
+              isd(1) = 2
+              IF(iT(1).EQ.i_SBin(1)) CYCLE
             ELSE
               CYCLE
             END IF
@@ -1819,20 +2533,19 @@
         END IF
         DO j = 0,1
           IF(j .EQ. 0) THEN
-            iTemp_SBin(2) = i_SBin(2)
-            foff(2) = fw(2)
-            IF(iTemp_SBin(2).LT.0 .OR.
-     >         iTemp_SBin(2).GT.ppiclf_nSBin(2)-1) CYCLE
+            iT(2) = i_SBin(2)
+            isd(2) = 0
+            IF(iT(2).LT.0 .OR. iT(2).GT.ppiclf_nSBin(2)-1) CYCLE
           ELSE
             IF(ppiclf_linperiodic(2).AND.ppiclf_EqualDomain(2)) THEN
               IF(i_SBin(2).LE.0) THEN
-                iTemp_SBin(2)=ppiclf_nSBin(2)-1
-                foff(2)=ppiclf_nSubFluid(2)-1
-                IF(iTemp_SBin(2).EQ.i_SBin(2)) CYCLE
+                iT(2) = ppiclf_nSBin(2)-1
+                isd(2) = 1
+                IF(iT(2).EQ.i_SBin(2)) CYCLE
               ELSE IF(i_SBin(2).GE.ppiclf_nSBin(2)-1) THEN
-                iTemp_SBin(2)=0
-                foff(2)=0
-                IF(iTemp_SBin(2).EQ.i_SBin(2)) CYCLE
+                iT(2) = 0
+                isd(2) = 2
+                IF(iT(2).EQ.i_SBin(2)) CYCLE
               ELSE
                 CYCLE
               END IF
@@ -1842,20 +2555,19 @@
           END IF
           DO k = 0,1
             IF(k .EQ. 0) THEN
-              iTemp_SBin(3) = i_SBin(3)
-              foff(3) = fw(3)
-              IF(iTemp_SBin(3).LT.0 .OR.
-     >           iTemp_SBin(3).GT.ppiclf_nSBin(3)-1) CYCLE
+              iT(3) = i_SBin(3)
+              isd(3) = 0
+              IF(iT(3).LT.0 .OR. iT(3).GT.ppiclf_nSBin(3)-1) CYCLE
             ELSE
               IF(ppiclf_linperiodic(3).AND.ppiclf_EqualDomain(3)) THEN
                 IF(i_SBin(3).LE.0) THEN
-                  iTemp_SBin(3)=ppiclf_nSBin(3)-1
-                  foff(3)=ppiclf_nSubFluid(3)-1
-                  IF(iTemp_SBin(3).EQ.i_SBin(3)) CYCLE
+                  iT(3) = ppiclf_nSBin(3)-1
+                  isd(3) = 1
+                  IF(iT(3).EQ.i_SBin(3)) CYCLE
                 ELSE IF(i_SBin(3).GE.ppiclf_nSBin(3)-1) THEN
-                  iTemp_SBin(3)=0
-                  foff(3)=0
-                  IF(iTemp_SBin(3).EQ.i_SBin(3)) CYCLE
+                  iT(3) = 0
+                  isd(3) = 2
+                  IF(iT(3).EQ.i_SBin(3)) CYCLE
                 ELSE
                   CYCLE
                 END IF
@@ -1863,16 +2575,147 @@
                 CYCLE
               END IF
             END IF
-            fS(1)=iTemp_SBin(1)*ppiclf_nSubFluid(1)+foff(1)
-            fS(2)=iTemp_SBin(2)*ppiclf_nSubFluid(2)+foff(2)
-            fS(3)=iTemp_SBin(3)*ppiclf_nSubFluid(3)+foff(3)
-            tempBin = fS(1) + nSBinF(1)*fS(2)
-     >              + nSBinF(1)*nSBinF(2)*fS(3)
             nplace = nplace + 1
-            place(nplace) = tempBin
+            wbin(nplace) = iT(1) + ppiclf_nSBin(1)*iT(2)
+     >                   + ppiclf_nSBin(1)*ppiclf_nSBin(2)*iT(3)
+            iside(1,nplace) = isd(1)
+            iside(2,nplace) = isd(2)
+            iside(3,nplace) = isd(3)
           END DO
         END DO
       END DO
+
+      RETURN
+      END SUBROUTINE
+
+      SUBROUTINE ppiclf_comm_fluidCellSubImages(ie, place, nplace)
+!
+!     Return the PACKED per-bin fine sub-cell index/indices for overlap
+!     cell ie, including single-rank periodic images. Direct placements
+!     sub-index by the cell's position in the bin's OWN grid; periodic
+!     images land in the image bin's boundary sub-cell layer (the true
+!     image position is within one cell length of the domain face).
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INTEGER*4, INTENT(IN)  :: ie
+      INTEGER*4, INTENT(OUT) :: place(8), nplace
+      INTEGER*4 wbin(8), iside(3,8), m, d, b, fw(3), ig(3)
+      REAL*8    binLow, h
+
+      CALL ppiclf_comm_cellBinImages(ie, wbin, iside, nplace)
+
+      DO m = 1,nplace
+        b = wbin(m)
+        ! global (i,j,k) of window bin b, for its low corner
+        ig(1) = MOD(b, ppiclf_nSBin(1))
+        ig(2) = MOD(b/ppiclf_nSBin(1), ppiclf_nSBin(2))
+        ig(3) = b/(ppiclf_nSBin(1)*ppiclf_nSBin(2))
+        DO d = 1,3
+          IF(iside(d,m) .EQ. 0) THEN
+            h = ppiclf_bins_dx(d)/DBLE(ppiclf_binNsf(d,b))
+            binLow = ppiclf_binb(2*d-1)
+     >             + (ig(d)+ppiclf_binOffset(d))*ppiclf_bins_dx(d)
+            fw(d) = FLOOR((ppiclf_picl_grid(d,ie)-binLow)/h)
+            fw(d) = MAX(0, MIN(fw(d), ppiclf_binNsf(d,b)-1))
+          ELSE IF(iside(d,m) .EQ. 1) THEN
+            fw(d) = ppiclf_binNsf(d,b)-1
+          ELSE
+            fw(d) = 0
+          END IF
+        END DO
+        place(m) = ppiclf_binSubOff(b) + fw(1)
+     >           + ppiclf_binNsf(1,b)*fw(2)
+     >           + ppiclf_binNsf(1,b)*ppiclf_binNsf(2,b)*fw(3)
+      END DO
+
+      RETURN
+      END SUBROUTINE
+
+      SUBROUTINE ppiclf_comm_binReachDilate
+!
+!     Convert the per-bin max cell edges (held in ppiclf_binReach as
+!     scratch) into the per-bin search reach: 1.5x the largest cell
+!     edge over the bin and its +-1 window neighbors, capped at the
+!     bin size. The neighborhood max lets a particle near a bin face
+!     reach the coarser cells of the adjacent bin; the cap keeps the
+!     search interval within +-1 bin (guaranteed sufficient by the
+!     Lfp bin-size constraint). In-place separable max filter.
+!
+      USE ppiclf_DynamicAllocation
+      IMPLICIT NONE
+      INCLUDE "PPICLF"
+      INTEGER*4 d, l, ii, jj, kk, m, mlo, mhi, b, src
+      REAL*8, ALLOCATABLE :: rtmp(:,:)
+
+      ALLOCATE(rtmp(3,0:ppiclf_total_SBin-1))
+      DO kk = 0,ppiclf_nSBin(3)-1
+       DO jj = 0,ppiclf_nSBin(2)-1
+        DO ii = 0,ppiclf_nSBin(1)-1
+          b = ii + ppiclf_nSBin(1)*jj
+     >      + ppiclf_nSBin(1)*ppiclf_nSBin(2)*kk
+          mlo = MAX(0, ii-1)
+          mhi = MIN(ppiclf_nSBin(1)-1, ii+1)
+          DO l = 1,3
+            rtmp(l,b) = 0.0D0
+            DO m = mlo,mhi
+              src = m + ppiclf_nSBin(1)*jj
+     >            + ppiclf_nSBin(1)*ppiclf_nSBin(2)*kk
+              rtmp(l,b) = MAX(rtmp(l,b), ppiclf_binReach(l,src))
+            END DO
+          END DO
+        END DO
+       END DO
+      END DO
+      DO kk = 0,ppiclf_nSBin(3)-1
+       DO jj = 0,ppiclf_nSBin(2)-1
+        mlo = MAX(0, jj-1)
+        mhi = MIN(ppiclf_nSBin(2)-1, jj+1)
+        DO ii = 0,ppiclf_nSBin(1)-1
+          b = ii + ppiclf_nSBin(1)*jj
+     >      + ppiclf_nSBin(1)*ppiclf_nSBin(2)*kk
+          DO l = 1,3
+            ppiclf_binReach(l,b) = 0.0D0
+            DO m = mlo,mhi
+              src = ii + ppiclf_nSBin(1)*m
+     >            + ppiclf_nSBin(1)*ppiclf_nSBin(2)*kk
+              ppiclf_binReach(l,b) = MAX(ppiclf_binReach(l,b),
+     >                                   rtmp(l,src))
+            END DO
+          END DO
+        END DO
+       END DO
+      END DO
+      DO kk = 0,ppiclf_nSBin(3)-1
+       mlo = MAX(0, kk-1)
+       mhi = MIN(ppiclf_nSBin(3)-1, kk+1)
+       DO jj = 0,ppiclf_nSBin(2)-1
+        DO ii = 0,ppiclf_nSBin(1)-1
+          b = ii + ppiclf_nSBin(1)*jj
+     >      + ppiclf_nSBin(1)*ppiclf_nSBin(2)*kk
+          DO l = 1,3
+            rtmp(l,b) = 0.0D0
+            DO m = mlo,mhi
+              src = ii + ppiclf_nSBin(1)*jj
+     >            + ppiclf_nSBin(1)*ppiclf_nSBin(2)*m
+              rtmp(l,b) = MAX(rtmp(l,b), ppiclf_binReach(l,src))
+            END DO
+          END DO
+        END DO
+       END DO
+      END DO
+      DO b = 0,ppiclf_total_SBin-1
+        DO l = 1,3
+          ppiclf_binReach(l,b) = MIN(1.5D0*rtmp(l,b),
+     >                               ppiclf_bins_dx(l))
+          ! Bins with no cells anywhere nearby: harmless default
+          IF(ppiclf_binReach(l,b) .LE. 0.0D0)
+     >       ppiclf_binReach(l,b) = ppiclf_bins_dx(l)
+        END DO
+      END DO
+      DEALLOCATE(rtmp)
+
       RETURN
       END SUBROUTINE
 !-----------------------------------------------------------------------
@@ -1890,11 +2733,21 @@
 !
       INTEGER*4  ie, i, j, k, d, iTemp_SBin(3)
      >          ,tempSBin, i_SBin(3), icount, newMax
-     >          ,nplace, place(8), pos, nSBinF(3)
+     >          ,nplace, place(8), iside(3,8), pos
       INTEGER*8  nfb8, nbytes8
       ! 250 MBytes
       INTEGER*8, PARAMETER :: FLUIDBIN_BYTE_BUDGET = 250000000_8
 
+      ! Build-skip optimization only: the fluid-cell maps depend on
+      ! geometry, not particles, so an empty rank may skip the
+      ! build. The stamp is deliberately NOT touched here - it
+      ! must keep describing the geometry of the last FULL build,
+      ! so that when particles later arrive under a newer geometry
+      ! the state check in PostTimeStepPartLB forces the rebuild.
+      ! (Stamping here falsely marked stale arrays current and
+      ! caused an out-of-bounds binReach read; the reader-side
+      ! check is gated on npart>0 to avoid rebuild storms from
+      ! perpetually empty ranks.)
       IF(ppiclf_npart .LT. 1) RETURN
 
       IF(ppiclf_nCells_FV2PICL .LE. 0 .AND. ppiclf_npart .GT. 0) THEN
@@ -1906,47 +2759,94 @@
       END IF
 
       ! ---- Decide whether to refine the fluid cell map ----------------
-      ! Subdivide each coarse sub-bin so the fine edge stays >= the
-      ! interpolation reach (1.5*MaxCellLen). Enable if that edge is
-      ! < 0.5*filter in any dimension. Memory-guarded (CSR) like the P2P
-      ! fine grid: shrink the subdivision until the grid fits, falling
-      ! back to the coarse map if it cannot.
-      DO d = 1,3
-        IF(ppiclf_MaxCellLen(d) .GT. 0.0D0) THEN
-          ppiclf_nSubFluid(d) =
-     >      MAX(1,FLOOR(ppiclf_bins_dx(d)/(1.5D0*ppiclf_MaxCellLen(d))))
-        ELSE
-          ppiclf_nSubFluid(d) = 1
-        END IF
+      ! PER-BIN sizing: each window bin subdivides by its OWN coarsest
+      ! cell, nsf_d(b) = max(1, floor(bins_dx_d/(1.5*binMax_d(b)))),
+      ! so particles among fine cells search a fine grid while bins
+      ! containing a refinement boundary keep the coarse resolution
+      ! their particles genuinely need. This bounds the candidate
+      ! count by LOCAL mesh contrast instead of the rank-wide
+      ! (partition-dependent) contrast of the former uniform grid.
+      ! The fine path is enabled when any bin refines meaningfully
+      ! (sub-cell < 0.5*filter), matching the LB model's path check.
+      CALL ppiclf_allocate_BinSubGrid(ppiclf_total_SBin)
+      ! Per-bin max cell edges over direct + periodic-image placements
+      ppiclf_binReach = 0.0D0   ! reuse as scratch for binMax first
+      DO ie = 1,ppiclf_nCells_FV2PICL
+        CALL ppiclf_comm_cellBinImages(ie, place, iside, nplace)
+        DO i = 1,nplace
+          DO d = 1,3
+            IF(ppiclf_picl_grid(3+d,ie) .GT.
+     >         ppiclf_binReach(d,place(i)))
+     >         ppiclf_binReach(d,place(i)) = ppiclf_picl_grid(3+d,ie)
+          END DO
+        END DO
       END DO
       ppiclf_useFineFluid = .FALSE.
-      DO d = 1,3
-        IF(ppiclf_bins_dx(d)/DBLE(ppiclf_nSubFluid(d))
-     >     .LT. 0.5D0*ppiclf_filter(d)) ppiclf_useFineFluid = .TRUE.
+      DO i = 0,ppiclf_total_SBin-1
+        DO d = 1,3
+          IF(ppiclf_binReach(d,i) .GT. 0.0D0) THEN
+            ppiclf_binNsf(d,i) = MAX(1, FLOOR(ppiclf_bins_dx(d)
+     >                          /(1.5D0*ppiclf_binReach(d,i))))
+          ELSE
+            ppiclf_binNsf(d,i) = 1
+          END IF
+          IF(ppiclf_bins_dx(d)/DBLE(ppiclf_binNsf(d,i)) .LT.
+     >       0.5D0*ppiclf_filter(d)) ppiclf_useFineFluid = .TRUE.
+        END DO
       END DO
 
       IF(ppiclf_useFineFluid) THEN
-        PRINT*, '**********FineFluid used'
+        ! Memory guard: shrink the most-refined bins until the packed
+        ! grid fits the byte budget (or refinement is exhausted).
         DO
-          nfb8 = 1_8
-          DO d = 1,3
-            nfb8 = nfb8*INT(ppiclf_nSBin(d)*ppiclf_nSubFluid(d),8)
+          nfb8 = 0_8
+          DO i = 0,ppiclf_total_SBin-1
+            nfb8 = nfb8 + INT(ppiclf_binNsf(1,i),8)
+     >                   *INT(ppiclf_binNsf(2,i),8)
+     >                   *INT(ppiclf_binNsf(3,i),8)
           END DO
-          ! offset(0:nbins) + count(0:nbins-1) + flat(<=8*nCells)
           nbytes8 = (2_8*nfb8 + 1_8
      >             + 8_8*INT(ppiclf_nCells_FV2PICL,8))*4_8
           IF(nfb8    .LE. INT(HUGE(ppiclf_total_fluidSBin),8) .AND.
      >       nbytes8 .LE. FLUIDBIN_BYTE_BUDGET) EXIT
-          ! Too large: halve the largest subdivision factor.
-          d = 1
-          IF(ppiclf_nSubFluid(2).GT.ppiclf_nSubFluid(d)) d = 2
-          IF(ppiclf_nSubFluid(3).GT.ppiclf_nSubFluid(d)) d = 3
-          ppiclf_nSubFluid(d) = MAX(1, ppiclf_nSubFluid(d)/2)
-          IF(ppiclf_nSubFluid(1).EQ.1 .AND. ppiclf_nSubFluid(2).EQ.1
-     >       .AND. ppiclf_nSubFluid(3).EQ.1) THEN
+          newMax = 1
+          DO i = 0,ppiclf_total_SBin-1
+            DO d = 1,3
+              IF(ppiclf_binNsf(d,i) .GT. 1) THEN
+                ppiclf_binNsf(d,i) = MAX(1, ppiclf_binNsf(d,i)/2)
+                newMax = MAX(newMax, ppiclf_binNsf(d,i))
+              END IF
+            END DO
+          END DO
+          IF(newMax .EQ. 1) THEN
             ppiclf_useFineFluid = .FALSE.
             EXIT
           END IF
+        END DO
+      END IF
+
+      IF(ppiclf_useFineFluid .AND. ppiclf_nid .EQ. 0) THEN
+        newMax = 0
+        DO i = 0,ppiclf_total_SBin-1
+          newMax = MAX(newMax, ppiclf_binNsf(1,i)*ppiclf_binNsf(2,i)
+     >                         *ppiclf_binNsf(3,i))
+        END DO
+        PRINT*, 'FineFluid per-bin map: packed subcells=',INT(nfb8,4),
+     >          ' max nsf product=', newMax
+      END IF
+
+      IF(ppiclf_useFineFluid) THEN
+        ! Per-bin search reach: 1.5x the largest cell edge over the bin
+        ! and its +-1 window neighbors, so near-face particles reach
+        ! coarser neighbor cells; capped at the bin size (which the
+        ! Lfp bin constraint guarantees is sufficient).
+        CALL ppiclf_comm_binReachDilate
+        ! Packed sub-cell offsets per bin
+        ppiclf_binSubOff(0) = 0
+        DO i = 0,ppiclf_total_SBin-1
+          ppiclf_binSubOff(i+1) = ppiclf_binSubOff(i)
+     >        + ppiclf_binNsf(1,i)*ppiclf_binNsf(2,i)
+     >          *ppiclf_binNsf(3,i)
         END DO
       END IF
 
@@ -2059,10 +2959,17 @@
           END DO !i
         END DO !ie
 
+        ! Record the geometry these maps were built for
+        CALL ppiclf_setBTCStamp(ppiclf_nSBin(1),ppiclf_nSBin(2),
+     >       ppiclf_nSBin(3),ppiclf_binOffset(1),
+     >       ppiclf_binOffset(2),ppiclf_binOffset(3),
+     >       ppiclf_total_SBin)
         RETURN
       END IF
 
       ! ================= FINE (CSR) fluid cell map =====================
+      ! Rows are the PACKED per-bin sub-cells: bin b occupies rows
+      ! [binSubOff(b), binSubOff(b+1)), local ordering fast-x.
       ppiclf_total_fluidSBin = INT(nfb8,4)
       CALL ppiclf_allocate_FluidCSR(ppiclf_total_fluidSBin,
      >                              8*ppiclf_nCells_FV2PICL)
@@ -2072,7 +2979,7 @@
         ppiclf_fluidCellCount(i) = 0
       END DO
       DO ie = 1,ppiclf_nCells_FV2PICL
-        CALL ppiclf_comm_fluidCellImages(ie, place, nplace)
+        CALL ppiclf_comm_fluidCellSubImages(ie, place, nplace)
         DO i = 1,nplace
           ppiclf_fluidCellCount(place(i)) =
      >                  ppiclf_fluidCellCount(place(i)) + 1
@@ -2091,7 +2998,7 @@
 
       ! Pass 2: scatter cell IDs into the flat list
       DO ie = 1,ppiclf_nCells_FV2PICL
-        CALL ppiclf_comm_fluidCellImages(ie, place, nplace)
+        CALL ppiclf_comm_fluidCellSubImages(ie, place, nplace)
         DO i = 1,nplace
           pos = ppiclf_fluidCellCount(place(i))
           ppiclf_fluidCellFlat(pos)       = ie
@@ -2099,12 +3006,15 @@
         END DO
       END DO
 
+      ! Record the geometry these maps were built for
+        CALL ppiclf_setBTCStamp(ppiclf_nSBin(1),ppiclf_nSBin(2),
+     >       ppiclf_nSBin(3),ppiclf_binOffset(1),
+     >       ppiclf_binOffset(2),ppiclf_binOffset(3),
+     >       ppiclf_total_SBin)
       RETURN
       END SUBROUTINE
 !-----------------------------------------------------------------------
-!
 ! This is for statistics gathering only
-!
 !-----------------------------------------------------------------------
       SUBROUTINE ppiclf_comm_LBCheck(series,iteration)
 

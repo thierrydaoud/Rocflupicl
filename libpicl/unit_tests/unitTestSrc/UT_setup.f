@@ -37,7 +37,7 @@
       ! Particle Input
       totalParticles = 25000
       ! Particles to calculate periodicity error
-      faceParticles = 4200
+      faceParticles = 0!4200
       
       ! Ensuring PPICLF array limits aren't violated
       IF(NumXCells*NumYCells*NumZCells .GT. PPICLF_LEE) THEN

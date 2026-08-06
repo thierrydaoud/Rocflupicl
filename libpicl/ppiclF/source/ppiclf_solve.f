@@ -447,6 +447,7 @@
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
+      INCLUDE "mpif.h"
 ! 
 ! Internal: 
 ! 
@@ -461,10 +462,22 @@
       INTEGER*4 n_SBin1x2, i_SBin(3), nS1, nS2, nS3, cnt, istart
 #ifdef TEST
       LOGICAL   FineGridInput
-
+#endif
+#ifndef PERF
+      REAL*8    tnn0
+#endif
+#ifdef TEST
       ppiclf_useFineGrid = FineGridInput
 #endif
-
+#ifndef PERF
+      ! The ONE surviving conditional of the calibration tier: PERF
+      ! builds time this routine from its user-side call site (in the
+      ! user SetYdot code), so the mirror bracket here is compiled
+      ! only when PERF is absent, to avoid double-counting the P2P
+      ! channel. If the user-side bracket is ever removed, this guard
+      ! (and its partner at the routine exit) can be dropped too.
+      tnn0 = MPI_WTIME()
+#endif
 !
       distSQ = ppiclf_nndist**2
 
@@ -689,6 +702,10 @@
       END DO wall_loop
 
 
+#ifndef PERF
+      PPICLF_TPPNNSearch = PPICLF_TPPNNSearch
+     >     + (MPI_WTIME() - tnn0)
+#endif
       RETURN
       END
 !-----------------------------------------------------------------------
@@ -786,26 +803,27 @@
 ! Input: 
 ! 
       REAL*8    time
-#ifdef PERF
       REAL *8 tstart,tfinal     
-#endif
 ! 
 ! Internal:
 !
-#ifdef PERF
-      tstart = MPI_WTIME()
-      IF(time .GT. 2.0E-9) THEN
-        CALL ppiclf_solve_LogPerformanceLocal
-      END IF
-#endif
       ppiclf_time   = time
+      tstart = MPI_WTIME()
       CALL ppiclf_io_WriteParticleVTU('')
       !CALL ppiclf_io_WriteBinVTU('')
       ! Output diagnostics
       CALL ppiclf_io_OutputDiagAll
-
 #ifdef PERF
+      ! Output IO (VTU + diagnostics) time. This sits OUTSIDE the
+      ! per-step TTotal bracket, so it gets its own counter; the
+      ! performance row is written AFTER the IO so the row includes
+      ! this output's own IO time (previously this tstart/tfinal
+      ! pair was dead and IO time was invisible to the profile).
       tfinal = MPI_WTIME()
+      PPICLF_TIO = PPICLF_TIO + (tfinal - tstart)
+      IF(time .GT. 2.0E-9) THEN
+        CALL ppiclf_solve_LogPerformanceLocal
+      END IF
 #endif
 
       RETURN
@@ -818,6 +836,7 @@ c----------------------------------------------------------------------
       SUBROUTINE ppiclf_solve_IntegrateParticle(istep,iostep,dt,time)
 #endif
 !
+      USE ppiclf_DynamicAllocation
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
@@ -835,37 +854,66 @@ c----------------------------------------------------------------------
       LOGICAL iout
 
 #ifdef PERF
-      REAL*8 ppiclf_pt0
-      PPICLF_TCreateBin      = 0.0D0
-      PPICLF_TFindPart       = 0.0D0
-      PPICLF_TLoadBalance    = 0.0D0
-      PPICLF_TEmptyInd       = 0.0D0
-      PPICLF_TInterfaceInd   = 0.0D0
-      PPICLF_TRankBounds     = 0.0D0
+      REAL*8 ppiclf_pt0, tb0
+      INTEGER*4 ierrb
+#endif
+      ! Per-stage reset of the calibration-channel timers. These are
+      ! plain, unconditional source code (no build flag): the online
+      ! coefficient calibration reads them at the end of every stage
+      ! and depends on the per-stage-reset semantics. PERF gates only
+      ! the full instrumentation and CSV logging.
       PPICLF_TMapOverlap     = 0.0D0
-      PPICLF_TCreateGhost    = 0.0D0
-      PPICLF_TMoveGhost      = 0.0D0
       PPICLF_TsubbinRealMap  = 0.0D0
-      PPICLF_TsubbinGhostMap = 0.0D0
       PPICLF_TsubbinFineMap  = 0.0D0
       PPICLF_TsubbinCellMap  = 0.0D0
       PPICLF_TPCNNSearch     = 0.0D0
       PPICLF_TPPNNSearch     = 0.0D0
       PPICLF_TProject        = 0.0D0
       PPICLF_TInterp         = 0.0D0
-      PPICLF_TMPI_allreduces = 0.0D0
-      PPICLF_TMPI_moveRP     = 0.0D0
-      PPICLF_TMPI_moveGP     = 0.0D0
       PPICLF_TMPI_moveInt    = 0.0D0
       PPICLF_TMPI_movePro    = 0.0D0
       PPICLF_TMPI_moveOvlp   = 0.0D0
       PPICLF_TIntegrate      = 0.0D0
+      PPICLF_TUserYdot       = 0.0D0
+      PPICLF_TRemovePart     = 0.0D0
+      PPICLF_TLBCalib        = 0.0D0
+#ifdef PERF
+      PPICLF_TCreateBin      = 0.0D0
+      PPICLF_TFindPart       = 0.0D0
+      PPICLF_TLoadBalance    = 0.0D0
+      PPICLF_TEmptyInd       = 0.0D0
+      PPICLF_TInterfaceInd   = 0.0D0
+      PPICLF_TRankBounds     = 0.0D0
+      PPICLF_TCreateGhost    = 0.0D0
+      PPICLF_TMoveGhost      = 0.0D0
+      PPICLF_TsubbinGhostMap = 0.0D0
+      PPICLF_TMPI_allreduces = 0.0D0
+      PPICLF_TMPI_moveRP     = 0.0D0
+      PPICLF_TMPI_moveGP     = 0.0D0
       PPICLF_TTotal          = 0.0D0
       PPICLF_TQuasiSteady    = 0.0D0
       PPICLF_TAddedMass      = 0.0D0
       PPICLF_TPresGrad       = 0.0D0
       PPICLF_THeatTransfer   = 0.0D0
-      PPICLF_TUserYdot       = 0.0D0
+      PPICLF_TIO             = 0.0D0
+      PPICLF_TPeriodicShift  = 0.0D0
+      PPICLF_TEntrySync      = 0.0D0
+      ! Optional profiling barrier (ppiclf_perf_sync, default FALSE):
+      ! ranks may enter ppiclF staggered when the host fluid solve is
+      ! itself imbalanced; without a barrier that stagger is absorbed
+      ! by the FIRST synchronizing collective inside the stage (the
+      ! interpolation crystal transfer) and inflates TMPI_moveInt.
+      ! With the barrier, the stagger is measured directly here as
+      ! TEntrySync (per rank = how long that rank waited for the
+      ! slowest one), and TTotal starts synchronized, so every
+      ! interior timer reflects ppiclF's own cost. Net wall time is
+      ! unchanged: the wait merely moves from the crystal transfer to
+      ! this line. TEntrySync is OUTSIDE TTotal by construction.
+      IF (ppiclf_perf_sync) THEN
+        tb0 = MPI_WTIME()
+        CALL MPI_BARRIER(ppiclf_comm, ierrb)
+        PPICLF_TEntrySync = PPICLF_TEntrySync + (MPI_WTIME() - tb0)
+      END IF
       ppiclf_pt0 = MPI_WTIME()
 #endif
 
@@ -924,9 +972,7 @@ c----------------------------------------------------------------------
 ! Output:
 !
       LOGICAL iout
-#ifdef PERF
       REAL*8 ppiclf_pt0
-#endif
 !
       icalld = icalld + 1
 
@@ -943,9 +989,7 @@ c----------------------------------------------------------------------
       ! evaluate ydot
       CALL ppiclf_solve_SetYdot
 
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
 
       !Zero out for first stage
       if (istage .EQ. 1) then
@@ -975,10 +1019,8 @@ c----------------------------------------------------------------------
         END DO
       END IF
 
-#ifdef PERF
       PPICLF_TIntegrate = PPICLF_TIntegrate
      >     + (MPI_WTIME() - ppiclf_pt0)
-#endif
 
       RETURN
       END
@@ -995,10 +1037,9 @@ c----------------------------------------------------------------------
 !
       INTEGER*4 i  
       REAL*8 per_alpha
-#ifdef PERF
       REAL *8 tstart,tfinal     
-#endif
 !
+      tstart = MPI_WTIME()
       DO i=1,ppiclf_npart
 !!!!!!!!!!!!!!!!        Rotational Periodicity Starts Here     !!!!!!!!!!!!!!!!!!!!
 !            ! currently only supports angular rotation around z-axis
@@ -1031,7 +1072,10 @@ c----------------------------------------------------------------------
            CALL ppiclf_solve_InvokeLinearPeriodic(i)
          END IF 
       END DO ! i=1,ppiclf_part
-
+#ifdef PERF
+      PPICLF_TPeriodicShift = PPICLF_TPeriodicShift
+     >                      + (MPI_WTIME() - tstart)
+#endif
       RETURN
       END
 
@@ -1119,9 +1163,7 @@ c----------------------------------------------------------------------
       INCLUDE "mpif.h"
 !
       INTEGER*4 j, ierr
-#ifdef PERF
       REAL*8 ppiclf_pt0
-#endif
 ! 
 ! Assumes cells have already been mapped to particles
 !
@@ -1130,9 +1172,7 @@ c----------------------------------------------------------------------
       ! Copies Grid Cell ID for all Rocflu elements that map
       ! to ppiclf domain for GSLIB Transfer.  This copy is from
       ! MapOverlapGrid.
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_solve_InitInterp
 
       ! Makes array (ppiclf_int_fld_input) of all rprop data
@@ -1148,10 +1188,8 @@ c----------------------------------------------------------------------
 
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
-#ifdef PERF
       PPICLF_TInterp = PPICLF_TInterp
      >     + (MPI_WTIME() - ppiclf_pt0)
-#endif
 
       ! Reset for next iteration. Input from rocpicl/PICL_TEMP_Runge
       PPICLF_INT_ICNT = 0
@@ -1161,17 +1199,13 @@ c----------------------------------------------------------------------
         ! Ghost particles are needed 
         ! They're made here after interpolated
         ! values are updated.
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
         CALL ppiclf_comm_CreateGhostPartLB
 #ifdef PERF
       PPICLF_TCreateGhost = PPICLF_TCreateGhost
      >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
         CALL ppiclf_comm_MoveGhostPartLB
 #ifdef PERF
       PPICLF_TMoveGhost = PPICLF_TMoveGhost
@@ -1184,20 +1218,14 @@ c----------------------------------------------------------------------
      
         IF(ppiclf_useFineGrid) THEN
           ! Fine path: map BOTH reals and ghosts to the nndist grid
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
           CALL ppiclf_comm_subbinFineParticleMap
-#ifdef PERF
       PPICLF_TsubbinFineMap = PPICLF_TsubbinFineMap
      >     + (MPI_WTIME() - ppiclf_pt0)
-#endif
         ELSE
           ! Coarse (original) path: append ghosts to the filter-sized
           ! sub-bins that already hold the real particles
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
           CALL ppiclf_comm_subbinGhostParticleMap
 #ifdef PERF
       PPICLF_TsubbinGhostMap = PPICLF_TsubbinGhostMap
@@ -1207,14 +1235,10 @@ c----------------------------------------------------------------------
         ! Zero collisions 
         ppiclf_ydotc = 0.0D0
       END IF
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_user_SetYdot
-#ifdef PERF
       PPICLF_TUserYdot = PPICLF_TUserYdot
      >     + (MPI_WTIME() - ppiclf_pt0)
-#endif
 
       RETURN
       END SUBROUTINE
@@ -1232,6 +1256,7 @@ c----------------------------------------------------------------------
 ! Internal: 
 ! 
       INTEGER*4 :: j,ierr
+      REAL*8 ppiclf_pt0
 
       ! Finds global number of particles
       CALL MPI_ALLREDUCE(ppiclf_npart,ppiclf_glnpart,1
@@ -1275,7 +1300,10 @@ c----------------------------------------------------------------------
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
       CALL ppiclf_comm_subbinCellMap
+      ppiclf_pt0 = MPI_WTIME()
       CALL ppiclf_solve_SBParticleToCellMap
+      PPICLF_TPCNNSearch = PPICLF_TPCNNSearch
+     >     + (MPI_WTIME() - ppiclf_pt0)
 
       ! Interpolates rprop data for ppiclf domain cells in this bin
       CALL ppiclf_solve_Interpolate
@@ -1382,6 +1410,7 @@ c----------------------------------------------------------------------
 
       SUBROUTINE ppiclf_solve_PostTimeStepPartLB
 !
+      USE ppiclf_DynamicAllocation
       IMPLICIT NONE
 !
       INCLUDE "PPICLF"
@@ -1391,24 +1420,19 @@ c----------------------------------------------------------------------
 ! Internal: 
 ! 
       INTEGER*4 :: i, j,ierr
-#ifdef PERF
       REAL*8 ppiclf_pt0
-#endif
+      LOGICAL remap_stale
 
       ! ppiclf_binchanged set in CreateBin
       ! ppiclf_binchanged .TRUE. means
       ! bin boundaries changed
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_comm_CreateBinPartLB
 #ifdef PERF
       PPICLF_TCreateBin = PPICLF_TCreateBin
      >     + (MPI_WTIME() - ppiclf_pt0)
 #endif
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_comm_FindParticlePartLB
 #ifdef PERF
       PPICLF_TFindPart = PPICLF_TFindPart
@@ -1416,10 +1440,12 @@ c----------------------------------------------------------------------
 #endif
       IF(ppiclf_rebalance) THEN
         CALL ppiclf_comm_PartLoadBalance
-      ELSE        
-#ifdef PERF
+      ELSE IF (ppiclf_LB_countsfresh) THEN
+        ! EIB refresh needs the global per-bin counts, which are only
+        ! reduced on ppiclf_LB_checkfreq stages. Off-stage skipping is
+        ! safe: the one-bin dilation of the EIB covers any bin a
+        ! particle can enter before the next refresh.
       ppiclf_pt0 = MPI_WTIME()
-#endif
         CALL ppiclf_comm_setEmptyIndicator
 #ifdef PERF
       PPICLF_TEmptyInd = PPICLF_TEmptyInd
@@ -1429,52 +1455,84 @@ c----------------------------------------------------------------------
       IF(ppiclf_particleMoved) THEN
         CALL ppiclf_comm_MoveParticlePartLB    
       END IF
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_comm_subbinRealParticleMap
-#ifdef PERF
       PPICLF_TsubbinRealMap = PPICLF_TsubbinRealMap
      >     + (MPI_WTIME() - ppiclf_pt0)
-#endif
 
-      IF(ppiclf_binchanged .OR. ppiclf_rebalance
-     >   .OR. ppiclf_emptyChanged) THEN
-#ifdef PERF
+      ! State-based staleness check, in addition to the event flags:
+      ! the particle->cell maps must match the CURRENT subbin
+      ! geometry (nSBin, binOffset, total_SBin). Any geometry
+      ! change on a path that fails to raise binchanged/rebalance/
+      ! emptyChanged forces a rebuild here instead of an out-of-
+      ! bounds read in SBParticleToCellMap. The allreduce keeps
+      ! the rebuild (which contains collectives) collectively
+      ! consistent; cost is one 1-logical allreduce per stage,
+      ! matching the existing particleMoved reduction.
+      remap_stale = ppiclf_binchanged .OR. ppiclf_rebalance
+     >   .OR. ppiclf_emptyChanged
+      ! The stamp term is gated on npart>0: a rank with no particles
+      ! never reads the maps (its SBParticleToCellMap loop is empty),
+      ! so its arrays may legitimately describe an older geometry
+      ! without forcing a collective rebuild every stage. The moment
+      ! particles arrive under a geometry newer than the last full
+      ! build, this term fires and the rebuild runs.
+      IF (.NOT. remap_stale .AND. ppiclf_npart .GT. 0) THEN
+        IF (ppiclf_BTCStale(ppiclf_nSBin(1),ppiclf_nSBin(2),
+     >      ppiclf_nSBin(3),ppiclf_binOffset(1),
+     >      ppiclf_binOffset(2),ppiclf_binOffset(3),
+     >      ppiclf_total_SBin)) THEN
+          remap_stale = .TRUE.
+          ! This print is the root-cause detector: it fires exactly
+          ! when the subbin geometry changed on a path that raised
+          ! none of the event flags. Report it (with the step/stage)
+          ! so the missing trigger can be found and fixed.
+          ! Expected on empty->occupied rank transitions across a
+          ! geometry or overlap-cell change; investigate only if it
+          ! fires on a continuously occupied rank.
+          PRINT*,'PPICLF: map stale on particle arrival;',
+     >           ' rebuilding. rank=',ppiclf_nid
+        END IF
+      END IF
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE, remap_stale, 1,
+     >     MPI_LOGICAL, MPI_LOR, ppiclf_comm, ierr)
+      IF(remap_stale) THEN
       ppiclf_pt0 = MPI_WTIME()
-#endif
         CALL ppiclf_comm_MapOverlapGridPartLB
-#ifdef PERF
       PPICLF_TMapOverlap = PPICLF_TMapOverlap
      >     + (MPI_WTIME() - ppiclf_pt0)
-#endif
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
         CALL ppiclf_comm_subbinCellMap
-#ifdef PERF
       PPICLF_TsubbinCellMap = PPICLF_TsubbinCellMap
      >     + (MPI_WTIME() - ppiclf_pt0)
-#endif
+        ! Consume-once: with the EIB refresh now on the checkfreq
+        ! cadence, a latched TRUE would otherwise re-trigger this
+        ! block on the intervening stages. (Behavior-identical under
+        ! checkfreq=1, where setEmptyIndicator rewrites the flag
+        ! before the next read.)
+        ppiclf_emptyChanged = .FALSE.
       END IF
       ! Maps up to 27 closest cell centers to particle
       ! Includes: CellID, total dist, x dist, y dist, z dist
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_solve_SBParticleToCellMap
-#ifdef PERF
       PPICLF_TPCNNSearch = PPICLF_TPCNNSearch
      >     + (MPI_WTIME() - ppiclf_pt0)
-#endif
       ! Project particle feedback to fluid solver grid
-#ifdef PERF
       ppiclf_pt0 = MPI_WTIME()
-#endif
       CALL ppiclf_solve_ProjectParticleGrid
-#ifdef PERF
       PPICLF_TProject = PPICLF_TProject
      >     + (MPI_WTIME() - ppiclf_pt0)
+
+#ifdef PERF
+      ! Online cost-model calibration, sampled at the true END of the
+      ! stage so the per-stage timer accumulators (zeroed at each
+      ! IntegrateParticle entry) contain the FULL stage, including the
+      ! P2C map, projection, and cell-communication work above. Every
+      ! rank reaches this point every stage, so the collective inside
+      ! LBCalibrate is safe.
+      CALL ppiclf_comm_LBCalibAccum
+      CALL ppiclf_comm_LBCalibrate
 #endif
       RETURN
       END
@@ -1570,8 +1628,10 @@ c----------------------------------------------------------------------
          ! subroutine
          ! j is the rprop index
          iee = ppiclf_cell_map_interp(1,ie) 
-         CALL ppiclf_copy(ppiclf_int_fld (j,ie)
-     >                   ,ppiclf_int_fld_input(iee,j),1)
+         ! Direct assignment: the previous ppiclf_copy(...,1) paid a
+         ! subroutine-call overhead per cell per field (millions of
+         ! calls per stage) to move a single double.
+         ppiclf_int_fld(j,ie) = ppiclf_int_fld_input(iee,j)
       END DO
 
       RETURN
@@ -1589,9 +1649,7 @@ c----------------------------------------------------------------------
       REAL*8 FLD(PPICLF_LEX,PPICLF_LEY,PPICLF_LEZ,PPICLF_LEE)
       INTEGER*4 nkey(2), nl, nii, njj, nrr  
       LOGICAL partl
-#ifdef PERF
       REAL *8 tstart,tfinal     
-#endif
 !
       ! send it all
       nl   = 0
@@ -1601,9 +1659,7 @@ c----------------------------------------------------------------------
       nkey(1) = 2
       nkey(2) = 1
 
-#ifdef PERF
       tstart = MPI_WTIME()
-#endif
 
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl ! Setup
      >      ,ppiclf_nCells_Interp, PPICLF_LEE ! Amount of columns to transfer
@@ -1617,11 +1673,9 @@ c----------------------------------------------------------------------
      >      ,partl,nl                         ! Logical data
      >      ,ppiclf_int_fld,nrr               ! Real data
      >      ,nkey,2)                          ! Sorting order
-#ifdef PERF
       tfinal = MPI_WTIME() - tstart
       PPICLF_TMPI_moveInt = PPICLF_TMPI_moveInt + tfinal
       PPICLF_TInterp = PPICLF_TInterp - tfinal
-#endif
 
 
       RETURN
@@ -1643,16 +1697,17 @@ c----------------------------------------------------------------------
       INTEGER*4  i_SBin(3), i_count, ii, jj, kk, loopSB
       INTEGER*4  CellID_nearest(27), idx_worst
       INTEGER*4  d, nSb1, nSb2, nSb3, totSB, istart, ncell
-      REAL*8     subOrigin(3), invSubLen(3)
+      INTEGER*4  wblo(3), wbhi(3), slo(3), shi(3)
+      INTEGER*4  ibn, jbn, kbn, isc, jsc, ksc, bwin, homew
+      REAL*8     rr(3), binlo, hinv, rdxinv(3)
+      LOGICAL    wrapl(3)
       REAL*8     dSQl, dSQi, dSQ(27), xp(3), binblength(3), dSQchk(3)
       REAL*8     dSQ_worst
       LOGICAL, ALLOCATABLE, SAVE :: cell_is_in_list(:)
       LOGICAL    farAway
       LOGICAL    wrap_x, wrap_y, wrap_z
 
-#ifdef PERF
       REAL*8    tstart,tfinal
-#endif
       
       IF(ppiclf_npart < 1) RETURN
 
@@ -1663,31 +1718,23 @@ c----------------------------------------------------------------------
       DO i = 1,3
         binblength(i) = ppiclf_binb(2*i) - ppiclf_binb(2*i-1)
         dSQchk(i) = ppiclf_interp_dchk(i)**2
+        rdxinv(i) = 1.0D0/ppiclf_bins_dx(i)
       END DO
 
-      ! Select the active sub-bin grid: fine (position-based, CSR) when
-      ! the fluid map was refined, else the coarse (iprop-based) bins.
-      IF(ppiclf_useFineFluid) THEN
-        nSb1  = ppiclf_nSBin(1)*ppiclf_nSubFluid(1)
-        nSb2  = ppiclf_nSBin(2)*ppiclf_nSubFluid(2)
-        nSb3  = ppiclf_nSBin(3)*ppiclf_nSubFluid(3)
-        totSB = ppiclf_total_fluidSBin
-        DO d = 1,3
-          subOrigin(d) = ppiclf_binb(2*d-1)
-     >                 + ppiclf_binOffset(d)*ppiclf_bins_dx(d)
-          invSubLen(d) = DBLE(ppiclf_nSubFluid(d))/ppiclf_bins_dx(d)
-        END DO
-      ELSE
-        nSb1  = ppiclf_nSBin(1)
-        nSb2  = ppiclf_nSBin(2)
-        nSb3  = ppiclf_nSBin(3)
-        totSB = ppiclf_total_SBin
-      END IF
+      ! Coarse sub-bin grid extents (the fine path derives its
+      ! per-bin sub-grid quantities inside the particle loop).
+      nSb1  = ppiclf_nSBin(1)
+      nSb2  = ppiclf_nSBin(2)
+      nSb3  = ppiclf_nSBin(3)
+      totSB = ppiclf_total_SBin
       n_SBin1x2 = nSb1*nSb2
 
       wrap_x = ppiclf_linperiodic(1) .AND. ppiclf_EqualDomain(1)
       wrap_y = ppiclf_linperiodic(2) .AND. ppiclf_EqualDomain(2)
       wrap_z = ppiclf_linperiodic(3) .AND. ppiclf_EqualDomain(3)
+      wrapl(1) = wrap_x
+      wrapl(2) = wrap_y
+      wrapl(3) = wrap_z
       cell_is_in_list = .FALSE. ! Reset hash table
       partCount = 0
       ! --- Main Particle Loop ---
@@ -1703,16 +1750,167 @@ c----------------------------------------------------------------------
         xp(3) = ppiclf_y(PPICLF_JZ, ip)
 
         IF(ppiclf_useFineFluid) THEN
-          i_SBin(1) = FLOOR((xp(1)-subOrigin(1))*invSubLen(1))
-          i_SBin(2) = FLOOR((xp(2)-subOrigin(2))*invSubLen(2))
-          i_SBin(3) = FLOOR((xp(3)-subOrigin(3))*invSubLen(3))
-        ELSE
-          i_SBin(1) = ppiclf_iprop(5,ip) - ppiclf_binOffset(1)
-          i_SBin(2) = ppiclf_iprop(6,ip) - ppiclf_binOffset(2)
-          i_SBin(3) = ppiclf_iprop(7,ip) - ppiclf_binOffset(3)
+        ! ===== FINE PATH: per-bin sub-grids =========================
+        ! Enumerate all sub-cells intersecting [xp-r, xp+r], where r
+        ! is the home bin's neighborhood reach (1.5x the coarsest
+        ! nearby cell, capped at the bin size, so at most 2 bins per
+        ! dimension are touched). Each touched bin is walked at its
+        ! OWN resolution. Periodic candidates are present as image
+        ! sub-cells built into boundary bins; distances use the
+        ! minimum image, so no index wrapping is needed here.
+        ! NOTE: candidate-processing body duplicated in the coarse
+        ! path below - keep in sync.
+        homew = (ppiclf_iprop(5,ip) - ppiclf_binOffset(1))
+     >        + nSb1*(ppiclf_iprop(6,ip) - ppiclf_binOffset(2))
+     >        + n_SBin1x2*(ppiclf_iprop(7,ip) - ppiclf_binOffset(3))
+        homew = MAX(0, MIN(homew, totSB-1))
+        ! Defensive: clamp to the ALLOCATED extent with a warning; a
+        ! search reach from a neighboring bin degrades the candidate
+        ! search slightly instead of reading past the array.
+        IF (homew .GE. SIZE(ppiclf_binReach,2)) THEN
+          PRINT*,'PPICLF WARN: stale binReach extent', homew,
+     >           SIZE(ppiclf_binReach,2), ppiclf_nid
+          homew = SIZE(ppiclf_binReach,2) - 1
         END IF
+        DO d = 1,3
+          rr(d) = ppiclf_binReach(d,homew)
+          wblo(d) = FLOOR((xp(d)-rr(d)-ppiclf_binb(2*d-1))
+     >                    *rdxinv(d)) - ppiclf_binOffset(d)
+          wbhi(d) = FLOOR((xp(d)+rr(d)-ppiclf_binb(2*d-1))
+     >                    *rdxinv(d)) - ppiclf_binOffset(d)
+          wblo(d) = MAX(0, MIN(wblo(d), ppiclf_nSBin(d)-1))
+          wbhi(d) = MAX(0, MIN(wbhi(d), ppiclf_nSBin(d)-1))
+        END DO
+        DO kbn = wblo(3), wbhi(3)
+         DO jbn = wblo(2), wbhi(2)
+          DO ibn = wblo(1), wbhi(1)
+            bwin = ibn + nSb1*jbn + n_SBin1x2*kbn
+            ! Defensive: skip windows beyond the ALLOCATED fine
+            ! metadata extent (stale-geometry protection).
+            IF (bwin .GE. SIZE(ppiclf_binNsf,2)) THEN
+              PRINT*,'PPICLF WARN: stale binNsf extent', bwin,
+     >               SIZE(ppiclf_binNsf,2), ppiclf_nid
+              CYCLE
+            END IF
+            ! sub-cell index ranges of THIS bin's grid intersecting
+            ! the search interval, per dimension
+            DO d = 1,3
+              IF(d .EQ. 1) THEN
+                binlo = ppiclf_binb(1)
+     >                + (ibn+ppiclf_binOffset(1))*ppiclf_bins_dx(1)
+              ELSE IF(d .EQ. 2) THEN
+                binlo = ppiclf_binb(3)
+     >                + (jbn+ppiclf_binOffset(2))*ppiclf_bins_dx(2)
+              ELSE
+                binlo = ppiclf_binb(5)
+     >                + (kbn+ppiclf_binOffset(3))*ppiclf_bins_dx(3)
+              END IF
+              ! Reciprocal form: FLOOR(x/h) -> FLOOR(x*Nsf/bins_dx),
+              ! removing three divisions per (particle, bin, dim).
+              hinv = DBLE(ppiclf_binNsf(d,bwin))*rdxinv(d)
+              slo(d) = FLOOR((xp(d)-rr(d)-binlo)*hinv)
+              shi(d) = FLOOR((xp(d)+rr(d)-binlo)*hinv)
+              slo(d) = MAX(0, MIN(slo(d), ppiclf_binNsf(d,bwin)-1))
+              shi(d) = MAX(0, MIN(shi(d), ppiclf_binNsf(d,bwin)-1))
+            END DO
+            DO ksc = slo(3), shi(3)
+             DO jsc = slo(2), shi(2)
+              DO isc = slo(1), shi(1)
+                loopSB = ppiclf_binSubOff(bwin) + isc
+     >                 + ppiclf_binNsf(1,bwin)*jsc
+     >                 + ppiclf_binNsf(1,bwin)
+     >                  *ppiclf_binNsf(2,bwin)*ksc
+                ! Defensive: validate against ALLOCATED extents so
+                ! a stale/corrupt map degrades to a logged skip
+                ! instead of a segfault.
+                IF (loopSB .LT. 0 .OR. loopSB+1 .GT.
+     >              UBOUND(ppiclf_fluidCellOffset,1)) THEN
+                  PRINT*,'PPICLF WARN: stale fine map row',
+     >                   loopSB, ppiclf_nid
+                  CYCLE
+                END IF
+                istart = ppiclf_fluidCellOffset(loopSB)
+                ncell  = ppiclf_fluidCellOffset(loopSB+1) - istart
+                IF (ncell .LT. 0 .OR. istart .LT. 1 .OR.
+     >              istart+ncell-1 .GT.
+     >              SIZE(ppiclf_fluidCellFlat)) THEN
+                  PRINT*,'PPICLF WARN: bad fine map row',
+     >                   loopSB, istart, ncell, ppiclf_nid
+                  CYCLE
+                END IF
 
-        ! --- Neighbor Sub-Bin Search Loop ---
+              DO i_count = 1, ncell
+                ie = ppiclf_fluidCellFlat(istart + i_count - 1)
+                IF (ie .LT. 1 .OR.
+     >              ie .GT. ppiclf_nCells_FV2PICL) THEN
+                  PRINT*,'PPICLF WARN: bad fine map cell', ie,
+     >                   ppiclf_nid
+                  CYCLE
+                END IF
+                IF (cell_is_in_list(ie)) CYCLE
+
+                dSQi = 0.0D0
+                farAway = .FALSE.
+                DO l=1,3
+                  IF( wrapl(l) ) THEN
+                    dSQl = MIN((ppiclf_picl_grid(l,ie) - xp(l))**2, 
+     >                     (binblength(l)-
+     >                      ABS(ppiclf_picl_grid(l,ie) - xp(l)))**2)
+                  ELSE
+                    dSQl = (ppiclf_picl_grid(l,ie) - xp(l))**2
+                  END IF
+                  dSQi = dSQi + dSQl
+                  IF (dSQl > dSQchk(l)) farAway = .TRUE.
+                END DO ! l
+                
+                IF (farAway) CYCLE
+
+                IF (nnearest < 27) THEN
+                  nnearest = nnearest + 1
+                  dSQ(nnearest) = dSQi
+                  CellID_nearest(nnearest) = ie
+                  cell_is_in_list(ie) = .TRUE.
+                  IF (nnearest .EQ. 27) THEN
+                    ! List is now full, find the initial worst neighbor
+                    dSQ_worst = dSQ(1)
+                    idx_worst = 1
+                    DO l = 2, 27
+                      IF (dSQ(l) > dSQ_worst) THEN
+                        dSQ_worst = dSQ(l)
+                        idx_worst = l
+                      END IF
+                    END DO
+                  END IF
+                ELSE IF (dSQi < dSQ_worst) THEN
+                  ! New cell is better than the worst one, replace it
+                  cell_is_in_list(CellID_nearest(idx_worst)) = .FALSE.
+                  dSQ(idx_worst) = dSQi
+                  CellID_nearest(idx_worst) = ie
+                  cell_is_in_list(ie) = .TRUE.
+                  ! Find the new worst in the updated list
+                  dSQ_worst = dSQ(1)
+                  idx_worst = 1
+                  DO l = 2, 27
+                    IF (dSQ(l) > dSQ_worst) THEN
+                      dSQ_worst = dSQ(l)
+                      idx_worst = l
+                    END IF
+                  END DO ! l
+                END IF
+              END DO ! i_count
+              END DO ! isc
+             END DO ! jsc
+            END DO ! ksc
+          END DO ! ibn
+         END DO ! jbn
+        END DO ! kbn
+
+        ELSE
+        ! ===== COARSE PATH: filter-sized sub-bins (unchanged) =======
+        i_SBin(1) = ppiclf_iprop(5,ip) - ppiclf_binOffset(1)
+        i_SBin(2) = ppiclf_iprop(6,ip) - ppiclf_binOffset(2)
+        i_SBin(3) = ppiclf_iprop(7,ip) - ppiclf_binOffset(3)
+
         DO k = -1, 1
           kk = i_SBin(3) + k
           IF(kk < 0 .OR. kk >= nSb3) CYCLE
@@ -1726,28 +1924,39 @@ c----------------------------------------------------------------------
               loopSB = ii + jj*nSb1 + kk*n_SBin1x2
               IF(loopSB < 0 .OR. loopSB >= totSB) CYCLE
 
-              IF(ppiclf_useFineFluid) THEN
-                istart = ppiclf_fluidCellOffset(loopSB)
-                ncell  = ppiclf_fluidCellOffset(loopSB+1) - istart
-              ELSE
-                istart = 1
-                ncell  = ppiclf_binCellCount(loopSB)
+              ! Defensive: loopSB is guarded against totSB above,
+              ! but the arrays may predate the current geometry;
+              ! validate against ALLOCATED extents so staleness
+              ! degrades to a logged skip instead of a segfault.
+              IF (loopSB .GE. SIZE(ppiclf_binCellCount)) THEN
+                PRINT*,'PPICLF WARN: stale coarse map bin',
+     >                 loopSB, SIZE(ppiclf_binCellCount),
+     >                 ppiclf_nid
+                CYCLE
+              END IF
+              istart = 1
+              ncell  = ppiclf_binCellCount(loopSB)
+              IF (ncell .LT. 0 .OR.
+     >            ncell .GT. SIZE(ppiclf_binCellList,2)) THEN
+                PRINT*,'PPICLF WARN: bad coarse map count',
+     >                 loopSB, ncell, ppiclf_nid
+                CYCLE
               END IF
 
               DO i_count = 1, ncell
-                IF(ppiclf_useFineFluid) THEN
-                  ie = ppiclf_fluidCellFlat(istart + i_count - 1)
-                ELSE
-                  ie = ppiclf_binCellList(loopSB, i_count)
+                ie = ppiclf_binCellList(loopSB, i_count)
+                IF (ie .LT. 1 .OR.
+     >              ie .GT. ppiclf_nCells_FV2PICL) THEN
+                  PRINT*,'PPICLF WARN: bad coarse map cell', ie,
+     >                   ppiclf_nid
+                  CYCLE
                 END IF
-                
                 IF (cell_is_in_list(ie)) CYCLE
 
                 dSQi = 0.0D0
                 farAway = .FALSE.
                 DO l=1,3
-                  IF( (l==1.AND.wrap_x) .OR.
-     >                (l==2.AND.wrap_y) .OR. (l==3.AND.wrap_z) ) THEN
+                  IF( wrapl(l) ) THEN
                     dSQl = MIN((ppiclf_picl_grid(l,ie) - xp(l))**2, 
      >                     (binblength(l)-
      >                      ABS(ppiclf_picl_grid(l,ie) - xp(l)))**2)
@@ -1796,6 +2005,7 @@ c----------------------------------------------------------------------
             END DO ! i
           END DO ! j
         END DO ! k
+        END IF ! useFineFluid
         
         ! --- Finalize mapping for this particle ---
         IF (nnearest < 1) THEN
@@ -1808,7 +2018,10 @@ c----------------------------------------------------------------------
           ppiclf_nPart2Cell(partCount) = nnearest
           DO i = 1, nnearest
             ppiclf_Part2Cell_map(partCount,i) = CellID_nearest(i)
-            ppiclf_Part2Cell_dist(partCount,i) = SQRT(dSQ(i))
+            ! Stores the SQUARED distance: the projection Gaussian
+            ! needs d^2 and interpolation needs d^3 = dSQ*SQRT(dSQ),
+            ! so the SQRT here was pure overhead.
+            ppiclf_Part2Cell_dist(partCount,i) = dSQ(i)
             cell_is_in_list(CellID_nearest(i)) = .FALSE.
           END DO
         END IF
@@ -1835,7 +2048,8 @@ c----------------------------------------------------------------------
 
       ! Local Variables
       INTEGER*4 i, j, k, ip, nnearest,cellID 
-      REAL*8    wsum, eps, dist, a(27), w(27)  
+      REAL*8    wsum, eps, dist, w(27)
+      INTEGER*4 cid(27)
 
       IF(ppiclf_npart .LT. 1) RETURN
 
@@ -1845,19 +2059,28 @@ c----------------------------------------------------------------------
         w = 0.0D0
         wsum = 0.0D0
         DO k = 1,nnearest
-          ! Interpolation Weighting: 1/(distance^3)
-          dist = ppiclf_Part2Cell_dist(ip,k)**3 + eps
+          ! Interpolation Weighting: 1/(distance^3). Part2Cell_dist
+          ! stores the SQUARED distance, so d^3 = dSQ*SQRT(dSQ).
+          dist = ppiclf_Part2Cell_dist(ip,k)
+          dist = dist*SQRT(dist) + eps
           w(k) = 1.0d0 / dist
           wsum = w(k) + wsum
         END DO ! k
+        ! Prenormalize the weights and hoist the cell ids out of the
+        ! field loop: removes one divide and one indirect load per
+        ! (field, neighbor) pair from the accumulation below.
+        wsum = 1.0D0/wsum
+        DO k = 1,nnearest
+          w(k) = w(k)*wsum
+          cid(k) = ppiclf_Part2Cell_map(ip,k)
+        END DO
         DO i = 1,PPICLF_INT_ICNT
           j = PPICLF_INT_MAP(i)
           ppiclf_rprop(j, ip) = 0.0D0
           ! Inverse Distance Interpolation
           DO k = 1,nnearest
-            cellID = ppiclf_Part2Cell_map(ip,k) 
-            a(k) = ppiclf_int_fld(i,cellID)
-            ppiclf_rprop(j, ip) = ppiclf_rprop(j, ip) + w(k)*a(k)/wsum
+            ppiclf_rprop(j, ip) = ppiclf_rprop(j, ip)
+     >                          + w(k)*ppiclf_int_fld(i,cid(k))
           END DO ! k
           IF (isnan(ppiclf_rprop(j,ip))) THEN
             PRINT *, 'INTERP NAN: Particle, processor id, nnearest', ip,
@@ -1882,7 +2105,9 @@ c----------------------------------------------------------------------
 ! Internal:
 !
       INTEGER*4 i, icount
+      REAL*8    trm0, trm1
 !
+      trm0 = MPI_WTIME()
       icount = 0
       DO i=1,ppiclf_npart
          IF(ppiclf_iprop(9,i) .NE. -1) THEN
@@ -1928,7 +2153,12 @@ c----------------------------------------------------------------------
       END DO
 
       ppiclf_npart = icount
-
+      ! RemoveParticle is invoked from inside the P2C map routines,
+      ! which are bracketed by TPCNNSearch: carve the time out so the
+      ! two leaves stay mutually exclusive.
+      trm1 = MPI_WTIME() - trm0
+      PPICLF_TRemovePart = PPICLF_TRemovePart + trm1
+      PPICLF_TPCNNSearch = PPICLF_TPCNNSearch - trm1
       RETURN
       END
 !
@@ -1943,19 +2173,27 @@ c----------------------------------------------------------------------
 
       ! Internal:
       INTEGER*4 i, j, ip, ie, nCellProj, CellID, nl, nii, njj,
-     >          nrr, nkey(2), iee, cell_id(27)
+     >          nrr, nkey(2), iee, cell_id(27), kcomp
+      LOGICAL, ALLOCATABLE, SAVE :: cell_touched(:)
+      INTEGER*4, ALLOCATABLE, SAVE :: prev_iee(:)
+      INTEGER*4, SAVE :: nprev = -1
       REAL*8    GaussianConst, dist, w(27), wsum, CellVol(27),
      >          x_norm, y_norm, z_norm, PI, eps, wt, 
      >          avg_dx, avg_dy, avg_dz, avg_scale, wsum_inv 
       LOGICAL   partl 
 
-#ifdef PERF
       REAL*8    tstart, tfinal
-#endif
 ! 
       PI = 4*ATAN(1.0D0)
       GaussianConst = 2.305D0 ! Distribution over 2 cell widths
-      ppiclf_pro_fld_picl = 0.0d0
+      ! pro_fld_picl is no longer zeroed wholesale: rows are zeroed
+      ! lazily on first touch each stage (cell_touched), and only
+      ! touched rows are sent (see the compaction below). Untouched
+      ! rows hold stale data but are never read or transferred.
+      IF (.NOT. ALLOCATED(cell_touched)) THEN
+        ALLOCATE(cell_touched(1:PPICLF_LEE))
+        cell_touched = .FALSE.
+      END IF
       eps = 1.0D-60
 
       DO ip=1,ppiclf_npart
@@ -1985,9 +2223,11 @@ c----------------------------------------------------------------------
      >               + avg_dz*avg_dz) 
         ! Loop to find individual cell weightings
         DO i = 1,nCellProj
-          dist = ppiclf_Part2Cell_dist(ip,i) + eps
+          ! Part2Cell_dist now stores the SQUARED distance, which is
+          ! exactly what the Gaussian exponent needs.
+          dist = ppiclf_Part2Cell_dist(ip,i)
           w(i) = ABS(CellVol(i)*
-     >               EXP(-GaussianConst*(dist**2)*(avg_scale)))
+     >               EXP(-GaussianConst*dist*avg_scale))
           wsum = wsum + w(i)
         END DO !i
         IF (wsum .GT. eps) THEN
@@ -2020,6 +2260,12 @@ c----------------------------------------------------------------------
         DO i = 1,nCellProj
           CellID = cell_id(i)
           wt     = w(i)
+          IF (.NOT. cell_touched(CellID)) THEN
+            cell_touched(CellID) = .TRUE.
+            DO j=1,PPICLF_LRP_PRO
+              ppiclf_pro_fld_picl(j,CellID) = 0.0D0
+            END DO
+          END IF
           DO j=1,PPICLF_LRP_PRO
             ppiclf_pro_fld_picl(j,CellID) = 
      >         ppiclf_pro_fld_picl(j,CellID) + ppiclf_feedbk(j,ip)*wt
@@ -2029,11 +2275,28 @@ c----------------------------------------------------------------------
 
       ! Now send feedback information to processor that contains 
       ! the cell for the fluid solver
-      ppiclf_nCells_Proj = ppiclf_nCells_FV2PICL
-      DO i = 1,ppiclf_nCells_Proj
-        CALL ppiclf_icopy(ppiclf_cell_map_proj(1,i),
-     >         ppiclf_cell_map(1,i),PPICLF_LRMAX)
+      ! Compact to TOUCHED cells only before the crystal transfer.
+      ! Untouched cells carry all-zero contributions, which accumulate
+      ! nothing on the receiving side, so dropping them is EXACT while
+      ! cutting the transfer volume (22 reals + 10 ints per cell) to
+      ! the cells particles actually projected into. The forward copy
+      ! is in place (kcomp <= i always). cell_touched is reset here,
+      ! ready for the next stage's lazy zeroing.
+      kcomp = 0
+      DO i = 1,ppiclf_nCells_FV2PICL
+        IF (cell_touched(i)) THEN
+          kcomp = kcomp + 1
+          CALL ppiclf_icopy(ppiclf_cell_map_proj(1,kcomp),
+     >           ppiclf_cell_map(1,i),PPICLF_LRMAX)
+          IF (kcomp .NE. i) THEN
+            DO j = 1,PPICLF_LRP_PRO
+              ppiclf_pro_fld_picl(j,kcomp) = ppiclf_pro_fld_picl(j,i)
+            END DO
+          END IF
+          cell_touched(i) = .FALSE.
+        END IF
       END DO
+      ppiclf_nCells_Proj = kcomp
 
       nl = 0
       nii = PPICLF_LRMAX
@@ -2042,9 +2305,7 @@ c----------------------------------------------------------------------
       nkey(1) = 2
       nkey(2) = 1
 
-#ifdef PERF
       tstart = MPI_WTIME()
-#endif
       CALL pfgslib_crystal_tuple_transfer(ppiclf_cr_hndl ! Setup
      >      ,ppiclf_nCells_Proj, PPICLF_LEE ! Amount of columns to transfer
      >      ,ppiclf_cell_map_proj, nii      ! Integer communication
@@ -2058,22 +2319,41 @@ c----------------------------------------------------------------------
      >      ,ppiclf_pro_fld_picl,nrr        ! Real data
      >      ,nkey,2)                        ! Sorting order
 
-#ifdef PERF
       tfinal = MPI_WTIME() - tstart
       PPICLF_TMPI_movePro = PPICLF_TMPI_movePro + tfinal
       PPICLF_TProject = PPICLF_TProject - tfinal
-#endif
 
 
-      ppiclf_pro_fld = 0.0d0
+      ! pro_fld is a large static array (dim1 x LRP_PRO reals); a
+      ! wholesale zero every stage is a fixed ~10s-of-MB memset. Zero
+      ! it fully ONCE, then on later stages clear only the rows that
+      ! received contributions LAST stage (tracked in prev_iee). Rows
+      ! never received stay zero; rows received previously but not now
+      ! are cleared here. Result is bit-identical to the full memset.
+      IF (nprev .LT. 0) THEN
+        ppiclf_pro_fld = 0.0d0
+        IF (.NOT. ALLOCATED(prev_iee)) THEN
+          ALLOCATE(prev_iee(1:PPICLF_LEE))
+        END IF
+        nprev = 0
+      ELSE
+        DO ie = 1,nprev
+          iee = prev_iee(ie)
+          DO j=1,PPICLF_LRP_PRO
+            ppiclf_pro_fld(iee,j) = 0.0D0
+          END DO
+        END DO
+      END IF
       DO ie=1,ppiclf_nCells_Proj
          iee = ppiclf_cell_map_Proj(1,ie)
+         prev_iee(ie) = iee
          DO j=1,PPICLF_LRP_PRO
            ! Mapped to the fluid solver domain
            ppiclf_pro_fld(iee,j) = ppiclf_pro_fld(iee,j) +
      >                                    ppiclf_pro_fld_picl(j,ie)
          END DO
       END DO
+      nprev = ppiclf_nCells_Proj
 
       RETURN
       END SUBROUTINE
@@ -2283,7 +2563,7 @@ c----------------------------------------------------------------------
           DO i = 1,nnearest
             ppiclf_Part2Cell_map(partCount,i) = CellID_nearest(i) ! Cell ID
             ! Particle center to cell center distance
-            ppiclf_Part2Cell_dist(partCount,i) = SQRT(dSQ(i)) 
+            ppiclf_Part2Cell_dist(partCount,i) = dSQ(i) ! squared
            END DO
         END IF 
       END DO !ip
@@ -2618,6 +2898,11 @@ c----------------------------------------------------------------------
       PPICLF_TPresGrad       = 0.0D0
       PPICLF_THeatTransfer   = 0.0D0
       PPICLF_TUserYdot       = 0.0D0
+      PPICLF_TIO             = 0.0D0
+      PPICLF_TPeriodicShift  = 0.0D0
+      PPICLF_TRemovePart     = 0.0D0
+      PPICLF_TLBCalib        = 0.0D0
+      PPICLF_TEntrySync      = 0.0D0
       PPICLF_T_RealPart      = 0
       PPICLF_T_GhostPartSent = 0
       PPICLF_T_GhostPartRec  = 0
@@ -2648,7 +2933,7 @@ c----------------------------------------------------------------------
       INTEGER*4, save :: iprint = 0
 #ifdef PERF
       INTEGER*4 NT, NC
-      PARAMETER (NT=30, NC=8)
+      PARAMETER (NT=35, NC=8)
       REAL*8    tloc(NT), tmax(NT), tmin(NT), tsum(NT), tmean(NT)
       INTEGER*4 cloc(NC), cmax(NC), csum(NC)
       REAL*8    unacc, imbal, rnp, leafsum
@@ -2693,6 +2978,11 @@ c----------------------------------------------------------------------
       tloc(28) = PPICLF_TMPI_movePro
       tloc(29) = PPICLF_TMPI_moveOvlp
       tloc(30) = PPICLF_TTotal
+      tloc(31) = PPICLF_TIO
+      tloc(32) = PPICLF_TPeriodicShift
+      tloc(33) = PPICLF_TRemovePart
+      tloc(34) = PPICLF_TLBCalib
+      tloc(35) = PPICLF_TEntrySync
 
       cloc(1) = PPICLF_T_RealPart
       cloc(2) = PPICLF_T_GhostPartSent
@@ -2728,6 +3018,9 @@ c----------------------------------------------------------------------
       END DO
       unacc = tmean(30) - leafsum
       DO i=24,29
+        unacc = unacc - tmean(i)
+      END DO
+      DO i=32,34
         unacc = unacc - tmean(i)
       END DO
       IF(tmean(30) .GT. 0.0D0) THEN
@@ -2769,6 +3062,11 @@ c----------------------------------------------------------------------
         tname(28) = 'TMPI_movePro'
         tname(29) = 'TMPI_moveOvlp'
         tname(30) = 'TTotal'
+        tname(31) = 'TIO'
+        tname(32) = 'TPeriodicShift'
+        tname(33) = 'TRemovePart'
+        tname(34) = 'TLBCalib'
+        tname(35) = 'TEntrySync'
         cname(1)  = 'RealPart'
         cname(2)  = 'GhostPartSent'
         cname(3)  = 'GhostPartRec'
@@ -2823,7 +3121,7 @@ c----------------------------------------------------------------------
       INCLUDE "PPICLF"
 #ifdef PERF
       INTEGER*4 NT, NC
-      PARAMETER (NT=30, NC=8)
+      PARAMETER (NT=35, NC=8)
       REAL*8    tloc(NT), leafsum, unacc
       INTEGER*4 cloc(NC)
       INTEGER*4 i, iu
@@ -2865,6 +3163,11 @@ c----------------------------------------------------------------------
       tloc(28) = PPICLF_TMPI_movePro
       tloc(29) = PPICLF_TMPI_moveOvlp
       tloc(30) = PPICLF_TTotal
+      tloc(31) = PPICLF_TIO
+      tloc(32) = PPICLF_TPeriodicShift
+      tloc(33) = PPICLF_TRemovePart
+      tloc(34) = PPICLF_TLBCalib
+      tloc(35) = PPICLF_TEntrySync
 
       cloc(1) = PPICLF_NPART
       cloc(2) = PPICLF_T_GhostPartSent
@@ -2883,6 +3186,9 @@ c----------------------------------------------------------------------
       ! TMPI split across tloc(24..29); TTotal now tloc(30)
       unacc = tloc(30) - leafsum
       DO i=24,29
+        unacc = unacc - tloc(i)
+      END DO
+      DO i=32,34
         unacc = unacc - tloc(i)
       END DO
 
@@ -2920,6 +3226,11 @@ c----------------------------------------------------------------------
       tname(28) = 'TMPI_movePro'
       tname(29) = 'TMPI_moveOvlp'
       tname(30) = 'TTotal'
+      tname(31) = 'TIO'
+        tname(32) = 'TPeriodicShift'
+        tname(33) = 'TRemovePart'
+        tname(34) = 'TLBCalib'
+        tname(35) = 'TEntrySync'
       cname(1)  = 'RealPart'
       cname(2)  = 'GhostPartSent'
       cname(3)  = 'GhostPartRec'
@@ -2950,7 +3261,7 @@ c----------------------------------------------------------------------
      >  (tloc(i),i=1,NT), leafsum, unacc,
      >  (cloc(i),i=1,NC)
       CLOSE(iu)
-  900 FORMAT(I9,',',I7,',',I9,32(',',1PE15.7),8(',',I11))
+  900 FORMAT(I9,',',I7,',',I9,37(',',1PE15.7),8(',',I11))
 #endif
       RETURN
       END

@@ -7,6 +7,9 @@ C Grid
       COMMON /PPICLF_GRID_FLD_R/ PPICLF_PRO_FLD,
      >       PPICLF_PRO_FLD_PICL,PPICLF_INT_FLD_INPUT,
      >       PPICLF_INT_FLD,PPICLF_FLUID_GRID,
+! NOTE: PPICLF_PART2CELL_DIST stores the SQUARED particle-to-cell
+! distance (the projection Gaussian needs d^2 and interpolation forms
+! d^3 = dSQ*SQRT(dSQ)); do not treat it as a plain distance.
      >       PPICLF_PICL_GRID,PPICLF_PART2CELL_DIST
 
 

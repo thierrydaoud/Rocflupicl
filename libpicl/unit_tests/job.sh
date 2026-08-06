@@ -6,7 +6,7 @@
 #SBATCH --ntasks=32
 #SBATCH --nodes=1
 #SBATCH --mem-per-cpu=5gb                     # Per node
-#SBATCH --time=00-06:30:00             # Walltime in hh:mm:ss or d-hh:mm:ss
+#SBATCH --time=00-01:30:00             # Walltime in hh:mm:ss or d-hh:mm:ss
 #SBATCH --account=bala1s
 #SBATCH --qos=bala1s
 #SBATCH --partition=hpg-dev
