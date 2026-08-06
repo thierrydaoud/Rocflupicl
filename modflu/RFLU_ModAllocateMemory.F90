@@ -533,6 +533,22 @@ SUBROUTINE RFLU_AllocateMemorySolCv(pRegion)
      IF (global%error /= ERR_NONE) THEN
         CALL ErrorStop(global,ERR_ALLOCATE,__LINE__,'pRegion%mixt%piclFeedback')
      END IF ! global%error
+
+     ! Zero-initialize all PICL arrays (restores Dec14 behavior, which zeroed
+     ! piclVF after allocation). These are only populated by the ppiclF
+     ! projection, which rfluinit never runs; without this, SetDependentVars
+     ! reads uninitialized heap during initialization (e.g., piclVF > 1 gives
+     ! negative gas density in the JWL branch and an ErrorStop in ModJWL).
+     pRegion%mixt%piclVF          = 0.0_RFREAL
+     pRegion%mixt%piclVFg         = 1.0_RFREAL ! gas volume fraction = 1 - piclVF
+     pRegion%mixt%piclgradRhog    = 0.0_RFREAL
+     pRegion%mixt%piclPhiRsg      = 0.0_RFREAL
+     pRegion%mixt%piclGradPhiRsg  = 0.0_RFREAL
+     pRegion%mixt%piclKsg         = 0.0_RFREAL
+     pRegion%mixt%piclPhiQsg      = 0.0_RFREAL
+     pRegion%mixt%piclGradPhiQsg  = 0.0_RFREAL
+     pRegion%mixt%piclFeedback    = 0.0_RFREAL
+     pRegion%mixt%piclgradFeedback = 0.0_RFREAL
 !   END IF
 #endif
 

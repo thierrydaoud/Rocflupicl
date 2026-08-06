@@ -310,7 +310,7 @@ SUBROUTINE RFLU_BXV_ConvertCvCons2Prim(pRegion,pPatch,cvStateFuture)
                   pCv(CV_MIXT_YVEL,ifl) = ir*pCv(CV_MIXT_YMOM,ifl)
                   pCv(CV_MIXT_ZVEL,ifl) = ir*pCv(CV_MIXT_ZMOM,ifl)
 
-                  ksg = pRegion%mixt%piclKsg(ifl)
+                  ksg = pRegion%mixt%piclKsg(icg) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
                   u = pCv(CV_MIXT_XVEL,ifl)
                   v = pCv(CV_MIXT_YVEL,ifl)
@@ -528,7 +528,7 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
               gc = MixtPerf_R_M(mw)
               g  = MixtPerf_G_CpR(cp,gc)
 
-              ksg = pRegion%mixt%piclKsg(ifl)
+              ksg = pRegion%mixt%piclKsg(icg) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
               pCv(CV_MIXT_ENER,ifl) = r*MixtPerf_Eo_DGPUVW(r,g,p,u,v,w,ksg)
             END DO ! icg
@@ -562,7 +562,7 @@ SUBROUTINE RFLU_BXV_ConvertCvPrim2Cons(pRegion,pPatch,cvStateFuture)
               w = pCv(CV_MIXT_ZVEL,ifl)
               p = pDv(DV_MIXT_PRES,ifl)
               
-              ksg = pRegion%mixt%piclKsg(ifl)
+              ksg = pRegion%mixt%piclKsg(icg) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
               pCv(CV_MIXT_XMOM,ifl) = r*u !ifl was icg
               pCv(CV_MIXT_YMOM,ifl) = r*v !ifl was icg

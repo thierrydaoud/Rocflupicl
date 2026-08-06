@@ -340,7 +340,7 @@ SUBROUTINE RFLU_BXV_CompEnergyPatch(pRegion,pPatch)
     rw = pCv(CV_MIXT_ZMOM,ifl)
     p  = pDv(DV_MIXT_PRES,ifl)
 
-    ksg = pRegion%mixt%piclKsg(ifl)
+    ksg = pRegion%mixt%piclKsg(icg) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
     u = ru/r
     v = rv/r
@@ -474,7 +474,7 @@ SUBROUTINE RFLU_BXV_CompMomEnergyPatch(pRegion,pPatch)
 
     r  = pCv(CV_MIXT_DENS,ifl)
 
-    ksg = pRegion%mixt%piclKsg(ifl)
+    ksg = pRegion%mixt%piclKsg(icg) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
     u = vals(BCDAT_INFLOW_U,distrib*ifl) 
     v = vals(BCDAT_INFLOW_V,distrib*ifl)
@@ -2073,7 +2073,7 @@ SUBROUTINE RFLU_BXV_SetDependentVarsPatch(pRegion,pPatch)
             
             Vm2 = u*u + v*v + w*w
 
-            ksg = pRegion%mixt%piclKsg(ifl)
+            ksg = pRegion%mixt%piclKsg(icg) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
             p = MixtPerf_P_DEoGVm2(r,Eo,gGas,Vm2,ksg)
 

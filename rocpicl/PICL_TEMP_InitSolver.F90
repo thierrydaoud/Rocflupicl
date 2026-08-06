@@ -792,6 +792,23 @@ IF(global%restartFromScratch) THEN
       pRegion%mixt%cv(CV_MIXT_YMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_YMOM,icg)
       pRegion%mixt%cv(CV_MIXT_ZMOM,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_ZMOM,icg)
       pRegion%mixt%cv(CV_MIXT_ENER,icg) = vFrac*pRegion%mixt%cv(CV_MIXT_ENER,icg)
+
+!***
+! I think this below was wrong
+!#ifdef SPEC
+!      ! The species conserved variables must also be made superficial
+!      ! (phig*rho*Y): the scalar convective fluxes (RFLU_ScalarFirst/Second)
+!      ! upwind Y with the phig-scaled mixture mass flux mfMixt, so the
+!      ! species field evolves as phig*rho*Y. Leaving the initial field as
+!      ! rho*Y makes species and mixture inconsistent inside the particle
+!      ! bed (Y = specCv/mixtCv = Y/phig > 1 at high volume fraction).
+!      IF ( global%specUsed .EQV. .TRUE. ) THEN
+!         DO iSpec = 1,pRegion%specInput%nSpecies
+!            pRegion%spec%cv(iSpec,icg) = vFrac*pRegion%spec%cv(iSpec,icg)
+!         END DO ! iSpec
+!      END IF ! global%specUsed
+!#endif
+!***
       IF(pRegion%mixt%cv(CV_MIXT_DENS,icg) .le. 0.0) THEN
            WRITE(*,*) "Error: negative density: ",pRegion%mixt%cv(CV_MIXT_DENS,icg)     
            PRINT*, 'From rocpicl/PICL_TEMP_InitSolver.F90' 

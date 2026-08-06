@@ -352,7 +352,7 @@ SUBROUTINE RFLU_NSCBC_CompFirstPatchFlux(pRegion,pPatch)
     wr   = pPatch%mixt%cv(CV_MIXT_ZMOM,ifl)*irr
     pr   = pPatch%mixt%dv(DV_MIXT_PRES,ifl)
    
-    ksg = pRegion%mixt%piclKsg(ifl)
+    ksg = pRegion%mixt%piclKsg(c1) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
     IF (pRegion%mixtInput%gasModel == GAS_MODEL_MIXT_JWL) THEN
 #ifdef SPEC
@@ -727,7 +727,7 @@ SUBROUTINE RFLU_NSCBC_CompPatchFlux(pRegion,pPatch)
     wr   = pPatch%mixt%cv(CV_MIXT_ZMOM,ifl)*irr
     pr   = pPatch%mixt%dv(DV_MIXT_PRES,ifl)
     
-    ksg = pRegion%mixt%piclKsg(ifl)
+    ksg = pRegion%mixt%piclKsg(c1) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
     IF (pRegion%mixtInput%gasModel == GAS_MODEL_MIXT_JWL) THEN
 #ifdef SPEC
@@ -1181,7 +1181,7 @@ SUBROUTINE RFLU_NSCBC_CompSecondPatchFlux(pRegion,pPatch)
     wr   = pPatch%mixt%cv(CV_MIXT_ZMOM,ifl)*irr
     pr   = pPatch%mixt%dv(DV_MIXT_PRES,ifl)
 
-    ksg = pRegion%mixt%piclKsg(ifl)
+    ksg = pRegion%mixt%piclKsg(c1) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
     IF (pRegion%mixtInput%gasModel == GAS_MODEL_MIXT_JWL) THEN
 #ifdef SPEC      
@@ -1866,16 +1866,13 @@ SUBROUTINE RFLU_NSCBC_CompRhsFF(pRegion,pPatch)
 
 
     IF ( global%mvFrameFlag .EQV. .TRUE. ) THEN
-      print*, "loc 1 RFLU_NSCBC_CompRhsFF"
-
       pRhs(CV_MIXT_XMOM,ifl) = pRhs(CV_MIXT_XMOM,ifl) + r*pRegion%mvfAcc(XCOORD)
       pRhs(CV_MIXT_YMOM,ifl) = pRhs(CV_MIXT_YMOM,ifl) + r*pRegion%mvfAcc(YCOORD)
       pRhs(CV_MIXT_ZMOM,ifl) = pRhs(CV_MIXT_ZMOM,ifl) + r*pRegion%mvfAcc(ZCOORD)
       pRhs(CV_MIXT_ENER,ifl) = pRhs(CV_MIXT_ENER,ifl) &
                              + r*u*pRegion%mvfAcc(XCOORD) &
                              + r*v*pRegion%mvfAcc(YCOORD) &
-                             + r*w*pRegion%mvfAcc(ZCOORD) &
-                             + r*pRegion%mixt%piclKsg(ifl)
+                             + r*w*pRegion%mvfAcc(ZCOORD)
     END IF ! global%mvFrameFlag
   END DO ! ifl
 
@@ -2602,7 +2599,7 @@ SUBROUTINE RFLU_NSCBC_CompRhsOF(pRegion,pPatch)
     p  = pDv(DV_MIXT_PRES,ifl)
     a  = pDv(DV_MIXT_SOUN,ifl)
     
-    ksg = pRegion%mixt%piclKsg(ifl)
+    ksg = pRegion%mixt%piclKsg(c1) ! Fixed: piclKsg is cell-indexed; was indexed by boundary face ifl
 
     IF (pRegion%mixtInput%gasModel == GAS_MODEL_MIXT_JWL) THEN
       ra   = pRegion%mixtInput%prepRealVal3   !Ambient farfield density

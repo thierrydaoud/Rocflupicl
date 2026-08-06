@@ -352,6 +352,13 @@ SUBROUTINE RFLU_EndFlowSolver(levels)
 ! Weights for cell and face gradients
 ! ==============================================================================
 
+  ! Associate pRegion before use: every preceding loop that sets it is
+  ! conditional (master-only prints, STATS/PLAG ifdefs, printEndTime),
+  ! so on a clean completion pRegion can reach this point unassociated
+  ! and RFLU_DecideNeedWeights(pRegion) dereferences garbage. The
+  ! function depends only on global%solverType, so region 1 suffices.
+  pRegion => levels(1)%regions(1)
+
   IF ( RFLU_DecideNeedWeights(pRegion) .EQV. .TRUE. ) THEN
     DO iReg = 1,global%nRegionsLocal 
       pRegion => levels(1)%regions(iReg)
@@ -379,6 +386,7 @@ SUBROUTINE RFLU_EndFlowSolver(levels)
 ! Weights for optimal LES approach
 ! ==============================================================================
 
+  pRegion => levels(1)%regions(1) ! see association note above
   IF ( RFLU_DecideNeedWeights(pRegion) .EQV. .TRUE. ) THEN
     DO iReg = 1,global%nRegionsLocal
       pRegion => levels(1)%regions(iReg) 

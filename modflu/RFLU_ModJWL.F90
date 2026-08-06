@@ -194,8 +194,9 @@ MODULE RFLU_ModJWL
     ! internal energy = density * specific internal energy
     ! eamb = p_amb/rho/(ga-1); p_amb = 102,300 Pa; ga = 1.4; rho = 1.0 kg/m^3
     ! rhoTNT replaced by 1860 following RocSDT scaling
-    !eJ = ETNT/rhoTNT                    ! explosive internal energy
-    eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
+    ! TLJ 1860 hardcode reverted to input rhoTNT (matches RocfluMacro_Subbin_Dec14)
+    eJ = ETNT/rhoTNT                    ! explosive internal energy
+    !eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
     eamb = 2.55750E+05_RFREAL            ! ambient internal energy; m^2/s^2
 
     ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
@@ -409,8 +410,8 @@ MODULE RFLU_ModJWL
         r .LE. 0.0_RFREAL ) THEN
       WRITE(*,*) 'Input variables to pressure function are Negative'
       WRITE(*,*) 'g,gc,e,r,Y,a,eJWL,ePerf,p,T', g,gc,e,r,Y,a,eJWL,ePerf,p,T
-      WRITE(*,*) 'e,r,VF,rkstep,icg,iReg',e,r,pRegion%mixt%piclVF(icg), &
-              pRegion%irkStep,icg,pRegion%iRegionGlobal
+      WRITE(*,*) 'e,r,VF,rkstep,icg,iReg, grid_cofg(x,y,z)',e,r,pRegion%mixt%piclVF(icg), &
+              pRegion%irkStep,icg,pRegion%iRegionGlobal, pRegion%grid%cofg(:,icg)
       CALL ErrorStop(global,ERR_INVALID_VALUE,__LINE__,'Invalid quantity 2 in ModJWL')
     END IF
 #else
@@ -592,8 +593,9 @@ MODULE RFLU_ModJWL
     ! internal energy = density * specific internal energy
     ! eamb = p_amb/rho/(ga-1); p_amb = 102,300 Pa; ga = 1.4; rho = 1.0 kg/m^3
     ! rhoTNT replaced by 1860 following RocSDT scaling
-    !eJ = ETNT/rhoTNT                    ! explosive internal energy
-    eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
+    ! TLJ 1860 hardcode reverted to input rhoTNT (matches RocfluMacro_Subbin_Dec14)
+    eJ = ETNT/rhoTNT                    ! explosive internal energy
+    !eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
     eamb = 2.55750E+05_RFREAL            ! ambient internal energy; m^2/s^2
 
     ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
@@ -669,13 +671,11 @@ MODULE RFLU_ModJWL
        ENDIF
     ENDIF
 
-    ! TLJ added for safety 12/27/2024
-    IF (e .LE. ea) THEN
-       e = ea
+    ! Reverted to Dec14 constant floor; ea-based clamp (pa/ra/0.4) raised the
+    ! floor to ~ambient e and injected energy in expansion regions
+    IF (e .LE. 1.0E+04_RFREAL) THEN
+       e = 1.0E+04_RFREAL
     ENDIF
-    !IF (e .LE. 1.0E+04_RFREAL) THEN
-    !   e = 1.0E+04_RFREAL
-    !ENDIF
 
     RFLU_JWL_E_PR = e
 
@@ -859,8 +859,9 @@ MODULE RFLU_ModJWL
     ! internal energy = density * specific internal energy
     ! eamb = p_amb/rho/(ga-1); p_amb = 102,300 Pa; ga = 1.4; rho = 1.0 kg/m^3
     ! rhoTNT replaced by 1860 following RocSDT scaling
-    !eJ = ETNT/rhoTNT                    ! explosive internal energy
-    eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
+    ! TLJ 1860 hardcode reverted to input rhoTNT (matches RocfluMacro_Subbin_Dec14)
+    eJ = ETNT/rhoTNT                    ! explosive internal energy
+    !eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
     eamb = 2.55750E+05_RFREAL            ! ambient internal energy; m^2/s^2
 
     ma = (ATNT-0.00_RFREAL)/(eJ-eamb)
@@ -992,8 +993,9 @@ MODULE RFLU_ModJWL
     ! internal energy = density * specific internal energy
     ! eamb = p_amb/rho/(ga-1); p_amb = 102,300 Pa; ga = 1.4; rho = 1.0 kg/m^3
     ! rhoTNT replaced by 1860 following RocSDT scaling
-    !eJ = ETNT/rhoTNT                    ! explosive internal energy
-    eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
+    ! TLJ 1860 hardcode reverted to input rhoTNT (matches RocfluMacro_Subbin_Dec14)
+    eJ = ETNT/rhoTNT                    ! explosive internal energy
+    !eJ = ETNT/1860.0_RFREAL              ! explosive internal energy
     eamb = 2.55750E+05_RFREAL            ! ambient internal energy; m^2/s^2
     shcvair = 717.60_RFREAL              ! Cv for air; Cv = Cp/ga; J/kg-K
 
@@ -1009,7 +1011,8 @@ MODULE RFLU_ModJWL
     END IF
     
     w  = max(mp*(r-ra)+0.4_RFREAL, wTNT)
-    cv = max(mcv*(r-ra)+shcvair,   shcvair)
+    ! Reverted cv clamp to shcvTNT (matches Dec14 working version)
+    cv = max(mcv*(r-ra)+shcvair,   shcvTNT)
 
     IF (r > rhoTNT) THEN
        mp = 0.0_RFREAL
@@ -1049,8 +1052,9 @@ MODULE RFLU_ModJWL
 
     ! TLJ - 12/12/2024
     ! Added for safety to possibly prevent negative temperatures
-    !IF ( T .LE. Ta ) T = Ta
-    IF ( T .LE. 270.0_RFREAL .AND. Y .GT. 0.01 ) T = 270.0_RFREAL
+    ! Reverted to unconditional floor: with the Y>0.01 condition, near-pure-air
+    ! cells (Y<=0.01) could return T<=0 and trip the ErrorStop below
+    IF ( T .LE. 270.0_RFREAL ) T = 270.0_RFREAL
     IF ( T .LE. 0.0_RFREAL ) THEN
        WRITE(*,*) 'Temperature in RFLU_JWL_T_PR function is negative'
        WRITE(*,*) 'p,r,e,Y,T', p,r,e,Y,T

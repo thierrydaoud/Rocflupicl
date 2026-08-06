@@ -211,6 +211,7 @@ SUBROUTINE RFLU_TimeStepping(dTimeSystem,dIterSystem,regions)
 
   INTEGER :: icg
   REAL(RFREAL) :: vFrac, ir
+  INTEGER :: iSpec
 
 !CRN - begin
   REAL(RFREAL) :: timerStart, timerEnd
@@ -302,6 +303,17 @@ SUBROUTINE RFLU_TimeStepping(dTimeSystem,dIterSystem,regions)
            pRegion%mixt%cv(CV_MIXT_YMOM,icg) = ir*pRegion%mixt%cv(CV_MIXT_YMOM,icg)
            pRegion%mixt%cv(CV_MIXT_ZMOM,icg) = ir*pRegion%mixt%cv(CV_MIXT_ZMOM,icg)
            pRegion%mixt%cv(CV_MIXT_ENER,icg) = ir*pRegion%mixt%cv(CV_MIXT_ENER,icg)
+#ifdef SPEC
+           ! Species cv is superficial (phig*rho*Y); convert to primitive
+           ! rho*Y alongside the mixture so written/plotted mass fractions
+           ! are Y and not phig*Y in particle-laden cells.
+           IF ( global%specUsed .EQV. .TRUE. ) THEN
+              DO iSpec = 1,pRegion%specInput%nSpecies
+                 pRegion%spec%cv(iSpec,icg) = &
+                    pRegion%spec%cv(iSpec,icg)/vFrac
+              END DO ! iSpec
+           END IF ! global%specUsed
+#endif
         ENDDO
         ENDIF
 #endif
@@ -318,6 +330,15 @@ SUBROUTINE RFLU_TimeStepping(dTimeSystem,dIterSystem,regions)
            pRegion%mixt%cv(CV_MIXT_YMOM,icg) = ir*pRegion%mixt%cv(CV_MIXT_YMOM,icg)
            pRegion%mixt%cv(CV_MIXT_ZMOM,icg) = ir*pRegion%mixt%cv(CV_MIXT_ZMOM,icg)
            pRegion%mixt%cv(CV_MIXT_ENER,icg) = ir*pRegion%mixt%cv(CV_MIXT_ENER,icg)
+#ifdef SPEC
+           ! Restore superficial species cv after writing
+           IF ( global%specUsed .EQV. .TRUE. ) THEN
+              DO iSpec = 1,pRegion%specInput%nSpecies
+                 pRegion%spec%cv(iSpec,icg) = &
+                    vFrac*pRegion%spec%cv(iSpec,icg)
+              END DO ! iSpec
+           END IF ! global%specUsed
+#endif
         ENDDO
         ENDIF
 #endif
@@ -1004,6 +1025,7 @@ END IF
       ! Inserting write statements here
       DO iReg=1,global%nRegionsLocal
         pRegion => regions(iReg)
+        pGrid => pRegion%grid ! was missing: pGrid stale from earlier loop
 #ifdef PICL
         IF ( global%piclUsed .EQV. .TRUE. ) THEN
         ! TLJ added to plot primitive variables - 02/19/2025
@@ -1015,6 +1037,17 @@ END IF
            pRegion%mixt%cv(CV_MIXT_YMOM,icg) = ir*pRegion%mixt%cv(CV_MIXT_YMOM,icg)
            pRegion%mixt%cv(CV_MIXT_ZMOM,icg) = ir*pRegion%mixt%cv(CV_MIXT_ZMOM,icg)
            pRegion%mixt%cv(CV_MIXT_ENER,icg) = ir*pRegion%mixt%cv(CV_MIXT_ENER,icg)
+#ifdef SPEC
+           ! Species cv is superficial (phig*rho*Y); convert to primitive
+           ! rho*Y alongside the mixture so written/plotted mass fractions
+           ! are Y and not phig*Y in particle-laden cells.
+           IF ( global%specUsed .EQV. .TRUE. ) THEN
+              DO iSpec = 1,pRegion%specInput%nSpecies
+                 pRegion%spec%cv(iSpec,icg) = &
+                    pRegion%spec%cv(iSpec,icg)/vFrac
+              END DO ! iSpec
+           END IF ! global%specUsed
+#endif
         ENDDO
         ENDIF
 #endif
@@ -1032,6 +1065,15 @@ END IF
            pRegion%mixt%cv(CV_MIXT_YMOM,icg) = ir*pRegion%mixt%cv(CV_MIXT_YMOM,icg)
            pRegion%mixt%cv(CV_MIXT_ZMOM,icg) = ir*pRegion%mixt%cv(CV_MIXT_ZMOM,icg)
            pRegion%mixt%cv(CV_MIXT_ENER,icg) = ir*pRegion%mixt%cv(CV_MIXT_ENER,icg)
+#ifdef SPEC
+           ! Restore superficial species cv after writing
+           IF ( global%specUsed .EQV. .TRUE. ) THEN
+              DO iSpec = 1,pRegion%specInput%nSpecies
+                 pRegion%spec%cv(iSpec,icg) = &
+                    vFrac*pRegion%spec%cv(iSpec,icg)
+              END DO ! iSpec
+           END IF ! global%specUsed
+#endif
         ENDDO
         ENDIF
 #endif
