@@ -306,6 +306,8 @@
          fdpdx = 0.0d0; fdpdy = 0.0d0; fdpdz = 0.0d0;
          fcx = 0.0d0; fcy = 0.0d0; fcz = 0.0d0;
          taux = 0.0d0; tauy = 0.0d0; tauz = 0.0d0;
+         taux_hydro = 0.0d0; tauy_hydro = 0.0d0;
+         tauz_hydro = 0.0d0;
          liftx = 0.0d0; lifty = 0.0d0; liftz = 0.0d0;
          fvux = 0.0d0; fvuy = 0.0d0; fvuz = 0.0d0;
          qq=0.0d0
@@ -671,16 +673,27 @@
 
         IF(feedback_flag==1) THEN
           ! Momentum equations feedback terms
+          ! With added mass treated implicitly on the particle LHS,
+          ! (rmass+rmass_add)*ydot = fqs+fam+fdpd+fvu+flift+fc exactly,
+          ! so subtracting fc returns the full hydrodynamic force per
+          ! Daoud et al. (2026) Eq. (23). Using rmass alone underweights
+          ! the feedback by m/(m+m_am) and leaks collision force into
+          ! the gas whenever am_flag > 0.
           ppiclf_feedbk(PPICLF_P_JFX,i) = ppiclf_rprop(PPICLF_R_JSPL,i)*
-     >      (ppiclf_ydot(PPICLF_JVX,i)*rmass - fcx)
+     >      (ppiclf_ydot(PPICLF_JVX,i)*(rmass+rmass_add) - fcx)
           ppiclf_feedbk(PPICLF_P_JFY,i) = ppiclf_rprop(PPICLF_R_JSPL,i)*
-     >      (ppiclf_ydot(PPICLF_JVY,i)*rmass - fcy)
+     >      (ppiclf_ydot(PPICLF_JVY,i)*(rmass+rmass_add) - fcy)
           ppiclf_feedbk(PPICLF_P_JFZ,i) = ppiclf_rprop(PPICLF_R_JSPL,i)*
-     >      (ppiclf_ydot(PPICLF_JVZ,i)*rmass - fcz)
+     >      (ppiclf_ydot(PPICLF_JVZ,i)*(rmass+rmass_add) - fcz)
 
           ! Energy equation feedback term
+          ! Work coupling per Daoud, Jackson & Balachandar, IJMF (2026)
+          ! Eq. (18)/(21): dissipative forces (QS incl. fluctuations,
+          ! VU, lift) do work at the PARTICLE velocity; non-dissipative
+          ! forces (added mass, pressure gradient) do work at the GAS
+          ! velocity, so they cancel in the dissipation and conserve
+          ! total energy. 
           ! 09/19/2025 - Thierry - Added Lift force
-          ! Still need to add Torue \cdot angular velocity
           ppiclf_feedbk(PPICLF_P_JE,i) = ppiclf_rprop(PPICLF_R_JSPL,i)
      >     * ( (fqsx+fvux+liftx)*ppiclf_y(PPICLF_JVX,i) + 
      >         (fqsy+fvuy+lifty)*ppiclf_y(PPICLF_JVY,i) + 
@@ -688,6 +701,16 @@
      >                famx*ppiclf_rprop(PPICLF_R_JUX,i) +
      >                famy*ppiclf_rprop(PPICLF_R_JUY,i) +
      >                famz*ppiclf_rprop(PPICLF_R_JUZ,i) +
+              ! PG work deliberately EXCLUDED: Rocflu's MJWL energy
+              ! flux is vFracF*rho*u*H = phig*(rho u E + u P), so the
+              ! particle share of pressure work never enters the gas
+              ! energy equation and must not be removed by feedback.
+              ! (Daoud et al. Eq. 21 puts PG work at u_g because THEIR
+              ! energy equation carries the unscaled div(P u); the
+              ! feedback must match the discretization, not the paper.)
+              ! The fdpd momentum feedback stays: the momentum flux
+              ! carries the UNSCALED grad(P), so that share IS
+              ! over-applied to the gas and must be returned.
      >                taux_hydro*ppiclf_y(PPICLF_JOX,i) +
      >                tauy_hydro*ppiclf_y(PPICLF_JOY,i) +
      >                tauz_hydro*ppiclf_y(PPICLF_JOZ,i) +
@@ -699,6 +722,10 @@
      >           (fqsy+fvuy+famy+lifty)*ppiclf_y(PPICLF_JVY,i) + 
      >           (fqsz+fvuz+famz+liftz)*ppiclf_y(PPICLF_JVZ,i) +
      >           qq )
+          ! WARNING: this branch routes the added-mass slip work
+          ! Fam.(ug-up) to the PTKE (Rsg) projections, which are
+          ! currently commented out below -- that energy is lost
+          ! until the Rsg/Tsg feedback path is restored.
           ELSE
             Rsg   = 0.0D0
             T_par = 0.0D0

@@ -190,10 +190,12 @@
             ! k1 = k_{n,limit}
             ksp1 = rmass*rpi*rpi/((ksp*ppiclf_dt)**2)
             ! k2 = k_{hertzian}
-            E1  = 1.0d9  ! Assumed value for Young's modulus
-            E2  = 1.0d9  ! Assumed value for Young's modulus
-            nu1 = 0.35d0 ! Assumed value for Poisson's ratio
-            nu2 = 0.35d0 ! Assumed value for Poisson's ratio
+            ! Avery - the following are for 410 stainless/alloy steel
+            ! This is to match the P-Rad Hughes experiment
+            E1  = 200.0D9  ! Assumed value for Young's modulus
+            E2  = 200.0D9  ! Assumed value for Young's modulus
+            nu1 = 0.28D0 ! Assumed value for Poisson's ratio
+            nu2 = 0.28D0 ! Assumed value for Poisson's ratio
             Estar = (1.0d0-nu1*nu1)/E1 + (1.0d0-nu2*nu2)/E2
             Estar = 1.0d0/Estar
             r1 = 0.5d0*rpropi(PPICLF_R_JDP)
@@ -427,25 +429,36 @@
 
          rm1 = rpropi(PPICLF_R_JRHOP)*rpropi(PPICLF_R_JVOLP)
 
-         ! Compute spring stiffness constant dynamically, 
-         !   which overrides the user defined value
-         ! Need to make sure this formula is valid for a wall
-         ! k1 = k_{n,limit}
-         ksp1 = rm1*rpi*rpi/((ksp*ppiclf_dt)**2)
-         ! k2 = k_{hertzian}
-         E1  = 1.0d9  ! Assumed value for Young's modulus
-         nu1 = 0.35d0 ! Assumed value for Poisson's ratio
-         Estar = E1/(1.0d0-nu1*nu1)
-         r1 = 0.5d0*rpropi(PPICLF_R_JDP)
-         r2 = r1
-         Rstar = r1*r2/(r1+r2)
-         ksp2 = (2.0d0/3.0d0)*Estar*sqrt(Rstar)
-         ksp2 = ksp2*sqrt(abs(rdiff-rthresh))
-         ! kn = min(k1,k2)
-         rksp_wall = min(ksp1,ksp2)
+
+         ! Avery Comment 7/21/20026:
+         ! Wall stiffness should be thought through more.
+         ! I don't like the idea of a material property
+         ! dependent boundary.  Maybe just use a multiple
+         ! of the above particle stiffness??
+
+
+         !! Compute spring stiffness constant dynamically, 
+         !!   which overrides the user defined value
+         !! Need to make sure this formula is valid for a wall
+         !! k1 = k_{n,limit}
+         !ksp1 = rm1*rpi*rpi/((ksp*ppiclf_dt)**2)
+         !! k2 = k_{hertzian}
+         !E1  = 1.0d9  ! Assumed value for Young's modulus
+         !nu1 = 0.35d0 ! Assumed value for Poisson's ratio
+         !Estar = E1/(1.0d0-nu1*nu1)
+         !r1 = 0.5d0*rpropi(PPICLF_R_JDP)
+         !r2 = r1
+         !Rstar = r1*r2/(r1+r2)
+         !ksp2 = (2.0d0/3.0d0)*Estar*sqrt(Rstar)
+         !ksp2 = ksp2*sqrt(abs(rdiff-rthresh))
+         !! kn = min(k1,k2)
+         !rksp_wall = min(ksp1,ksp2)
+
+         ! Setting wall stiffness to 3x particle stiffness
+         rksp_wall = 3.0D0*ksp_min
          
          rmult = sqrt(rm1)
-         eta_n = 2.0d0*sqrt(rksp_wall)*log(erest)
+         eta_n = -2.0d0*sqrt(rksp_wall)*log(erest)
      >           /sqrt(log(erest)**2+pi2)*rmult
          
          rbot = 1.0d0/rdiff
@@ -464,46 +477,47 @@
          rnmag     = -rksp_max - rv12_mage
 
          
-!         ppiclf_ydotc(PPICLF_JVX,i) = ppiclf_ydotc(PPICLF_JVX,i)
-!     >                              + rnmag*rn_12x
-!         ppiclf_ydotc(PPICLF_JVY,i) = ppiclf_ydotc(PPICLF_JVY,i)
-!     >                              + rnmag*rn_12y
-!         ppiclf_ydotc(PPICLF_JVZ,i) = ppiclf_ydotc(PPICLF_JVZ,i)
-!     >                              + rnmag*rn_12z
-!
+         ppiclf_ydotc(PPICLF_JVX,i) = ppiclf_ydotc(PPICLF_JVX,i)
+     >                              + rnmag*rn_12x
+         ppiclf_ydotc(PPICLF_JVY,i) = ppiclf_ydotc(PPICLF_JVY,i)
+     >                              + rnmag*rn_12y
+         ppiclf_ydotc(PPICLF_JVZ,i) = ppiclf_ydotc(PPICLF_JVZ,i)
+     >                              + rnmag*rn_12z
 
+         ! Avery commenting out temp fix below.
+         ! Hard-coding user files is very bad practice.
+         ! We could use case names if it can't be generalized.
+         ! 
+         !! Particles leavind the domain with wall collisions
+         !! Simple fix for a conical geometry
+         !yp = yi(PPICLF_JY)
+         !zp = yi(PPICLF_JZ)
+         !vp = yi(PPICLF_JVY)
+         !wp = yi(PPICLF_JVZ)
 
-         ! Particles leavind the domain with wall collisions
-         ! Simple fix for a conical geometry
-         yp = yi(PPICLF_JY)
-         zp = yi(PPICLF_JZ)
-         vp = yi(PPICLF_JVY)
-         wp = yi(PPICLF_JVZ)
+         !rbound = sqrt(yj(PPICLF_JY)**2 + yj(PPICLF_JZ)**2)
+         !rp = sqrt(yp**2 + zp**2)
+         !urp = sqrt(vp**2 + wp**2)
+         !thetap = atan2(zp, yp)
 
-         rbound = sqrt(yj(PPICLF_JY)**2 + yj(PPICLF_JZ)**2)
-         rp = sqrt(yp**2 + zp**2)
-         urp = sqrt(vp**2 + wp**2)
-         thetap = atan2(zp, yp)
+         !if(rp > rbound) then
+         !  
+         !  rp_new = rp - (rp - rbound)
+         !  yp_new = rp_new * cos(thetap)
+         !  zp_new = rp_new * sin(thetap)
 
-         if(rp > rbound) then
-           
-           rp_new = rp - (rp - rbound)
-           yp_new = rp_new * cos(thetap)
-           zp_new = rp_new * sin(thetap)
+         !  urp = - urp
+         !  
+         !  vp_new = urp * cos(thetap)
+         !  wp_new = urp * sin(thetap)
 
-           urp = - urp
-           
-           vp_new = urp * cos(thetap)
-           wp_new = urp * sin(thetap)
+         !  ppiclf_y(PPICLF_JY,i) = yp_new
+         !  ppiclf_y(PPICLF_JZ,i) = zp_new
 
-           ppiclf_y(PPICLF_JY,i) = yp_new
-           ppiclf_y(PPICLF_JZ,i) = zp_new
+         !  ppiclf_y(PPICLF_JVY,i) = vp_new
+         !  ppiclf_y(PPICLF_JVZ,i) = wp_new
+         !endif
 
-           ppiclf_y(PPICLF_JVY,i) = vp_new
-           ppiclf_y(PPICLF_JVZ,i) = wp_new
-         endif
-
-         !write(*,*) "Wall NEAR",i,ppiclf_ydotc(PPICLF_JVY,i)  
       endif
 
 
