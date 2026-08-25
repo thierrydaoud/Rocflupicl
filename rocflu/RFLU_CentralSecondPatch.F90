@@ -188,7 +188,7 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
 ! ******************************************************************************
 ! Set pointers and variables
 ! ******************************************************************************
-
+  ksg = 0.0D0
   indCp    = pRegion%mixtInput%indCp
   indMf    = pRegion%mixtInput%indMfMixt
   indSd    = pRegion%mixtInput%indSd
@@ -265,9 +265,10 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
         vl  = cv(CV_MIXT_YMOM,c1)*irl
         wl  = cv(CV_MIXT_ZMOM,c1)*irl
         pl  = dv(DV_MIXT_PRES,c1)
-
+#ifdef PICL
         ksg = pRegion%mixt%piclKsg(c1)
-
+        IF( .NOT. global%piclUsed) ksg = 0.0_RFREAL
+#endif
         dx  = xc - pRegion%grid%cofg(XCOORD,c1)
         dy  = yc - pRegion%grid%cofg(YCOORD,c1)
         dz  = zc - pRegion%grid%cofg(ZCOORD,c1)
@@ -441,6 +442,12 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
 
         rl  = cv(CV_MIXT_DENS,c1)
         irl = 1.0_RFREAL/rl
+
+#ifdef PICL
+        ksg = pRegion%mixt%piclKsg(c1)
+        IF( .NOT. global%piclUsed) ksg = 0.0_RFREAL
+#endif
+
 
         dx  = xc - pRegion%grid%cofg(XCOORD,c1)
         dy  = yc - pRegion%grid%cofg(YCOORD,c1)
@@ -676,7 +683,10 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
         wl  = cv(CV_MIXT_ZMOM,c1)*irl
         pl  = dv(DV_MIXT_PRES,c1)
 
+#ifdef PICL
         ksg = pRegion%mixt%piclKsg(c1)
+        IF( .NOT. global%piclUsed) ksg = 0.0_RFREAL
+#endif
 
 
         rl = rl + grad(XCOORD,GRC_MIXT_DENS,c1)*dx &
@@ -1134,7 +1144,11 @@ SUBROUTINE RFLU_CentralSecondPatch(pRegion,pPatch)
         wl  = cv(CV_MIXT_ZMOM,c1)*irl
         pl  = dv(DV_MIXT_PRES,c1)
 
+#ifdef PICL
         ksg = pRegion%mixt%piclKsg(c1)
+        IF( .NOT. global%piclUsed) ksg = 0.0_RFREAL
+#endif
+
 
         dx  = xc - pRegion%grid%cofg(XCOORD,c1)
         dy  = yc - pRegion%grid%cofg(YCOORD,c1)

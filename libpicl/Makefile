@@ -1,10 +1,21 @@
 FC               = mpif90 # Valid MPI Fortran compiler
 CC               = mpicc  # Valid MPI C compiler
-FFLAGS          += -w -cpp -O3 -std=legacy -g -fcheck=bounds -fbacktrace -fno-math-errno -funroll-loops -mcmodel=medium
-# Add for Turin
-# FFLAGS += -march=znver5
-# Add for Milan 
-FFLAGS += -march=znver3 
+FFLAGS          += -w -cpp -O3 -std=legacy -g -fbacktrace -fno-math-errno -funroll-loops -mcmodel=medium
+
+# Machine-dependent architecture flags
+MACHINE = $(shell uname -n)
+ifeq ($(findstring dane,$(MACHINE)),dane)
+    # LLNL Dane: Intel Sapphire Rapids (gcc >= 11)
+    FFLAGS += -march=sapphirerapids
+else ifeq ($(findstring tuolumne,$(MACHINE)),tuolumne)
+    # LLNL Tuolumne: AMD Zen4 (El Capitan class)
+    FFLAGS += -march=znver4
+else
+    # Default: AMD Milan (Zen3)
+    FFLAGS += -march=znver3
+    # Add for Turin
+    # FFLAGS += -march=znver5
+endif
 
 CPFLAGS         += -E
 ifeq ($(TEST),1)
@@ -13,6 +24,10 @@ endif
 
 ifeq ($(PERF),1)
     FFLAGS += -DPERF
+endif
+
+ifeq ($(DEBUG),1)
+    FFLAGS += -fcheck=bounds
 endif
  	           
 INSTALL_LOCATION = .
@@ -93,7 +108,7 @@ POS = $(SOURCE_ROOT_PPICLF)/PPICLF
 default: makeThird preProcess $(DYN_OBJ) getObjs libObjs 
 
 $(DYN_OBJ): $(DYN_SRC)
-	$(FC) -c $(DYN_SRC) -J$(SOURCE_ROOT_PPICLF) -o $(DYN_OBJ) 
+	$(FC) $(FFLAGS) -c $(DYN_SRC) -J$(SOURCE_ROOT_PPICLF) -o $(DYN_OBJ) 
 
 libObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.o $(DYN_OBJ)
 	@ar crv $(SOURCE_ROOT_PPICLF)/libppiclF.a $(DYN_OBJ) $(SOURCE_ROOT_PPICLF)/ppiclf.o $(SOURCE_ROOT_GSLIB_OBJ)/*.o

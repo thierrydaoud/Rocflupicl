@@ -573,8 +573,8 @@
 !   Vsup : Gaussian projection support, KAPPA*filter per dimension
 ! Normalizing by Vbin and C_L:
 !
-!   W(bin) = Np + aPP*Np^2
-!          + (bMAP*sMAP(bin) + bPROJ)*Np*Nc + cCell*Nc
+!   W(bin) = (1 + bPROJ)*Np + aPP*Np^2
+!          + bMAP*sMAP(bin)*Np*Nc + cCell*Nc
 !   sMAP(bin) = PROD_d 3/nsf_d(bin),
 !   nsf_d(bin) = MAX(1, FLOOR(bins_dx_d/(1.5*CellMaxLen_d(bin))))
 !
@@ -623,7 +623,12 @@
 
       aPP   = (C_PP/C_L)*sPP
       bMAP  = C_MAP/C_L
-      bPROJ = (C_PROJ/C_L)*sPROJ
+      ! C_PROJ is fitted against the per-PARTICLE basis X(4)=Np in
+      ! LBCalibAccum (capped projection stencil). The weight must use
+      ! the same basis: no sPROJ factor here, otherwise the fitted
+      ! seconds-per-particle is multiplied by a stencil-volume ratio
+      ! that was never in the regression.
+      bPROJ = C_PROJ/C_L
       cCell = C_CELL/C_L
 
       RETURN
@@ -714,21 +719,27 @@
       !      separately here would double-count them, and leaving the
       !      P2P time in would contaminate the linear channel with
       !      quadratic work.
-      ! ch2: P2P nearest-neighbor search
+      ! ch2: P2P nearest-neighbor search, plus the fine-grid particle
+      !      sub-bin map that serves it (subbinFineParticleMap loops
+      !      over real+ghost particles, so it is particle-, not
+      !      cell-proportional; it is the P2P search structure build).
       ! ch3: P2C map build + search
-      ! ch4: projection (compute)
-      ! ch5: per-overlap-cell map + per-step cell communication
+      ! ch4: projection (compute) -- capped stencil, linear in Np
+      ! ch5: per-overlap-cell map + per-step per-cell communication:
+      !      fluid-field transfer IN (TMPI_moveInt) and projection
+      !      fields OUT (TMPI_movePro), plus the overlap-cell map
+      !      transfer on rebuild stages. TMPI_moveInt is the first
+      !      synchronizing collective of the stage and absorbs any
+      !      host-solver stagger; set ppiclf_perf_sync=.TRUE. to move
+      !      that wait into TEntrySync so the channel is clean.
       tch(1) = PPICLF_TInterp + PPICLF_TIntegrate
      >       + PPICLF_TsubbinRealMap
      >       + PPICLF_TUserYdot - PPICLF_TPPNNSearch
-      tch(2) = PPICLF_TPPNNSearch
-      ! Model revision (see BinWeight): the fine-grid sub-bin map is
-      ! a per-CELL build cost, so it belongs with the cell channel;
-      ! projection is capped-stencil and therefore linear in Np.
+      tch(2) = PPICLF_TPPNNSearch + PPICLF_TsubbinFineMap
       tch(3) = PPICLF_TPCNNSearch + PPICLF_TsubbinCellMap
       tch(4) = PPICLF_TProject
       tch(5) = PPICLF_TMapOverlap + PPICLF_TMPI_moveOvlp
-     >       + PPICLF_TMPI_movePro + PPICLF_TsubbinFineMap
+     >       + PPICLF_TMPI_moveInt + PPICLF_TMPI_movePro
 
       ! The PERF accumulators are zeroed at every IntegrateParticle
       ! entry, so at this end-of-stage sample point tch(k) IS the
@@ -953,31 +964,48 @@
 !-----------------------------------------------------------------------
       DOUBLE PRECISION FUNCTION ppiclf_comm_BinMapStencil(bin, rNc)
 !
-! Per-bin P2C stencil ratio sMAP, mirroring the fine fluid map build.
-! With the per-bin fluid sub-grid, each bin's search resolution is set
-! by its OWN coarsest cell, so the bin-local estimate below is the
-! exact quantity (no owner dependence, no dilation needed for the
-! WEIGHT; the neighborhood-max dilation in binReachDilate applies to
-! the search REACH used by the kernels, not to this cost estimate).
-! The CSR fine map is built and used only when the sub-cell it would
-! produce is meaningfully finer than the filter,
-!   bins_dx(d)/nsf_d < 0.5*filter(d) for at least one d;
-! otherwise SBParticleToCellMap scans the 3x3x3 BIN stencil
-! (sMAP = 27). The per-rank memory-budget fallback that halves
-! nSubFluid cannot be known at LB time and is neglected (it only
-! coarsens sMAP toward 27).
+! Per-bin P2C stencil ratio sMAP, mirroring SBParticleToCellMap.
+! The kernel walks each bin at its OWN sub-cell resolution
+! (nsf_d from the bin's own coarsest cell) but over a search reach
+! set by the COARSEST cell in the +-1 bin neighborhood (see
+! binReachDilate), capped at the bin size. The fraction of a bin's
+! cells a particle's box spans, counted in own sub-cells, is
+!   frac_d = 2*reach_d/bins_dx_d + 1/nsf_d,  reach_d = MIN(1.5*Ldil_d, bins_dx_d)
+! capped at 3 (a full-bin reach touches at most 3 bins per dim).
+! Coarse path (no fine map): 3x3x3 BIN stencil, sMAP = 27.
 !
       USE ppiclf_DynamicAllocation
       IMPLICIT NONE
       INCLUDE "PPICLF"
       INTEGER*4, INTENT(IN) :: bin
       REAL*8, INTENT(IN)    :: rNc
-      INTEGER*4 d, nsf
-      REAL*8    sMAP
+      INTEGER*4 d, nsf, ii, jj, kk, i2, j2, k2, nb1, nb2, nb3, src
+      REAL*8    sMAP, reach, frac, ldil(3)
       LOGICAL   fineOK
 
       sMAP = 1.0D0
       IF(rNc .GT. 0.0D0) THEN
+        nb1 = ppiclf_n_bins(1)
+        nb2 = ppiclf_n_bins(2)
+        nb3 = ppiclf_n_bins(3)
+        kk  = bin/(nb1*nb2)
+        jj  = (bin - kk*nb1*nb2)/nb1
+        ii  = bin - kk*nb1*nb2 - jj*nb1
+
+        ! +-1 neighborhood max of the per-bin max cell edge
+        ! (global field, MPI_MAX-reduced in FindCellPartLB)
+        ldil = 0.0D0
+        DO k2 = MAX(0,kk-1), MIN(nb3-1,kk+1)
+         DO j2 = MAX(0,jj-1), MIN(nb2-1,jj+1)
+          DO i2 = MAX(0,ii-1), MIN(nb1-1,ii+1)
+            src = i2 + nb1*j2 + nb1*nb2*k2
+            DO d = 1,3
+              ldil(d) = MAX(ldil(d), ppiclf_CellMaxLen(d,src))
+            END DO
+          END DO
+         END DO
+        END DO
+
         fineOK = .FALSE.
         DO d = 1,3
           IF(ppiclf_CellMaxLen(d,bin) .GT. 0.0D0) THEN
@@ -988,7 +1016,11 @@
           END IF
           IF(ppiclf_bins_dx(d)/DBLE(nsf) .LT.
      >       0.5D0*ppiclf_filter(d)) fineOK = .TRUE.
-          sMAP = sMAP * (3.0D0/DBLE(nsf))
+
+          reach = MIN(1.5D0*ldil(d), ppiclf_bins_dx(d))
+          IF(reach .LE. 0.0D0) reach = ppiclf_bins_dx(d)
+          frac  = 2.0D0*reach/ppiclf_bins_dx(d) + 1.0D0/DBLE(nsf)
+          sMAP  = sMAP * MIN(3.0D0, frac)
         END DO
         IF(.NOT. fineOK) sMAP = 2.7D1
       END IF

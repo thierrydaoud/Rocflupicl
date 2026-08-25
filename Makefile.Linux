@@ -449,6 +449,61 @@ ifeq ($(findstring quartz,$(MACHINE)),quartz)
 
 endif
 
+### DANE at LLNL  ########################
+ifeq ($(findstring dane,$(MACHINE)),dane)
+  FC=mpif90
+  COMP=mpif90
+  CXX=mpic++
+  CXXFLAGS=
+  CXXOPT=
+  LINKER=$(CXX)
+
+  # gcc + openmpi (TCE): C++ linker needs the Fortran MPI + runtime libs
+  CXXLINKFLAGS += -lmpi_mpifh -lmpi_usempif08 -lgfortran
+
+  PICLFSRC=../libpicl/ppiclF/source
+
+  ifdef PICL
+    CMFLAGS+=-z muldefs
+    LDFLAGS+=-z muldefs -mcmodel=medium
+  endif
+
+  FORTFLAGS= -DFORTRAN_UNDERSCORE -DFORTRAN_LOWERCASE
+
+  ifdef DEBUG
+    CMFLAGS=-g -fbacktrace -fcheck=bounds
+    LDFLAGS=-g -fbacktrace -fcheck=bounds
+  else
+    CMFLAGS=-O2
+    LDFLAGS=-O2
+  endif
+
+  ifdef PROF
+    CMFLAGS+=-pg
+    LDFLAGS+=-pg
+  endif
+
+  LIBSYS=
+
+  ifdef ROCPROF
+    FPPFLAGS+= -DROCPROF
+    LIBSYS+= -L$(ROCPROF)/lib -lRocprof
+  endif
+
+  FPPFLAGS+=-mcmodel=medium
+  CMFLAGS+= -fallow-argument-mismatch
+
+  TECHOME= ../../libtecplot/tecio
+  LIBTEC=$(TECHOME)/lib/tecio64.a
+
+  ifdef RFLUPOST
+    INCTEC=-I$(TECHOME)/include
+  endif
+
+  LIBMET = -L../../3rd_party/local/lib -lmetis -lGKlib
+  INCMET+=-I../../3rd_party/local/include
+endif
+
 ### Pattern rules ##############################################################
 %.o: %.f90
 ifeq ($(FC),mpif90)

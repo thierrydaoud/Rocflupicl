@@ -72,7 +72,7 @@ MODULE ppiclf_DynamicAllocation
   ! when .TRUE. in a PERF build, an MPI_BARRIER is taken at ppiclF
   ! entry and its wait time recorded as TEntrySync, separating host
   ! (fluid-solver) imbalance from ppiclF's own timers. Default off.
-  LOGICAL   :: ppiclf_perf_sync = .FALSE.
+  LOGICAL   :: ppiclf_perf_sync = .TRUE.!.FALSE.
   ! Cadence of the global-count reduction + rebalance criterion in
   ! FindParticlePartLB (stages between checks; 3 = once per RK3 step,
   ! 1 = legacy per-stage behavior). Per-particle bin assignment and

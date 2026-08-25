@@ -242,6 +242,11 @@ SUBROUTINE RFLU_CentralFirstPatch(pRegion,pPatch)
 
         fs = pPatch%gs(indGs*ifl)
 
+#ifdef PICL
+        ksg = pRegion%mixt%piclKsg(c1)
+        IF( .NOT. global%piclUsed) ksg = 0.0_RFREAL
+#endif
+
         rl  = cv(CV_MIXT_DENS,c1)
         rul = cv(CV_MIXT_XMOM,c1)
         rvl = cv(CV_MIXT_YMOM,c1)
@@ -395,7 +400,10 @@ SUBROUTINE RFLU_CentralFirstPatch(pRegion,pPatch)
         rel = cv(CV_MIXT_ENER,c1)
         pl  = dv(DV_MIXT_PRES,c1)
 
+#ifdef PICL
         ksg = pRegion%mixt%piclKsg(c1)
+        IF( .NOT. global%piclUsed) ksg = 0.0_RFREAL
+#endif
 
         ur = vals(BCDAT_INFLOW_U,distrib*ifl)
         vr = vals(BCDAT_INFLOW_V,distrib*ifl)
@@ -595,7 +603,10 @@ END IF ! 1==2
         rwl = cv(CV_MIXT_ZMOM,c1)
         rel = cv(CV_MIXT_ENER,c1)
         pl  = dv(DV_MIXT_PRES,c1)
+#ifdef PICL
         ksg = pRegion%mixt%piclKsg(c1)
+        IF( .NOT. global%piclUsed) ksg = 0.0_RFREAL
+#endif
 
         IF ( bcOptType /= BCOPT_SUPERSONIC ) THEN
           pr = vals(BCDAT_OUTFLOW_PRESS,distrib*ifl)
@@ -992,7 +1003,10 @@ END IF ! 1==2
         IF ( gasModel == GAS_MODEL_TCPERF ) THEN
           cp = gv(GV_MIXT_CP ,indCp *c1)
           mm = gv(GV_MIXT_MOL,indMol*c1)
+#ifdef PICL
           ksg = pRegion%mixt%piclKsg(c1)
+          IF( .NOT. global%piclUsed) ksg = 0.0_RFREAL
+#endif
                                            
           CALL RFLU_SetRindStateFarfieldPerf(global,cp,mm,nx,ny,nz,mf,pf,tf, &
                                              aoa,aos,corrFlag,liftCoef,xc,yc, &

@@ -1524,16 +1524,17 @@ c----------------------------------------------------------------------
       PPICLF_TProject = PPICLF_TProject
      >     + (MPI_WTIME() - ppiclf_pt0)
 
-#ifdef PERF
       ! Online cost-model calibration, sampled at the true END of the
       ! stage so the per-stage timer accumulators (zeroed at each
       ! IntegrateParticle entry) contain the FULL stage, including the
       ! P2C map, projection, and cell-communication work above. Every
       ! rank reaches this point every stage, so the collective inside
-      ! LBCalibrate is safe.
+      ! LBCalibrate is safe. UNCONDITIONAL (not PERF-gated): the
+      ! channel timers these routines read are plain source code in
+      ! every build; gating the calls here silently froze the
+      ! coefficients at their priors in production builds.
       CALL ppiclf_comm_LBCalibAccum
       CALL ppiclf_comm_LBCalibrate
-#endif
       RETURN
       END
 
