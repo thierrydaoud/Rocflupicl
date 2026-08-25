@@ -725,13 +725,18 @@
       !      cell-proportional; it is the P2P search structure build).
       ! ch3: P2C map build + search
       ! ch4: projection (compute) -- capped stencil, linear in Np
-      ! ch5: per-overlap-cell map + per-step per-cell communication:
-      !      fluid-field transfer IN (TMPI_moveInt) and projection
-      !      fields OUT (TMPI_movePro), plus the overlap-cell map
-      !      transfer on rebuild stages. TMPI_moveInt is the first
-      !      synchronizing collective of the stage and absorbs any
-      !      host-solver stagger; set ppiclf_perf_sync=.TRUE. to move
-      !      that wait into TEntrySync so the channel is clean.
+      ! ch5: per-overlap-cell work: the interp gather + tuple sort
+      !      (both cell-proportional local compute) and the overlap-
+      !      cell map + its transfer on rebuild stages.
+      !      The crystal TRANSFER timers (TMPI_moveInt, TMPI_movePro)
+      !      are deliberately EXCLUDED: measured on the 112-rank blast
+      !      case they are wait-dominated (r = -0.91 vs the gather and
+      !      r = -1.00 vs the P2C search respectively), i.e. they
+      !      mirror upstream imbalance rather than measuring cell-
+      !      proportional work. Including them anti-correlates Y with
+      !      the X basis and cancels the very imbalance signal the fit
+      !      needs; the gather (TInterpGather) carries the true cell-
+      !      proportional signal instead.
       tch(1) = PPICLF_TInterp + PPICLF_TIntegrate
      >       + PPICLF_TsubbinRealMap
      >       + PPICLF_TUserYdot - PPICLF_TPPNNSearch
@@ -739,7 +744,7 @@
       tch(3) = PPICLF_TPCNNSearch + PPICLF_TsubbinCellMap
       tch(4) = PPICLF_TProject
       tch(5) = PPICLF_TMapOverlap + PPICLF_TMPI_moveOvlp
-     >       + PPICLF_TMPI_moveInt + PPICLF_TMPI_movePro
+     >       + PPICLF_TInterpGather + PPICLF_TSortInt
 
       ! The PERF accumulators are zeroed at every IntegrateParticle
       ! entry, so at this end-of-stage sample point tch(k) IS the
@@ -1549,8 +1554,11 @@
       ! unmapped stack pages and segfaults inside the crystal router.
       REAL*8, ALLOCATABLE :: rtemp(:,:)
       INTEGER*4 i, icount, j0, ierr
-      REAL*8    tstart, tfinal
+      REAL*8    tstart, tfinal, tmv0
 !
+#ifdef PERF
+      tmv0 = MPI_WTIME()
+#endif
       ALLOCATE(rtemp(rtempLim,PPICLF_LPART))
 
       ! copy particle y, rprop, rprop2, rprop3 arrays into rtemp
@@ -1605,8 +1613,8 @@
      >             ,j0)                       ! Receiver processor index
 !
 #ifdef PERF
-      PPICLF_TMPI_moveRP = PPICLF_TMPI_moveRP
-     >     + (MPI_WTIME() - tstart)
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_moveRP = PPICLF_TMPI_moveRP + tfinal
 #endif
 
       IF(ppiclf_npart .GT. PPICLF_LPART .OR. ppiclf_npart .LT. 0) THEN
@@ -1655,6 +1663,13 @@
       END DO
         
       DEALLOCATE(rtemp)
+#ifdef PERF
+      ! Pack + unpack + buffer allocation, transfer excluded. This
+      ! was previously untimed and is the largest per-stage
+      ! Unaccounted contributor when particles migrate.
+      PPICLF_TMoveReal = PPICLF_TMoveReal
+     >     + (MPI_WTIME() - tmv0) - tfinal
+#endif
       RETURN
       END SUBROUTINE
 !-----------------------------------------------------------------------

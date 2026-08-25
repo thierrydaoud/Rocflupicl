@@ -877,6 +877,8 @@ c----------------------------------------------------------------------
       PPICLF_TUserYdot       = 0.0D0
       PPICLF_TRemovePart     = 0.0D0
       PPICLF_TLBCalib        = 0.0D0
+      PPICLF_TInterpGather   = 0.0D0
+      PPICLF_TSortInt        = 0.0D0
 #ifdef PERF
       PPICLF_TCreateBin      = 0.0D0
       PPICLF_TFindPart       = 0.0D0
@@ -898,6 +900,7 @@ c----------------------------------------------------------------------
       PPICLF_TIO             = 0.0D0
       PPICLF_TPeriodicShift  = 0.0D0
       PPICLF_TEntrySync      = 0.0D0
+      PPICLF_TMoveReal       = 0.0D0
       ! Optional profiling barrier (ppiclf_perf_sync, default FALSE):
       ! ranks may enter ppiclF staggered when the host fluid solve is
       ! itself imbalanced; without a barrier that stagger is absorbed
@@ -1181,12 +1184,21 @@ c----------------------------------------------------------------------
          CALL ppiclf_solve_InterpField(j)
       END DO
       
+      ! Close the gather bracket BEFORE the crystal transfer. The
+      ! InitInterp + InterpField work above is overlap-cell
+      ! proportional and belongs with the cell channel, not the
+      ! per-particle interpolation channel.
+      PPICLF_TInterpGather = PPICLF_TInterpGather
+     >     + (MPI_WTIME() - ppiclf_pt0)
+
       ! Transfers ppiclf_er_mapc & ppiclf_int_fld for all Rocflu Grid
-      ! cells that map to ppiclf domain.
+      ! cells that map to ppiclf domain. Times itself: transfer ->
+      ! TMPI_moveInt, tuple sort -> TSortInt.
       CALL ppiclf_solve_InterpTupleTransfer
 
-
-      ! Interpolates rprop data for ppiclf domain cells in this bin
+      ! Interpolates rprop data for ppiclf domain cells in this bin.
+      ! TInterp is now the IDW loop ONLY (linear in Np).
+      ppiclf_pt0 = MPI_WTIME()
       CALL ppiclf_solve_Interpolate
       PPICLF_TInterp = PPICLF_TInterp
      >     + (MPI_WTIME() - ppiclf_pt0)
@@ -1494,8 +1506,13 @@ c----------------------------------------------------------------------
      >           ' rebuilding. rank=',ppiclf_nid
         END IF
       END IF
+      ppiclf_pt0 = MPI_WTIME()
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, remap_stale, 1,
      >     MPI_LOGICAL, MPI_LOR, ppiclf_comm, ierr)
+#ifdef PERF
+      PPICLF_TMPI_allreduces = PPICLF_TMPI_allreduces
+     >     + (MPI_WTIME() - ppiclf_pt0)
+#endif
       IF(remap_stale) THEN
       ppiclf_pt0 = MPI_WTIME()
         CALL ppiclf_comm_MapOverlapGridPartLB
@@ -1647,7 +1664,6 @@ c----------------------------------------------------------------------
 !
 ! Internal: 
 !
-      REAL*8 FLD(PPICLF_LEX,PPICLF_LEY,PPICLF_LEZ,PPICLF_LEE)
       INTEGER*4 nkey(2), nl, nii, njj, nrr  
       LOGICAL partl
       REAL *8 tstart,tfinal     
@@ -1668,15 +1684,20 @@ c----------------------------------------------------------------------
      >      ,partl, nl                        ! Logical communication
      >      ,ppiclf_int_fld, nrr              ! Real communication
      >      ,njj)                             ! Proc index to send to
+      tfinal = MPI_WTIME() - tstart
+      PPICLF_TMPI_moveInt = PPICLF_TMPI_moveInt + tfinal
+
+      ! Local sort of the received tuples: cell-proportional compute,
+      ! carved out of the transfer channel so TMPI_moveInt is crystal
+      ! wait + wire only.
+      tstart = MPI_WTIME()
       CALL pfgslib_crystal_tuple_sort(ppiclf_cr_hndl ! Setup
      >      ,ppiclf_nCells_Interp             ! Amount of columns to sort
      >      ,ppiclf_cell_map_interp,nii       ! Integer data
      >      ,partl,nl                         ! Logical data
      >      ,ppiclf_int_fld,nrr               ! Real data
      >      ,nkey,2)                          ! Sorting order
-      tfinal = MPI_WTIME() - tstart
-      PPICLF_TMPI_moveInt = PPICLF_TMPI_moveInt + tfinal
-      PPICLF_TInterp = PPICLF_TInterp - tfinal
+      PPICLF_TSortInt = PPICLF_TSortInt + (MPI_WTIME() - tstart)
 
 
       RETURN
@@ -2934,7 +2955,7 @@ c----------------------------------------------------------------------
       INTEGER*4, save :: iprint = 0
 #ifdef PERF
       INTEGER*4 NT, NC
-      PARAMETER (NT=35, NC=8)
+      PARAMETER (NT=38, NC=8)
       REAL*8    tloc(NT), tmax(NT), tmin(NT), tsum(NT), tmean(NT)
       INTEGER*4 cloc(NC), cmax(NC), csum(NC)
       REAL*8    unacc, imbal, rnp, leafsum
@@ -2984,6 +3005,9 @@ c----------------------------------------------------------------------
       tloc(33) = PPICLF_TRemovePart
       tloc(34) = PPICLF_TLBCalib
       tloc(35) = PPICLF_TEntrySync
+      tloc(36) = PPICLF_TInterpGather
+      tloc(37) = PPICLF_TSortInt
+      tloc(38) = PPICLF_TMoveReal
 
       cloc(1) = PPICLF_T_RealPart
       cloc(2) = PPICLF_T_GhostPartSent
@@ -3012,16 +3036,24 @@ c----------------------------------------------------------------------
         tmean(i) = tsum(i)/rnp
       END DO
 
-      ! Unaccounted = mean TTotal - sum of mean leaf timers
+      ! Unaccounted = mean TTotal - sum of the mutually exclusive
+      ! leaves. Leaves 1..18 are exclusive; the UserYdot bracket (23)
+      ! CONTAINS the force channels 19..22 and the P2P search (15), so
+      ! the bracket is subtracted once with its nested leaf added back
+      ! rather than summing the sub-channels.
       leafsum = 0.0D0
-      DO i=1,22
+      DO i=1,18
         leafsum = leafsum + tmean(i)
       END DO
       unacc = tmean(30) - leafsum
+      unacc = unacc - (tmean(23) - tmean(15))
       DO i=24,29
         unacc = unacc - tmean(i)
       END DO
       DO i=32,34
+        unacc = unacc - tmean(i)
+      END DO
+      DO i=36,38
         unacc = unacc - tmean(i)
       END DO
       IF(tmean(30) .GT. 0.0D0) THEN
@@ -3068,6 +3100,9 @@ c----------------------------------------------------------------------
         tname(33) = 'TRemovePart'
         tname(34) = 'TLBCalib'
         tname(35) = 'TEntrySync'
+        tname(36) = 'TInterpGather'
+        tname(37) = 'TSortInt'
+        tname(38) = 'TMoveReal'
         cname(1)  = 'RealPart'
         cname(2)  = 'GhostPartSent'
         cname(3)  = 'GhostPartRec'
@@ -3114,24 +3149,27 @@ c----------------------------------------------------------------------
 !     Per-rank performance logger. Every rank writes its OWN raw timers
 !     and counts to ppiclf_perf_<nid>.csv -- no MPI reduction. On any
 !     single rank the identity
-!         sum(18 leaf timers) + TMPI + Unaccounted = TTotal
-!     then holds exactly, row by row. Purely local: no collective, safe
-!     to call on every rank. Compiles to a no-op when PERF is unset.
+!         sum(exclusive leaves) + TMPI + PeriodicShift + RemovePart
+!         + LBCalib + InterpGather + SortInt + MoveReal
+!         + (TUserYdot - TPPNNSearch) + Unaccounted = TTotal
+!     holds exactly, row by row (leaves 1..18; the force channels
+!     19..22 are nested inside the UserYdot bracket and are reported
+!     for information only). The step column is ppiclf_cycle, the
+!     host step passed to IntegrateParticle. Purely local: no
+!     collective, safe to call on every rank. Compiles to a no-op
+!     when PERF is unset.
 !
       IMPLICIT NONE
       INCLUDE "PPICLF"
 #ifdef PERF
       INTEGER*4 NT, NC
-      PARAMETER (NT=35, NC=8)
+      PARAMETER (NT=38, NC=8)
       REAL*8    tloc(NT), leafsum, unacc
       INTEGER*4 cloc(NC)
       INTEGER*4 i, iu
       CHARACTER*22 tname(NT), cname(NC)
       CHARACTER*32 fname
-      INTEGER*4, save :: istep = 1
       INTEGER*4, save :: ihdr  = 0
-
-      istep = istep + 1
 
       ! ---- pack timers: same order/names as the reduced logger ----
       tloc(1)  = PPICLF_TCreateBin
@@ -3169,6 +3207,9 @@ c----------------------------------------------------------------------
       tloc(33) = PPICLF_TRemovePart
       tloc(34) = PPICLF_TLBCalib
       tloc(35) = PPICLF_TEntrySync
+      tloc(36) = PPICLF_TInterpGather
+      tloc(37) = PPICLF_TSortInt
+      tloc(38) = PPICLF_TMoveReal
 
       cloc(1) = PPICLF_NPART
       cloc(2) = PPICLF_T_GhostPartSent
@@ -3184,12 +3225,19 @@ c----------------------------------------------------------------------
       DO i=1,18
         leafsum = leafsum + tloc(i)
       END DO
-      ! TMPI split across tloc(24..29); TTotal now tloc(30)
+      ! TMPI split across tloc(24..29); TTotal is tloc(30)
       unacc = tloc(30) - leafsum
+      ! UserYdot bracket (23) contains the P2P search (15, already a
+      ! leaf) and the force channels 19..22: subtract the bracket
+      ! once, adding the nested leaf back.
+      unacc = unacc - (tloc(23) - tloc(15))
       DO i=24,29
         unacc = unacc - tloc(i)
       END DO
       DO i=32,34
+        unacc = unacc - tloc(i)
+      END DO
+      DO i=36,38
         unacc = unacc - tloc(i)
       END DO
 
@@ -3232,6 +3280,9 @@ c----------------------------------------------------------------------
         tname(33) = 'TRemovePart'
         tname(34) = 'TLBCalib'
         tname(35) = 'TEntrySync'
+        tname(36) = 'TInterpGather'
+        tname(37) = 'TSortInt'
+        tname(38) = 'TMoveReal'
       cname(1)  = 'RealPart'
       cname(2)  = 'GhostPartSent'
       cname(3)  = 'GhostPartRec'
@@ -3258,11 +3309,11 @@ c----------------------------------------------------------------------
      >       action='WRITE')
       END IF
 
-      WRITE(iu,900) istep, ppiclf_nid, ppiclf_np,
+      WRITE(iu,900) ppiclf_cycle, ppiclf_nid, ppiclf_np,
      >  (tloc(i),i=1,NT), leafsum, unacc,
      >  (cloc(i),i=1,NC)
       CLOSE(iu)
-  900 FORMAT(I9,',',I7,',',I9,37(',',1PE15.7),8(',',I11))
+  900 FORMAT(I9,',',I7,',',I9,40(',',1PE15.7),8(',',I11))
 #endif
       RETURN
       END

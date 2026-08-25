@@ -153,8 +153,8 @@ ifeq ($(findstring ufhpc,$(MACHINE)),ufhpc)
     CMFLAGS=-g -C -fbacktrace #-fcheck=all 
     LDFLAGS=-g -C -fbacktrace #-fcheck=all 
   else
-    CMFLAGS=-O
-    LDFLAGS=-O
+    CMFLAGS=-O3
+    LDFLAGS=-O3
   endif
 
   ifdef PROF
@@ -471,11 +471,21 @@ ifeq ($(findstring dane,$(MACHINE)),dane)
   FORTFLAGS= -DFORTRAN_UNDERSCORE -DFORTRAN_LOWERCASE
 
   ifdef DEBUG
-    CMFLAGS=-g -fbacktrace -fcheck=bounds
-    LDFLAGS=-g -fbacktrace -fcheck=bounds
+    # Full debug: no optimization, all runtime checks, poison uninitialized
+    # reals with signalling NaN, and trap on the first invalid FP op so the
+    # backtrace points at the line that produces the NaN.
+    CMFLAGS=- -g -fbacktrace -fcheck=all -finit-real=snan -ffpe-trap=invalid,zero,overflow
+    LDFLAGS=- -g -fbacktrace -fcheck=all -finit-real=snan -ffpe-trap=invalid,zero,overflow
   else
-    CMFLAGS=-O2
-    LDFLAGS=-O2
+    CMFLAGS=-O3
+    LDFLAGS=-O3
+  endif
+
+  # ZEROINIT=1: zero-fill uninitialized locals (masks uninitialized-variable
+  # bugs; use only to confirm that is the failure mode, not as a fix).
+  ifdef ZEROINIT
+    CMFLAGS+=-finit-local-zero
+    LDFLAGS+=-finit-local-zero
   endif
 
   ifdef PROF

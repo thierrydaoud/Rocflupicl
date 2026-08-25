@@ -6,18 +6,37 @@ FFLAGS          += -w -cpp -O3 -std=legacy -g -fbacktrace -fno-math-errno -funro
 MACHINE = $(shell uname -n)
 ifeq ($(findstring dane,$(MACHINE)),dane)
     # LLNL Dane: Intel Sapphire Rapids (gcc >= 11)
-    FFLAGS += -march=sapphirerapids
+    ARCHFLAG = -march=sapphirerapids
 else ifeq ($(findstring tuolumne,$(MACHINE)),tuolumne)
     # LLNL Tuolumne: AMD Zen4 (El Capitan class)
-    FFLAGS += -march=znver4
+    ARCHFLAG = -march=znver4
 else
     # Default: AMD Milan (Zen3)
-    FFLAGS += -march=znver3
+    ARCHFLAG = -march=znver3
     # Add for Turin
-    # FFLAGS += -march=znver5
+    # ARCHFLAG = -march=znver5
 endif
+FFLAGS += $(ARCHFLAG)
+
+# C flags for gslib (crystal router + tuple_sort -- the code inside
+# TMPI_moveInt / TSortInt). gslib's own Makefile defaults to plain
+# 'CFLAGS ?= -O2' with NO -march, and its install script skips the
+# build entirely once lib/libgs.a exists -- so changing FFLAGS above
+# never touched gslib. Pass tuned flags through, and run
+# 'make cleanThird' after any flag change to force the rebuild.
+GSLIB_CFLAGS = -O3 -funroll-loops $(ARCHFLAG)
 
 CPFLAGS         += -E
+
+# Module output/search flags: gfortran uses -J, Intel (ifort/ifx) uses
+# -module. Detect from the wrapped compiler so the .mod lands in
+# $(SOURCE_ROOT_PPICLF) on either toolchain.
+FC_IS_INTEL := $(shell $(FC) --version 2>/dev/null | grep -ci 'intel\|ifort\|ifx')
+ifeq ($(FC_IS_INTEL),0)
+    MODFLAG = -J
+else
+    MODFLAG = -module
+endif
 ifeq ($(TEST),1)
     FFLAGS += -DTEST
 endif
@@ -108,7 +127,9 @@ POS = $(SOURCE_ROOT_PPICLF)/PPICLF
 default: makeThird preProcess $(DYN_OBJ) getObjs libObjs 
 
 $(DYN_OBJ): $(DYN_SRC)
-	$(FC) $(FFLAGS) -c $(DYN_SRC) -J$(SOURCE_ROOT_PPICLF) -o $(DYN_OBJ) 
+	$(FC) $(FFLAGS) -c $(DYN_SRC) $(MODFLAG) $(SOURCE_ROOT_PPICLF) -o $(DYN_OBJ)
+	@test -f $(SOURCE_ROOT_PPICLF)/ppiclf_dynamicallocation.mod || \
+	  { echo "ERROR: ppiclf_dynamicallocation.mod not written to $(SOURCE_ROOT_PPICLF) (FC=$(FC), MODFLAG=$(MODFLAG))"; exit 1; }
 
 libObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.o $(DYN_OBJ)
 	@ar crv $(SOURCE_ROOT_PPICLF)/libppiclF.a $(DYN_OBJ) $(SOURCE_ROOT_PPICLF)/ppiclf.o $(SOURCE_ROOT_GSLIB_OBJ)/*.o
@@ -119,8 +140,7 @@ libObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.o $(DYN_OBJ)
 	@echo "                       "
 
 getObjs: $(SOURCE_ROOT_PPICLF)/ppiclf.f $(DYN_OBJ)
-	$(FC) $(FFLAGS) -c $(SOURCE_ROOT_PPICLF)/ppiclf.f $(GSLIB_IFLAGS) 
-	mv *.o $(SOURCE_ROOT_PPICLF)
+	$(FC) $(FFLAGS) -c $(SOURCE_ROOT_PPICLF)/ppiclf.f $(GSLIB_IFLAGS) $(PPICLF_IFLAGS) -o $(SOURCE_ROOT_PPICLF)/ppiclf.o
 	@echo "                              "
 	@echo "******************************"
 	@echo "*** LIBRARY OBJECT SUCCESS ***"
@@ -143,28 +163,20 @@ preProcess: $(PRE)
 
 makeThird: $(SOURCE_ROOT_GSLIB)/install
 	cd $(SOURCE_ROOT_GSLIB); \
-	./install $(CC) $(FC)
+	GSLIB_CFLAGS="$(GSLIB_CFLAGS)" ./install $(CC) $(FC) 
 	@echo "                       "
 	@echo "***********************"
 	@echo "*** INSTALLED GSLIB ***"
 	@echo "***********************"
 	@echo "                       "
 
+cleanThird:
+	cd $(SOURCE_ROOT_GSLIB); ./install clean x
+
 clean:
 	 rm -r $(SOURCE_ROOT_PPICLF)/libppiclF.a                
 	 rm -r $(SOURCE_ROOT_PPICLF)/*.o                        
-	 rm -r $(SOURCE_ROOT_PPICLF)/ppiclf_DynamicAllocation.mod
+	 rm -r $(SOURCE_ROOT_PPICLF)/ppiclf_dynamicallocation.mod
 	 rm -r $(SOURCE_ROOT_PPICLF)/ppiclf.f
 	 rm -r $(SOURCE_ROOT_PPICLF)/PPICLF
-	 rm -r $(SOURCE_ROOT_PPICLF)/PPICLF_tmp/*                
-	 rm -r $(SOURCE_ROOT_GSLIB)/gslib                       
-	 rm -r $(SOURCE_ROOT_GSLIB)/lib                         
-	 rm -r $(SOURCE_ROOT_GSLIB)/include                     
-	 rm -r $(SOURCE_ROOT_GSLIB)/*.tar.gz                    
-	 rm -r $(INSTALL_LOCATION)/short_tests/*.pyc            
-	 rm -r $(INSTALL_LOCATION)/short_tests/lib/*.pyc        
-	 rm -r $(INSTALL_LOCATION)/short_tests/test1/test1.log*
-	 rm -r $(INSTALL_LOCATION)/short_tests/test1/*.vtu
-	 cd $(INSTALL_LOCATION)/short_tests/test1/; \
-	make clean
-
+	make cleanThird

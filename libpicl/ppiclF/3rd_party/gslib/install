@@ -43,6 +43,11 @@ rm -rf gslib 2>/dev/null
 mkdir gslib 
 tar -zxf *.tar.gz -C ./gslib --strip-components=1
 cd gslib
+# Optimization flags for the C sources (crystal router, tuple sort,
+# sarray_transfer). gslib's Makefile has 'CFLAGS ?= -O2'; honor a
+# caller-provided GSLIB_CFLAGS (set by the top-level ppiclF Makefile)
+# so gslib gets the same -O level and -march as the Fortran.
+GSLIB_CFLAGS=${GSLIB_CFLAGS:-"-O3"}
 set -x
-make -j4 $GSLIB_OPT 
+make -j4 $GSLIB_OPT CFLAGS="$GSLIB_CFLAGS"
 set +x

@@ -73,6 +73,11 @@ MODULE ppiclf_DynamicAllocation
   ! entry and its wait time recorded as TEntrySync, separating host
   ! (fluid-solver) imbalance from ppiclF's own timers. Default off.
   LOGICAL   :: ppiclf_perf_sync = .TRUE.!.FALSE.
+  ! Split-instrumentation timer channels PPICLF_TInterpGather,
+  ! PPICLF_TSortInt, PPICLF_TMoveReal are declared with the other
+  ! PPICLF_T* timers in PPICLF_PERFORMANCE.h (common block), NOT
+  ! here -- keep it that way: declaring them in both places is a
+  ! duplicate-symbol error in every routine that has USE + INCLUDE.
   ! Cadence of the global-count reduction + rebalance criterion in
   ! FindParticlePartLB (stages between checks; 3 = once per RK3 step,
   ! 1 = legacy per-stage behavior). Per-particle bin assignment and
